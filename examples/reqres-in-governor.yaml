@@ -1,0 +1,84 @@
+---
+apiVersion: gpte.redhat.com/v1
+kind: AnarchyGovernor
+metadata:
+  name: reqres-in-example
+spec:
+  parameters: {}
+  subjectEventActions:
+    added: register
+    modified: update
+    deleted: delete
+  actions:
+  - name: register
+    api:
+      url: https://reqres.in/api/register
+      request:
+        method: POST
+      statusCodeEvents:
+        200: registered
+    eventHandlers:
+    - event: registered
+      handlers:
+      - handlerType: scheduleAction
+        scheduleActionParams:
+          action: check
+          after: 1m 
+      - handlerType: setLabels
+        setLabelsParams:
+          user-id: "{{ response.json.data.id }}"
+      - handlerType: setStatus
+        setStatusParams:
+          userId: "{{ response.json.data.id }}"
+  - name: check
+    api:
+      url: "https://reqres.in/api/users/{{ subject.status.userId }}"
+      statusCodeEvents:
+        200: okay
+        404: not_found
+    eventHandlers:
+    - event: okay
+      handlers:
+      - handlerType: scheduleAction
+        scheduleActionParams:
+          action: check
+          after: 1m 
+    - event: not_found
+      handlers:
+      - handlerType: scheduleAction
+        scheduleActionParams:
+          action: register
+  - name: update
+    api:
+      url: "https://reqres.in/api/users/{{ subject.status.userId }}"
+      request:
+        method: PUT
+      statusCodeEvents:
+        200: okay
+    eventHandlers:
+    - event: okay
+      handlers:
+      - handlerType: setStatus
+        setStatusParams:
+          updatedAt: "{{ response.json.updatedAt }}"
+  - name: delete
+    api:
+      url: "https://reqres.in/api/users/{{ subject.status.user_id }}"
+      request:
+        method: DELETE
+      statusCodeEvents:
+        200: okay
+        404: not_found
+    eventHandlers:
+    - event: okay
+      handlers:
+      - handlerType: scheduleAction
+        scheduleActionParams:
+          action: check
+          after: 1m 
+    - event: not_found
+      handlers:
+      - handlerType: scheduleAction
+        scheduleActionParams:
+          action: register
+          after: 5m 

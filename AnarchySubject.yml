@@ -1,0 +1,38 @@
+---
+api_version: gpte.redhat.com/v1
+kind: AnarchySubject
+metadata:
+  # Name is based on agnosticd config type and a random string
+  name: ocp4-workshop-a4d93efa1359
+  labels:
+    # Label agnosticd config type for reporting
+    governor: babylon-ocp4-workshop
+    # GUID is not set by the template, but is labeled after a guid is set
+    guid: a39f
+  namespace: anarchy
+spec:
+  # Requester for the service... not sure about the fields here
+  requester:
+    name: someone-example.com
+    email: someone@example.com
+  governor: babylon-ocp4-workshop
+  # Parameters are free-form dictionary
+  parameters:
+    openshift_release: "4.1"
+    aws_region: us-east-1
+    repo_version: "3.11"
+    subdomain_base_suffix: .example.opentlc.com
+status:
+  # operator sets status including action schedule
+  action_schedule:
+    deploy:
+      at: 2019-06-04T01:03:39Z
+      started: true
+    destroy:
+      at: 2019-06-10T01:03:39Z
+      started: false
+  state: requested
+  actions:
+  - action: deploy
+    at: 2019-06-04T01:03:39Z
+    id: e94d8acd-1ede-420a-942a-ef35c8ee88f0

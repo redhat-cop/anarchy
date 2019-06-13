@@ -1,0 +1,147 @@
+---
+apiVersion: template.openshift.io/v1
+kind: Template
+metadata:
+  annotations:
+    description: openshift-provision-manager
+  name: openshift-provision-manager
+
+parameters:
+- name: ANARCHY_NAMESPACE
+  value: anarchy-operator
+- name: ANARCHY_IMAGESTREAM_NAMESPACE
+  value: openshift
+- name: IMAGE_BASE
+  value: quay.io/gnuthought/
+- name: ANARCHY_IMAGE
+  value: anarchy-operator:latest
+- name: ANARCHY_SERVICE_NAME
+  value: anarchy-operator
+
+objects:
+- apiVersion: v1
+  kind: Namespace
+  metadata:
+    name: ${ANARCHY_NAMESPACE}
+    annotations:
+      openshift-provision/action: create
+
+- apiVersion: v1
+  kind: ServiceAccount
+  metadata:
+    name: ${ANARCHY_SERVICE_NAME}
+    namespace: ${ANARCHY_NAMESPACE}
+
+- apiVersion: rbac.authorization.k8s.io/v1
+  kind: RoleBinding
+  metadata:
+    name: ${ANARCHY_SERVICE_NAME}-edit
+    namespace: ${ANARCHY_NAMESPACE}
+  roleRef:
+    apiGroup: rbac.authorization.k8s.io
+    kind: ClusterRole
+    name: edit
+  subjects:
+  - kind: ServiceAccount
+    name: ${ANARCHY_SERVICE_NAME}
+    namespace: ${ANARCHY_NAMESPACE}
+
+- apiVersion: v1
+  kind: Service
+  metadata:
+    name: ${ANARCHY_SERVICE_NAME}
+    namespace: ${ANARCHY_NAMESPACE}
+  spec:
+    ports:
+    - name: api
+      port: 5000
+      protocol: TCP
+      targetPort: 5000
+    - name: metrics
+      port: 8000
+      protocol: TCP
+      targetPort: 8000
+    selector:
+      name: ${ANARCHY_SERVICE_NAME}
+    sessionAffinity: None
+    type: ClusterIP
+
+- apiVersion: v1
+  kind: Route
+  metadata:
+    name: ${ANARCHY_SERVICE_NAME}
+    namespace: ${ANARCHY_NAMESPACE}
+  spec:
+    port:
+      targetPort: api
+    tls:
+      termination: edge
+    to:
+      kind: Service
+      name: ${ANARCHY_SERVICE_NAME}
+      weight: 100
+    wildcardPolicy: None
+
+- apiVersion: extensions/v1beta1
+  kind: Deployment
+  metadata:
+    labels:
+      name: ${ANARCHY_SERVICE_NAME}
+    name: ${ANARCHY_SERVICE_NAME}
+    namespace: ${ANARCHY_NAMESPACE}
+  spec:
+    replicas: 1
+    selector:
+      matchLabels:
+        name: ${ANARCHY_SERVICE_NAME}
+    strategy:
+      type: Recreate
+    template:
+      metadata:
+        labels:
+          name: ${ANARCHY_SERVICE_NAME}
+      spec:
+        containers:
+        - name: manager
+          env:
+          - name: RUNNER_IMAGE
+            value: docker-registry.default.svc:5000/${ANARCHY_IMAGESTREAM_NAMESPACE}/openshift-provision-runner:latest
+          image: docker-registry.default.svc:5000/${ANARCHY_IMAGESTREAM_NAMESPACE}/openshift-provision-manager:latest
+          imagePullPolicy: Always
+          # FIXME - Add probes
+          #livenessProbe:
+          #readinessProbe:
+          resources: {}
+          terminationMessagePath: /dev/termination-log
+          terminationMessagePolicy: File
+        restartPolicy: Always
+        securityContext: {}
+        serviceAccountName: ${ANARCHY_SERVICE_NAME}
+        terminationGracePeriodSeconds: 30
+
+- kind: ClusterRole
+  apiVersion: v1
+  metadata:
+    name: anarchy-operator
+    labels:
+      template: "cronjob-ldap-group-sync"
+  rules:
+  - apiGroups:
+    - gpte.redhat.com
+    resources:
+    - anarchygovernors
+    verbs:
+    - get
+    - list
+    - watch
+
+- kind: ClusterRoleBinding
+  apiVersion: v1
+  metadata:
+    name: anarchy-operator:${ANARCHY_NAMESPACE}:${ANARCHY_SERVICE_NAME}
+  roleRef:
+    name: anarchy-operator
+  subjects:
+  - kind: ServiceAccount
+    namespace: ${ANARCHY_NAMESPACE}
+    name: ${ANARCHY_SERVICE_NAME}

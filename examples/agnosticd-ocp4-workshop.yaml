@@ -1,0 +1,101 @@
+---
+api_version: gpte.redhat.com/v1
+kind: AnarchyGovernor
+metadata:
+  name: babylon-ocp4-workshop
+spec:
+  # List of parameters to pass to the Babylon Tower job template along with
+  # whatever parameters are in the AgnosticDeployment. Parameters in the
+  # AgnosticDeployment override parameters here.
+  #
+  # Values may strings or dictionaries that give details on how to fetch the
+  # value from a secret.
+  parameters:
+    cloud_provider: ec2    
+    aws_access_key_id:
+      secret_name: opentlc_aws_creds
+      secret_key: aws_access_key_id
+    aws_secret_access_key:
+      secret_name: opentlc_aws_creds
+      secret_key: aws_access_key_id
+  subjectEventActions:
+    added: deploy
+    modified: update
+    deleted: delete
+  # Each action should correspond to a Babylon Tower Job template name
+  actions:
+  - name: deploy
+    api:
+      url: https://...
+      request:
+        method: POST
+    # Event handlers fire on callback
+    eventHandlers:
+    - event: started
+      handlers:
+      - handlerType: email
+        emailParams:
+          to: ["requester"]
+          from: noreply@opentlc.com
+          subject: >-
+            Your Red Hat OPENTLC ocp4-workshop
+            {{ agnostic_deployment.metadata.name }} deployment has started
+          body: |-
+            ... jinja template ...
+    - event: complete
+      handlers:
+      - handlerType: scheduleAction
+        scheduleActionParams:
+          action: destroy
+          after: 6d
+      - handlerType: scheduleAction
+        scheduleActionParams:
+          action: suspend
+          after: 8h
+      - handlerType: email
+        emailParams:
+          to: ["requester"]
+          from: noreply@opentlc.com
+          subject: >-
+            Your Red Hat OPENTLC ocp4-workshop
+            {{ agnostic_deployment.metadata.name }} has been deployed
+          body: |-
+            ... jinja template ...
+    - event: error
+      handlers:
+      - handlerType: email
+        emailParams:
+          to:
+          - requester
+          ...
+  - name: destroy
+    api:
+      url: https://...
+    eventHandlers:
+    - event: complete
+      handlers:
+      - handlerType: email
+        emailParams:
+          to:
+          - requester
+          from: noreply@opentlc.com
+          subject: >-
+            Your Red Hat OPENTLC ocp4-workshop
+            {{ agnostic_deployment.metadata.name }} has been destroyed.
+          body: |-
+            ... jinja template …
+  - name: suspend
+    api:
+      url: https://...
+    ...
+  - name: resume
+    api:
+      url: https://...
+    eventHandlers:
+    - event: complete
+      handlers:
+      - handlerType: scheduleAction
+        scheduleActionParams:
+          action: suspend
+          after: 8h
+    ...
