@@ -12,3 +12,5 @@ spec:
     singular: anarchygovernor
     kind: AnarchyGovernor
     shortNames: []
+  subresources:
+    status: {}

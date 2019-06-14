@@ -1,0 +1,14 @@
+---
+apiVersion: gpte.redhat.com/v1
+kind: AnarchySubject
+metadata:
+  name: reqres-in-user1
+  namespace: anarchy-operator
+spec:
+  requester:
+    name: someone-example.com
+    email: someone@example.com
+  governor: reqres-in-example
+  parameters:
+    name: bob
+    job: subgenius

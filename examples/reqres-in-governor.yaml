@@ -5,10 +5,22 @@ metadata:
   name: reqres-in-example
 spec:
   parameters: {}
-  subjectEventActions:
-    added: register
-    modified: update
-    deleted: delete
+  subjectEventHandlers:
+  - event: added
+    handlers:
+    - handlerType: scheduleAction
+      scheduleActionParams:
+        action: register
+  - event: modified
+    handlers:
+    - handlerType: scheduleAction
+      scheduleActionParams:
+        action: update
+  - event: delete
+    handlers:
+    - handlerType: scheduleAction
+      scheduleActionParams:
+        action: delete
   actions:
   - name: register
     api:
@@ -26,10 +38,14 @@ spec:
           after: 1m 
       - handlerType: setLabels
         setLabelsParams:
-          user-id: "{{ response.json.data.id }}"
+          setLabels:
+          - name: userid
+            jinja2Template: "{{ response.json.data.id }}"
       - handlerType: setStatus
         setStatusParams:
-          userId: "{{ response.json.data.id }}"
+          setStatus:
+          - name: userId
+            jinja2Template: "{{ response.json.data.id }}"
   - name: check
     api:
       url: "https://reqres.in/api/users/{{ subject.status.userId }}"

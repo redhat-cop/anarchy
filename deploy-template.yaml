@@ -134,6 +134,30 @@ objects:
     - get
     - list
     - watch
+  - apiGroups:
+    - gpte.redhat.com
+    resources:
+    - anarchysubjects
+    verbs:
+    - get
+    - list
+    - watch
+    - update
+    - patch
+    - delete
+  - apiGroups:
+    - gpte.redhat.com
+    resources:
+    - anarchyactions
+    - anarchysubjects/status
+    verbs:
+    - create
+    - get
+    - list
+    - watch
+    - update
+    - patch
+    - delete
 
 - kind: ClusterRoleBinding
   apiVersion: v1
