@@ -1,14 +1,5 @@
 #!/usr/bin/env python
 
-# TODO
-#
-# * Flask webserver to get events
-# * Implement secret support for governor parameters
-# * Implement ability to customize data sent to api rather than all parameters
-# * Implement email event handler
-# * Locking mechanism to prevent more than one anarchy operator from running
-#
-
 import base64
 import datetime
 import flask
@@ -706,7 +697,6 @@ def handle_action_added(action_resource):
     action = Action(action_resource)
     logger.debug("Action status on {} is {}".format(action.name(), action.status))
     if action.status == None:
-        # FIXME - Add to action queue, process from queue
         action.subject().queue_action(action)
 
 def handle_action_modified(action_resource):
