@@ -2,7 +2,7 @@
 apiVersion: gpte.redhat.com/v1
 kind: AnarchySubject
 metadata:
-  name: reqres-in-user1
+  name: reqres-in-user2
   namespace: anarchy-operator
 spec:
   requester:
@@ -10,5 +10,5 @@ spec:
     email: someone@example.com
   governor: reqres-in-example
   parameters:
-    name: bob
-    job: subgenius
+    email: eve.holt@reqres.in
+    password: pistol

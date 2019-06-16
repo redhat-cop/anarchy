@@ -45,7 +45,7 @@ spec:
         setStatusParams:
           setStatus:
           - name: userId
-            jinja2Template: "{{ response.json.data.id }}"
+            jinja2Template: '{{ action.status.apiResponse.data.id }}'
   - name: check
     api:
       url: "https://reqres.in/api/users/{{ subject.status.userId }}"
@@ -79,7 +79,7 @@ spec:
           updatedAt: "{{ response.json.updatedAt }}"
   - name: delete
     api:
-      url: "https://reqres.in/api/users/{{ subject.status.user_id }}"
+      url: "https://reqres.in/api/users/{{ subject.status.userId }}"
       request:
         method: DELETE
       statusCodeEvents:

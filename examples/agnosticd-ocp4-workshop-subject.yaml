@@ -22,17 +22,3 @@ spec:
     aws_region: us-east-1
     repo_version: "3.11"
     subdomain_base_suffix: .example.opentlc.com
-status:
-  # operator sets status including action schedule
-  action_schedule:
-    deploy:
-      at: 2019-06-04T01:03:39Z
-      started: true
-    destroy:
-      at: 2019-06-10T01:03:39Z
-      started: false
-  state: requested
-  actions:
-  - action: deploy
-    at: 2019-06-04T01:03:39Z
-    id: e94d8acd-1ede-420a-942a-ef35c8ee88f0

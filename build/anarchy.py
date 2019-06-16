@@ -1,5 +1,14 @@
 #!/usr/bin/env python
 
+# TODO
+#
+# * Flask webserver to get events
+# * Implement secret support for governor parameters
+# * Implement ability to customize data sent to api rather than all parameters
+# * Implement email event handler
+# * Locking mechanism to prevent more than one anarchy operator from running
+#
+
 import base64
 import datetime
 import flask
@@ -7,10 +16,12 @@ import gevent.pywsgi
 import kubernetes
 import kubernetes.client.rest
 import logging
+import jinja2
 import os
 import prometheus_client
 import random
 import re
+import requests
 import six
 import socket
 import sys
@@ -31,6 +42,9 @@ anarchy_crd_domain = None
 anarchy_governors = {}
 anarchy_subjects = {}
 
+# Lock used by to trigger immediate subject action check
+action_release_lock = threading.Lock()
+
 def time_to_seconds(time):
     if isinstance(time, int):
         return time
@@ -48,14 +62,13 @@ def time_to_seconds(time):
     else:
         raise Exception("time not int or string")
 
-class Secret(object):
-    def __init__(self, name):
-        self.name = name
+def jinja2_render(template_string, template_vars):
+    template = jinja2.Template(template_string)
+    return template.render(template_vars)
 
-class SecretRef(object):
-    def __init__(self, secret, key):
-        self.secret = secret
-        self.key = key
+def get_secret_data(secret_name):
+    # FIXME
+    return {}
 
 class GovernorActionApiRequestConfig(object):
 
@@ -69,9 +82,117 @@ class GovernorActionApi(object):
         self.url = api_spec['url']
         self.request_config = GovernorActionApiRequestConfig(api_spec.get('request', {}))
         self.status_code_events = api_spec.get('statusCodeEvents', {})
-        assert isinstance(self.status_code_events, dict), 'statusCodeEvents must be a dict'
+        self.sanity_check()
 
-class GovernorEventHandler(object):
+    def sanity_check(self):
+        assert isinstance(self.status_code_events, dict), \
+            'statusCodeEvents must be a dict'
+
+    def call_api(self, subject, action):
+        governor = subject.governor()
+        parameters = governor.parameters()
+        parameters.update(subject.parameters())
+
+        url = jinja2_render(self.url, {
+            'governor': governor,
+            'subject': subject,
+            'action': action,
+            'parameters': parameters
+        })
+
+        logger.debug("{} to {}".format(self.request_config.method, url))
+        logger.debug(parameters)
+
+        if self.request_config.method == 'GET':
+            return requests.get(url, params=parameters)
+        elif self.request_config.method == 'DELETE':
+            return requests.delete(url, params=parameters)
+        elif self.request_config.method == 'POST':
+            return requests.post(url, json=parameters)
+        elif self.request_config.method == 'PUT':
+            return requests.put(url, json=parameters)
+        else:
+            raise Exception('unknown request method ' + self.request_config.method)
+
+    def status_code_event(self, code):
+        return self.status_code_events.get(str(code), None)
+
+
+class EmailEventHandler(object):
+    def __init__(self, handler_params):
+        self.email_to = handler_params['to']
+        self.email_from = handler_params['from']
+        self.email_subject_template = handler_params['subject']
+        self.email_body_template = handler_params['body']
+        self.sanity_check()
+
+    def sanity_check(self):
+        # FIXME
+        pass
+
+    def process(self, subject, action):
+        # FIXME
+        pass
+
+class ScheduleActionEventHandler(object):
+    def __init__(self, handler_params):
+        assert 'action' in handler_params, 'scheduleAction event handler requires action'
+        self.action = handler_params['action']
+        self.after_seconds = time_to_seconds(handler_params.get('after',0))
+
+    def process(self, subject, action):
+        subject.schedule_action(self.action, self.after_seconds)
+
+class SetLabelsEventHandlerItem(object):
+    def __init__(self, set_label):
+        assert 'name' in set_label, 'setLabels must define name'
+        self.name = set_label['name']
+        assert 'jinja2Template' in set_label, 'setLabels must define jinja2Template'
+        self.jinja2_template = jinja2.Template(set_label['jinja2Template'])
+
+class SetLabelsEventHandler(object):
+    def __init__(self, handler_params):
+        assert 'setLabels' in handler_params, 'setLabelsParams must include setLabels list'
+        self.set_labels = []
+        for set_label in handler_params.get('setLabels', []):
+            self.set_labels.append( SetLabelsEventHandlerItem(set_label) )
+
+    def process(self, subject, action):
+        set_labels = {}
+        for item in self.set_status:
+            set_values[item.name] = item.jinja2_template.render({
+                'action': action,
+                'governor': subject.governor(),
+                'subject': subject
+            })
+        subject.metadata['labels'].update(set_values)
+        subject.update()
+
+class SetStatusEventHandlerItem(object):
+    def __init__(self, set_status):
+        assert 'name' in set_status, 'setStatus must define name'
+        self.name = set_status['name']
+        assert 'jinja2Template' in set_status, 'setStatus must define jinja2Template'
+        self.jinja2_template = jinja2.Template(set_status['jinja2Template'])
+
+class SetStatusEventHandler(object):
+    def __init__(self, handler_params):
+        assert 'setStatus' in handler_params, 'setStatusParams must include setStatus list'
+        self.set_status = []
+        for set_status in handler_params.get('setStatus', []):
+            self.set_status.append( SetStatusEventHandlerItem(set_status) )
+
+    def process(self, subject, action):
+        set_values = {}
+        for item in self.set_status:
+            set_values[item.name] = item.jinja2_template.render({
+                'action': action,
+                'governor': subject.governor(),
+                'subject': subject
+            })
+        subject.set_status(set_values)
+
+class EventHandler(object):
 
     def __init__(self, handler_spec):
         assert 'handlerType' in handler_spec, 'eventHandlers must define handlerType'
@@ -79,9 +200,9 @@ class GovernorEventHandler(object):
         assert len(self.handler_type) > 0, 'eventHandlers must define handlerType'
 
         handler_class_name = (
-            'GovernorEventHandler' +
             self.handler_type[0].upper() +
-            self.handler_type[1:]
+            self.handler_type[1:] +
+            'EventHandler'
         )
 
         handler_class = getattr(sys.modules[__name__], handler_class_name)
@@ -92,87 +213,27 @@ class GovernorEventHandler(object):
 
         self.handler = handler_class(handler_spec[handler_params_name])
 
-    def run(self, governor, subject):
-        logger.info("Running {} event handler for {} governed by {}".format(
-            self.handler_type, subject.name, governor.name
+    def process(self, subject, action):
+        logger.info("Running {} event handler for {} in {}".format(
+            self.handler_type, subject.name(), subject.namespace()
         ))
-        self.handler.run(governor, subject)
+        self.handler.process(subject, action)
 
-class GovernorEventHandlerEmail(object):
-    def __init__(self, handler_params):
-        # FIXME - validate params
-        self.email_to = handler_params['to']
-        self.email_from = handler_params['from']
-        self.email_subject_template = handler_params['subject']
-        self.email_body_template = handler_params['body']
-
-    def run(self, governor, subject):
-        pass
-
-class GovernorEventHandlerScheduleAction(object):
-    def __init__(self, handler_params):
-        assert 'action' in handler_params, 'scheduleAction event handler requires action'
-        self.action = handler_params['action']
-        self.after_seconds = time_to_seconds(handler_params.get('after',0))
-
-    def run(self, governor, subject):
-        subject.schedule_action(self.action, self.after_seconds)
-
-class GovernorEventHandlerSetLabelItem(object):
-    def __init__(self, set_label):
-        assert 'name' in set_label, 'setLabels must define name'
-        self.name = set_label['name']
-        assert 'jinja2Template' in set_label, 'setLabels must define jinja2Template'
-        self.jinja2_template = set_label['jinja2Template']
-
-    def run(self, governor, subject):
-        pass
-
-class GovernorEventHandlerSetLabels(object):
-    def __init__(self, handler_params):
-        assert 'setLabels' in handler_params, 'setLabelsParams must include setLabels list'
-        self.set_labels = []
-        for set_label in handler_params.get('setLabels', []):
-            self.set_labels.append( GovernorEventHandlerSetLabelItem(set_label) )
-
-    def run(self, governor, subject):
-        pass
-
-class GovernorEventHandlerSetStatusItem(object):
-    def __init__(self, set_status):
-        assert 'name' in set_status, 'setStatus must define name'
-        self.name = set_status['name']
-        assert 'jinja2Template' in set_status, 'setLabels must define jinja2Template'
-        self.jinja2_template = set_status['jinja2Template']
-
-    def run(self, governor, subject):
-        pass
-
-class GovernorEventHandlerSetStatus(object):
-    def __init__(self, handler_params):
-        assert 'setStatus' in handler_params, 'setStatusParams must include setStatus list'
-        self.set_status = []
-        for set_status in handler_params.get('setStatus', []):
-            self.set_status.append( GovernorEventHandlerSetStatusItem(set_status) )
-
-    def run(self, governor, subject):
-        pass
-
-class GovernorEventHandlerList(object):
+class EventHandlerList(object):
 
     def __init__(self, event_handler_spec):
         assert 'event' in event_handler_spec, 'eventHandlers list must define event'
         self.event = event_handler_spec['event']
         self.handlers = []
         for handler_spec in event_handler_spec.get('handlers', []):
-            self.handlers.append( GovernorEventHandler(handler_spec) )
+            self.handlers.append( EventHandler(handler_spec) )
 
-    def run(self, governor, subject):
-        logger.info("Running event handlers for {} governed by {}".format(
-            subject.name, governor.name
+    def process(self, subject, action):
+        logger.info("Processing event handlers for {} in {}".format(
+            subject.name(), subject.namespace()
         ))
         for handler in self.handlers:
-            handler.run(governor, subject)
+            handler.process(subject, action)
 
 class GovernorAction(object):
 
@@ -187,17 +248,59 @@ class GovernorAction(object):
     def set_event_handlers(self, event_handlers):
         self.event_handler_lists = []
         for event_handler_spec in event_handlers:
-            self.event_handler_lists.append(GovernorEventHandlerList(event_handler_spec))
+            self.event_handler_lists.append(EventHandlerList(event_handler_spec))
+
+    def start(self, subject, action):
+        resp = self.api.call_api(subject, action)
+        resp_data = None
+        try:
+            resp_data = resp.json()
+        except ValueError as e:
+            pass
+
+        action.set_status({
+            "apiResponse": {
+                "status_code": resp.status_code,
+                "text": resp.text,
+                "data": resp_data
+            }
+        })
+
+        event = self.api.status_code_event(resp.status_code)
+        if event:
+            self.process_event_handlers(subject, event, action)
+
+    def process_event_handlers(self, subject, event, action):
+        for event_handler_list in self.event_handler_lists:
+            if event_handler_list.event == event:
+                event_handler_list.process(subject, action)
 
 class Governor(object):
+    """AnarchyGovernor class"""
 
     def __init__(self, resource):
         self.metadata = resource['metadata']
         self.spec = resource['spec']
-        self.name = self.metadata['name']
-        self.set_actions(self.spec.get('actions',[]))
-        self.set_parameters(self.spec.get('parameters',{}))
         self.set_subject_event_handlers(self.spec.get('subjectEventHandlers',{}))
+        self.__set_actions()
+        self.sanity_check()
+
+    def __set_actions(self):
+        actions = {}
+        for action_spec in self.spec.get('actions', []):
+            action = GovernorAction(action_spec)
+            actions[action.name] = action
+        self.actions = actions
+
+    def sanity_check(self):
+        if 'parameters' in self.spec:
+            for name, value in self.spec['parameters'].items():
+                if isinstance(value, dict):
+                    assert 'secret_name' in param_value, 'dictionary parameters must define secret_name'
+                    assert 'secret_key' in param_value, 'dictionary parameters must define secret_key'
+
+    def name(self):
+        return self.metadata['name']
 
     def uid(self):
         return self.metadata['uid']
@@ -205,77 +308,121 @@ class Governor(object):
     def resource_version(self):
         return self.metadata['resourceVersion']
 
-    def set_actions(self, action_list):
-        self.actions = {}
-        for action_spec in action_list:
-            action = GovernorAction(action_spec)
-            self.actions[action.name] = action
+    def governor_action(self, action):
+        assert action in self.actions, \
+            'governor has no action named {}'.format(action)
+        return self.actions[action]
 
-    def set_parameters(self, parameter_dict):
-        self.parameters = {}
-        for param_name, param_value in parameter_dict.items():
-            if isinstance(param_value, dict):
-                assert 'secret_name' in param_value, 'dictionary parameters must define secret_name'
-                assert 'secret_key' in param_value, 'dictionary parameters must define secret_key'
-                secret = self.register_secret(v['secret_name'])
-                self.parameters[k] = SecretRef(secret, param_value['secret_key'])
+    def parameters(self):
+        parameters = {}
+        secrets = {}
+        for name, value in self.spec.get('parameters', {}).items():
+            if isinstance(value, dict):
+                secret_name = value['secret_name']
+                secret_key = value['secret_key']
+                secret = secrets.get(secret_name, None)
+                if secret == None:
+                    secret = get_secret_data(secret_name)
+                assert secret_key in secret, \
+                    'data key {} not found in secret {}'.format(secret_key, secret_name)
+                parameters[name] = secret[secret_key]
             else:
-                self.parameters[k] = str(param_value)
+                parameters[name] = value
+        return parameters
+
+    def start_action(self, subject, action):
+        governor_action = self.governor_action(action.action())
+        governor_action.start(subject, action)
 
     def set_subject_event_handlers(self, event_handlers):
         self.subject_event_handler_lists = []
         for event_handler_spec in event_handlers:
             logger.debug(event_handler_spec)
-            self.subject_event_handler_lists.append(GovernorEventHandlerList(event_handler_spec))
+            self.subject_event_handler_lists.append(EventHandlerList(event_handler_spec))
 
-    def run_subject_event_handlers(self, subject, event):
+    def process_subject_event_handlers(self, subject, event):
         for event_handler_list in self.subject_event_handler_lists:
             if event_handler_list.event == event:
-                event_handler_list.run(self, subject)
+                event_handler_list.process(subject, None)
 
 class Subject(object):
+    """AnarchySubject class"""
+
     def __init__(self, resource):
+        """Initialize AnarchySubject from resource object data."""
         self.metadata = resource['metadata']
         self.spec = resource['spec']
         self.status = resource.get('status', None)
-        self.name = self.metadata['name']
-        self.namespace = self.metadata['namespace']
+        self.action_queue = []
+        self.sanity_check()
+
+    def sanity_check(self):
         assert 'governor' in self.spec, \
             'subjects must define governor'
-        self.governor_name = self.spec['governor']
-        assert self.governor_name in anarchy_governors, \
-            'governor {} is unknown'.format(self.governor_name)
-        self.parameters = self.spec.get('parameters', {})
+        assert self.spec['governor'] in anarchy_governors, \
+            'governor {} is unknown'.format(self.spec['governor'])
 
     def uid(self):
         return self.metadata['uid']
 
+    def name(self):
+        return self.metadata['name']
+
+    def namespace(self):
+        return self.metadata['namespace']
+
     def governor(self):
-        return anarchy_governors[self.governor_name]
+        return anarchy_governors[self.spec['governor']]
+
+    def governor_name(self):
+        return self.spec['governor']
+
+    def parameters(self):
+        return self.spec.get('parameters', {})
 
     def resource_version(self):
         return self.metadata['resourceVersion']
 
-    def run_subject_event_handlers(self, event):
-        return self.governor().run_subject_event_handlers(self, event)
+    def queue_action(self, action):
+        logger.debug("Queued action {} on {} in {}".format(
+            action.name(),
+            self.name(),
+            self.namespace()
+        ))
+        self.action_queue.append(action)
+
+    def start_actions(self):
+        logger.debug("Starting actions that are due on {}".format(self.name()))
+        for action in self.action_queue[:]:
+            if action.is_due():
+                self.governor().start_action(self, action)
+                self.action_queue.remove(action)
+
+    def process_subject_event_handlers(self, event):
+        return self.governor().process_subject_event_handlers(self, event)
 
     def schedule_action(self, action, after_seconds):
-        logger.info("Scheduling action {} for {} governed by {}".format(
-            action, self.name, self.governor_name
+        after = (
+            datetime.datetime.utcnow() +
+            datetime.timedelta(0, after_seconds)
+        ).strftime('%FT%TZ')
+
+        logger.info("Scheduling action {} for {} governed by {} to run after {}".format(
+            action, self.name(), self.governor_name(), after
         ))
-        after = (datetime.datetime.utcnow() + datetime.timedelta(0, 100)).strftime('%FT%TZ')
-        scheduled_action = Action({
+
+        action_obj = Action({
             "metadata": {
-                "generateName": self.name + '-' + action + '-',
+                "generateName": self.name() + '-' + action + '-',
                 "labels": {
-                    "gpte.redhat.com/anarchy-subject": self.name,
-                    "gpte.redhat.com/anarchy-governor": self.governor_name,
+                    anarchy_crd_domain + "/anarchy-subject": self.name(),
+                    anarchy_crd_domain + "/anarchy-governor": self.governor_name(),
                 },
                 "ownerReferences": [{
                     "apiVersion": anarchy_crd_domain + "/v1",
                     "controller": True,
                     "kind": "AnarchySubject",
-                    "name": self.name,
+                    "name": self.name(),
                     "uid": self.uid()
                 }]
             },
@@ -285,32 +432,27 @@ class Subject(object):
                 "governorRef": {
                     "apiVersion": anarchy_crd_domain + "/v1",
                     "kind": "AnarchyGovernor",
-                    "name": self.governor_name,
+                    "name": self.governor_name(),
                     "namespace": namespace,
                     "uid": self.governor().uid()
                 },
                 "subjectRef": {
                     "apiVersion": anarchy_crd_domain + "/v1",
                     "kind": "AnarchySubject",
-                    "name": self.name,
-                    "namespace": self.namespace,
+                    "name": self.name(),
+                    "namespace": self.namespace(),
                     "uid": self.uid()
                 }
             }
         })
-        scheduled_action.create()
+        action_obj.create()
         self.set_status({
-            "current_action": scheduled_action.name()
+            "currentAction": action_obj.name()
         })
 
-    def set_status(self, status_update):
-        if self.status == None:
-            self.status = status_update
-        else:
-            self.status.update(status_update)
-
-        kube_custom_objects.replace_namespaced_custom_object_status(
-            anarchy_crd_domain, 'v1', self.namespace, 'anarchysubjects', self.name,
+    def update(self):
+        resource = kube_custom_objects.replace_namespaced_custom_object(
+            anarchy_crd_domain, 'v1', self.namespace(), 'anarchysubjects', self.name(),
             {
                 "apiVersion": anarchy_crd_domain + "/v1",
                 "kind": "AnarchySubject",
@@ -319,12 +461,40 @@ class Subject(object):
                 "status": self.status
             }
         )
+        self.metadata = resource['metadata']
+        self.spec = resource['spec']
+        self.status = resource['status']
+
+    def set_status(self, status_update):
+        if self.status == None:
+            self.status = status_update
+        else:
+            self.status.update(status_update)
+
+        resource = kube_custom_objects.replace_namespaced_custom_object_status(
+            anarchy_crd_domain, 'v1', self.namespace(), 'anarchysubjects', self.name(),
+            {
+                "apiVersion": anarchy_crd_domain + "/v1",
+                "kind": "AnarchySubject",
+                "metadata": self.metadata,
+                "spec": self.spec,
+                "status": self.status
+            }
+        )
+        self.metadata = resource['metadata']
+        self.spec = resource['spec']
+        self.status = resource['status']
 
 class Action(object):
     def __init__(self, resource):
         self.metadata = resource['metadata']
         self.spec = resource['spec']
         self.status = resource.get('status', None)
+        self.sanity_check()
+
+    def sanity_check(self):
+        # FIXME
+        pass
 
     def name(self):
         return self.metadata['name']
@@ -332,14 +502,34 @@ class Action(object):
     def namespace(self):
         return self.metadata['namespace']
 
+    def action(self):
+        return self.spec['action']
+
+    def is_due(self):
+        after_datetime = self.spec.get('after','')
+        return after_datetime < datetime.datetime.utcnow().strftime('%FT%TZ')
+
+    def governor(self):
+        return anarchy_governors[self.spec['governorRef']['name']]
+
     def governor_name(self):
         return self.spec['governorRef']['name']
+
+    def subject(self):
+        return anarchy_subjects[
+            self.spec['subjectRef']['namespace'] + ':' +
+            self.spec['subjectRef']['name']
+        ]
 
     def subject_name(self):
         return self.spec['subjectRef']['name']
 
     def subject_namespace(self):
         return self.spec['subjectRef']['namespace']
+
+    def start(self):
+        logger.debug('Starting action {}'.format(self.name()))
+        self.subject().start_action(self)
 
     def create(self):
         scheduled_action = kube_custom_objects.create_namespaced_custom_object(
@@ -354,8 +544,22 @@ class Action(object):
         self.metadata = scheduled_action['metadata']
         self.spec = scheduled_action['spec']
 
-    def run(self):
-        logger.debug('Running action {}'.format(self.name()))
+    def set_status(self, status_update):
+        if self.status == None:
+            self.status = status_update
+        else:
+            self.status.update(status_update)
+
+        kube_custom_objects.replace_namespaced_custom_object_status(
+            anarchy_crd_domain, 'v1', self.namespace(), 'anarchyactions', self.name(),
+            {
+                "apiVersion": anarchy_crd_domain + "/v1",
+                "kind": "AnarchyAction",
+                "metadata": self.metadata,
+                "spec": self.spec,
+                "status": self.status
+            }
+        )
 
 def init():
     """Initialization function before management loops."""
@@ -428,8 +632,8 @@ def register_governor(governor_resource):
     governor = None
     try:
         governor = Governor(governor_resource)
-        anarchy_governors[governor.name] = governor
-        logger.info("Registered governor {}".format(governor.name))
+        anarchy_governors[governor.name()] = governor
+        logger.info("Registered governor {}".format(governor.name()))
     except Exception as e:
         logger.exception("Error registering governor {} {}".format(
             governor_resource['metadata']['name'], str(e)
@@ -463,7 +667,7 @@ def register_subject(subject_resource):
 def handle_subject_added(subject_resource):
     subject = register_subject(subject_resource)
     if subject and subject.status == None:
-        subject.run_subject_event_handlers('added')
+        subject.process_subject_event_handlers('added')
 
 def handle_subject_modified(subject_resource):
     # FIXME
@@ -500,8 +704,10 @@ def watch_subjects_loop():
 
 def handle_action_added(action_resource):
     action = Action(action_resource)
-    if action and action.status == None:
-        action.run()
+    logger.debug("Action status on {} is {}".format(action.name(), action.status))
+    if action.status == None:
+        # FIXME - Add to action queue, process from queue
+        action.subject().queue_action(action)
 
 def handle_action_modified(action_resource):
     # FIXME
@@ -521,6 +727,11 @@ def watch_actions():
         'anarchyactions'
     )
     for event in stream:
+        logger.debug("action {} in {} {}".format(
+            event['object']['metadata']['name'],
+            event['object']['metadata']['namespace'],
+            event['type']
+        ))
         if event['type'] == 'ADDED':
             handle_action_added(event['object'])
         elif event['type'] == 'MODIFIED':
@@ -536,16 +747,39 @@ def watch_actions_loop():
             logger.exception("Error in actions loop " + str(e))
             time.sleep(60)
 
-def govern():
-    while True:
-        time.sleep(5)
+def action_release():
+    """
+    Signal start actions loop that there may be work to be done.
 
-def govern_loop():
+    This is done by releasing the action_release_lock. This
+    lock may be already released.
+    """
+    try:
+        action_release_lock.release()
+    except threading.ThreadError:
+        pass
+
+def start_actions_loop():
     while True:
         try:
-            govern()
+            action_release_lock.acquire()
+            for subject in anarchy_subjects.values():
+                subject.start_actions()
         except Exception as e:
-            logger.exception("Error in govern loop " + str(e))
+            logger.exception("Error in start_actions_loop " + str(e))
+            time.sleep(60)
+
+def action_release_loop():
+    """
+    Periodically release the action_release_lock to trigger polling for actions
+    that are due.
+    """
+    while True:
+        try:
+            action_release()
+            time.sleep(5)
+        except Exception as e:
+            logger.exception("Error in action_release_loop " + str(e))
             time.sleep(60)
 
 def main():
@@ -558,18 +792,23 @@ def main():
     #).start()
 
     threading.Thread(
-        name = 'actions',
-        target = watch_actions_loop
-    ).start()
-
-    threading.Thread(
         name = 'subjects',
         target = watch_subjects_loop
     ).start()
 
     threading.Thread(
-        name = 'govern',
-        target = govern_loop
+        name = 'actions',
+        target = watch_actions_loop
+    ).start()
+
+    threading.Thread(
+        name = 'start-actions',
+        target = start_actions_loop
+    ).start()
+
+    threading.Thread(
+        name = 'action-release',
+        target = action_release_loop
     ).start()
 
     prometheus_client.start_http_server(8000)
