@@ -1,0 +1,33 @@
+---
+apiVersion: gpte.redhat.com/v1
+kind: AnarchyAPI
+metadata:
+  name: test
+spec:
+  baseUrl: https://anarchy-operator-test-server-anarchy-operator-test.apps.cluster-65b3.sandbox380.opentlc.com
+  caCertificate: |-
+    -----BEGIN CERTIFICATE-----
+    MIIC7TCCAdWgAwIBAgIBATANBgkqhkiG9w0BAQsFADAmMSQwIgYDVQQDDBtpbmdy
+    ZXNzLW9wZXJhdG9yQDE1NjEwMzY4MjAwHhcNMTkwNjIwMTMyMDE5WhcNMjEwNjE5
+    MTMyMDIwWjAmMSQwIgYDVQQDDBtpbmdyZXNzLW9wZXJhdG9yQDE1NjEwMzY4MjAw
+    ggEiMA0GCSqGSIb3DQEBAQUAA4IBDwAwggEKAoIBAQC+yLf4oFUaunDdw9y889nh
+    oLVHBarz9vnBYVF1a4WUzt39z5K5mSD+RyrFW9OrkUX4ZsHXC3awTQm/MzTFjtKP
+    UucNbX6gPacPOKfCMrlt/bQWyssrCIhGqvQRScOuDtcgVUurIkBAe25E+OEblYij
+    93Xkv4cjkUfTxBRCSCCsieRe1nr5U9iczTM+kyT9pNgQSu+BadmKGMoISgW14wTM
+    KbcM9WFfQ++4fFy3/uAnA8BGaokKAVwC7a05htBbKe/QPKom9kuT13u32Glhoi7H
+    aOR29ZkJOXugmxO/tbuVcjQfhWAcJ114sgn9VJ7rQigvKtl4wSs3Jd7OJA32EobX
+    AgMBAAGjJjAkMA4GA1UdDwEB/wQEAwICpDASBgNVHRMBAf8ECDAGAQH/AgEAMA0G
+    CSqGSIb3DQEBCwUAA4IBAQA964/LloTa5Z2FaHBSw3IN4L2n1lu5vF/vACKMR1ct
+    xb0wu34CE5XFswIBZxhGXiKj5UzgTA9sY4Gg5i8J6qy7MYcOHR575OL+tk/1OjWm
+    Ig0c/c6xLOtxaUzijxaQVx1hJl0ZbS1OMg7pXmq3DN6zVp3pCP7JT5NTAoNnBEZf
+    6KHEDTVyWj2zWILF8fwRos3r1cV9Ydcm/jC3PUvzEXAHaigEQZTCOggI7NxqJqzt
+    I1Qo7Hy5GrQqusIMF25U+zSI3z25nvQqtIL3fYz+Bi4SY8qrKwrdVVzozzWaOx7/
+    ac5pDWvCXvU6CInfSBoEcDtmuu/w98I0RZ1PIUcXTgpW
+    -----END CERTIFICATE-----
+  headers:
+  - name: Authorization
+    value: "Bearer {{ parameters.api_auth_token }}"
+  parameters:
+    auth_token:
+      secret_name: test-api-creds
+      secret_key: api_auth_token

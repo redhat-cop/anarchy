@@ -1,5 +1,5 @@
 ---
-api_version: gpte.redhat.com/v1
+apiVersion: gpte.redhat.com/v1
 kind: AnarchySubject
 metadata:
   # Name is based on agnosticd config type and a random string

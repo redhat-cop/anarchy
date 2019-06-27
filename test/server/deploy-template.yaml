@@ -1,0 +1,87 @@
+---
+apiVersion: template.openshift.io/v1
+kind: Template
+metadata:
+  annotations:
+    description: anarchy-operator-test-server
+  name: anarchy-operator-test-server
+
+parameters:
+- name: ANARCHY_TEST_NAMESPACE
+  value: anarchy-operator-test
+- name: ANARCHY_IMAGESTREAM_NAMESPACE
+  value: openshift
+- name: IMAGE_BASE
+  value: quay.io/gpte-devops-automation/
+- name: ANARCHY_TEST_IMAGE
+  value: anarchy-operator-test-server:latest
+- name: ANARCHY_TEST_SERVICE_NAME
+  value: anarchy-operator-test-server
+
+objects:
+- apiVersion: v1
+  kind: Namespace
+  metadata:
+    name: ${ANARCHY_TEST_NAMESPACE}
+
+- apiVersion: v1
+  kind: Service
+  metadata:
+    name: ${ANARCHY_TEST_SERVICE_NAME}
+    namespace: ${ANARCHY_TEST_NAMESPACE}
+  spec:
+    ports:
+    - name: api
+      port: 5000
+      protocol: TCP
+      targetPort: 5000
+    selector:
+      name: ${ANARCHY_TEST_SERVICE_NAME}
+    sessionAffinity: None
+    type: ClusterIP
+
+- apiVersion: v1
+  kind: Route
+  metadata:
+    name: ${ANARCHY_TEST_SERVICE_NAME}
+    namespace: ${ANARCHY_TEST_NAMESPACE}
+  spec:
+    port:
+      targetPort: api
+    tls:
+      termination: edge
+    to:
+      kind: Service
+      name: ${ANARCHY_TEST_SERVICE_NAME}
+      weight: 100
+    wildcardPolicy: None
+
+- apiVersion: extensions/v1beta1
+  kind: Deployment
+  metadata:
+    labels:
+      name: ${ANARCHY_TEST_SERVICE_NAME}
+    name: ${ANARCHY_TEST_SERVICE_NAME}
+    namespace: ${ANARCHY_TEST_NAMESPACE}
+  spec:
+    replicas: 1
+    selector:
+      matchLabels:
+        name: ${ANARCHY_TEST_SERVICE_NAME}
+    strategy:
+      type: Recreate
+    template:
+      metadata:
+        labels:
+          name: ${ANARCHY_TEST_SERVICE_NAME}
+      spec:
+        containers:
+        - name: manager
+          image: image-registry.openshift-image-registry.svc:5000/${ANARCHY_IMAGESTREAM_NAMESPACE}/${ANARCHY_TEST_IMAGE}
+          imagePullPolicy: Always
+          resources: {}
+          terminationMessagePath: /dev/termination-log
+          terminationMessagePolicy: File
+        restartPolicy: Always
+        securityContext: {}
+        terminationGracePeriodSeconds: 30

@@ -68,7 +68,7 @@ objects:
     resources: {}
     runPolicy: Serial
     source:
-      contextDir: operator
+      contextDir: build
       git:
         uri: ${GIT_REPO}
         ref: master

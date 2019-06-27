@@ -23,10 +23,10 @@ spec:
         action: delete
   actions:
   - name: register
-    api:
-      url: https://reqres.in/api/register
-      request:
-        method: POST
+    request:
+      api: reqres.in
+      path: /api/register
+      method: POST
       statusCodeEvents:
         200: registered
     eventHandlers:
