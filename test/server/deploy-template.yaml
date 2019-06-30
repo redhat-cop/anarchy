@@ -9,10 +9,8 @@ metadata:
 parameters:
 - name: ANARCHY_TEST_NAMESPACE
   value: anarchy-operator-test
-- name: ANARCHY_IMAGESTREAM_NAMESPACE
-  value: openshift
-- name: IMAGE_BASE
-  value: quay.io/gpte-devops-automation/
+- name: ANARCHY_TEST_IMAGESTREAM_NAMESPACE
+  value: anarchy-operator-test
 - name: ANARCHY_TEST_IMAGE
   value: anarchy-operator-test-server:latest
 - name: ANARCHY_TEST_SERVICE_NAME
@@ -77,7 +75,7 @@ objects:
       spec:
         containers:
         - name: manager
-          image: image-registry.openshift-image-registry.svc:5000/${ANARCHY_IMAGESTREAM_NAMESPACE}/${ANARCHY_TEST_IMAGE}
+          image: image-registry.openshift-image-registry.svc:5000/${ANARCHY_TEST_IMAGESTREAM_NAMESPACE}/${ANARCHY_TEST_IMAGE}
           imagePullPolicy: Always
           resources: {}
           terminationMessagePath: /dev/termination-log

@@ -36,7 +36,7 @@ spec:
       url: https://...
       request:
         method: POST
-      callbackUrlParameter: callback_url
+      callbackUrlParameter: anarchy_callback_url
     # Field in event data to identify event name
     eventNameParameter: event
     # Event handlers fire on callback

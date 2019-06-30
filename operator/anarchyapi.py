@@ -64,7 +64,7 @@ class AnarchyAPI(object):
     def ca_certificate_file(self):
         if self._ca_certificate_file:
             return self._ca_certificate_file
-        cert = tempfile.NamedTemporaryFile(delete=False)
+        cert = tempfile.NamedTemporaryFile(delete=False, mode='w')
         cert.write(self.spec['caCertificate'])
         cert.close()
         self._ca_certificate_file = cert.name
@@ -77,28 +77,28 @@ class AnarchyAPI(object):
 
         resp = None
         if request_config.method == 'GET':
-            resp =  requests.get(
+            resp = requests.get(
                 url,
                 headers=headers,
                 params=parameters,
                 verify=self.ca_certificate_file()
             )
         elif request_config.method == 'DELETE':
-            resp =  requests.delete(
+            resp = requests.delete(
                 url,
                 headers=headers,
                 params=parameters,
                 verify=self.ca_certificate_file()
             )
         elif request_config.method == 'POST':
-            resp =  requests.post(
+            resp = requests.post(
                 url,
                 headers=headers,
                 json=parameters,
                 verify=self.ca_certificate_file()
             )
         elif request_config.method == 'PUT':
-            resp =  requests.put(
+            resp = requests.put(
                 url,
                 headers=headers,
                 json=parameters,

@@ -11,7 +11,7 @@ def get_secret_data(runtime, secret_name):
     secret = runtime.kube_api.read_namespaced_secret(
         secret_name, runtime.namespace
     )
-    return { k: base64.b64decode(v) for (k, v) in secret.data.items() }
+    return { k: base64.b64decode(v).decode('utf-8') for (k, v) in secret.data.items() }
 
 def add_parameters(parameters, runtime, add):
     secrets = {}

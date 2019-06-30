@@ -10,45 +10,13 @@ parameters:
 - name: GIT_REPO
   value: https://github.com/gnuthought/anarchy-operator.git
 - name: NAMESPACE
-  value: openshift
+  value: anarchy-operator
 
 objects:
 - apiVersion: image.openshift.io/v1
   kind: ImageStream
   metadata:
-    annotations:
-      openshift.io/display-name: CentOS
-    name: centos
-    namespace: ${NAMESPACE}
-  spec:
-    lookupPolicy:
-      local: false
-    tags:
-    - annotations:
-        description: CentOS 7 base image
-        openshift.io/display-name: CentOS 7
-        openshift.io/provider-display-name: CentOS 7
-      from:
-        kind: DockerImage
-        name: docker.io/centos:7
-      importPolicy: {}
-      name: "7"
-      referencePolicy:
-        type: Local
-
-- apiVersion: image.openshift.io/v1
-  kind: ImageStream
-  metadata:
     name: anarchy-operator
-    namespace: ${NAMESPACE}
-  spec:
-    lookupPolicy:
-      local: false
-
-- apiVersion: image.openshift.io/v1
-  kind: ImageStream
-  metadata:
-    name: anarchy-operator-test-server
     namespace: ${NAMESPACE}
   spec:
     lookupPolicy:
@@ -76,32 +44,6 @@ objects:
       type: Docker
       dockerStrategy:
         from:
-          kind: ImageStreamTag
-          name: centos:7
-    triggers: []
-
-- apiVersion: v1
-  kind: BuildConfig
-  metadata:
-    name: anarchy-operator-test-server
-    namespace: ${NAMESPACE}
-  spec:
-    output:
-      to:
-        kind: ImageStreamTag
-        name: anarchy-operator-test-server:latest
-    postCommit: {}
-    resources: {}
-    runPolicy: Serial
-    source:
-      contextDir: test/server
-      git:
-        uri: ${GIT_REPO}
-        ref: master
-    strategy:
-      type: Docker
-      dockerStrategy:
-        from:
-          kind: ImageStreamTag
-          name: centos:7
+          kind: DockerImage
+          name: registry.redhat.io/ubi8/python-36:latest
     triggers: []

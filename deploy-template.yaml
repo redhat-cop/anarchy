@@ -10,9 +10,7 @@ parameters:
 - name: ANARCHY_NAMESPACE
   value: anarchy-operator
 - name: ANARCHY_IMAGESTREAM_NAMESPACE
-  value: openshift
-- name: IMAGE_BASE
-  value: quay.io/gnuthought/
+  value: anarchy-operator
 - name: ANARCHY_IMAGE
   value: anarchy-operator:latest
 - name: ANARCHY_SERVICE_NAME
