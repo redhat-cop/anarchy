@@ -1,5 +1,6 @@
 import logging
 import requests
+import requests.auth
 import tempfile
 
 logger = logging.getLogger('anarchy')
@@ -58,6 +59,16 @@ class AnarchyAPI(object):
     def is_https(self):
         return self.spec['baseUrl'].startswith('https://')
 
+    def auth(self, runtime):
+        if 'digestAuth' in self.spec:
+            secret_data = runtime.get_secret_data(self.spec['digestAuth']['secretName'])
+            return requests.auth.HTTPDigestAuth(secret_data['user'], secret_data['password'])
+        elif 'basicAuth' in self.spec:
+            secret_data = runtime.get_secret_data(self.spec['basicAuth']['secretName'])
+            return requests.auth.HTTPBasicAuth(secret_data['user'], secret_data['password'])
+        else:
+            return None
+
     def ca_certificate(self):
         return self.spec.get('caCertificate', None)
 
@@ -67,7 +78,8 @@ class AnarchyAPI(object):
         ca_certificate_text = self.spec['caCertificate']
 
         if not ca_certificate_text:
-            return None
+            logger.warning('Disabling TLS certificate verification for %s', self.name())
+            return False
 
         cert = tempfile.NamedTemporaryFile(delete=False, mode='w')
         cert.write(self.spec['caCertificate'])
@@ -75,7 +87,7 @@ class AnarchyAPI(object):
         self._ca_certificate_file = cert.name
         return cert.name
 
-    def call(self, path, parameters, headers, request_config):
+    def call(self, runtime, path, parameters, headers, request_config):
         url = self.base_url() + path
 
         logger.debug("%s to %s", request_config.method, url)
@@ -84,6 +96,7 @@ class AnarchyAPI(object):
         if request_config.method == 'GET':
             resp = requests.get(
                 url,
+                auth=self.auth(runtime),
                 headers=headers,
                 params=parameters,
                 verify=self.ca_certificate_file()
@@ -91,6 +104,7 @@ class AnarchyAPI(object):
         elif request_config.method == 'DELETE':
             resp = requests.delete(
                 url,
+                auth=self.auth(runtime),
                 headers=headers,
                 params=parameters,
                 verify=self.ca_certificate_file()
@@ -98,6 +112,7 @@ class AnarchyAPI(object):
         elif request_config.method == 'POST':
             resp = requests.post(
                 url,
+                auth=self.auth(runtime),
                 headers=headers,
                 json=parameters,
                 verify=self.ca_certificate_file()
@@ -105,6 +120,7 @@ class AnarchyAPI(object):
         elif request_config.method == 'PUT':
             resp = requests.put(
                 url,
+                auth=self.auth(runtime),
                 headers=headers,
                 json=parameters,
                 verify=self.ca_certificate_file()

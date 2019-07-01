@@ -1,4 +1,3 @@
-import base64
 import jinja2
 import logging
 import six
@@ -7,21 +6,15 @@ logger = logging.getLogger('anarchy')
 
 from anarchyapi import AnarchyAPI
 
-def get_secret_data(runtime, secret_name):
-    secret = runtime.kube_api.read_namespaced_secret(
-        secret_name, runtime.namespace
-    )
-    return { k: base64.b64decode(v).decode('utf-8') for (k, v) in secret.data.items() }
-
 def add_parameters(parameters, runtime, add):
     secrets = {}
     for name, value in add.items():
         if isinstance(value, dict):
-            secret_name = value['secret_name']
-            secret_key = value['secret_key']
+            secret_name = value['secretName']
+            secret_key = value['secretKey']
             secret = secrets.get(secret_name, None)
             if secret == None:
-                secret = get_secret_data(runtime, secret_name)
+                secret = runtime.get_secret_data(secret_name)
             assert secret_key in secret, \
                 'data key {} not found in secret {}'.format(secret_key, secret_name)
             parameters[name] = secret[secret_key]
@@ -168,9 +161,8 @@ class AnarchyGovernor(object):
             assert 'request' in spec, 'actions must define request'
             self.request = AnarchyGovernor.RequestConfig(spec['request'])
 
-            assert 'eventHandlers' in spec, 'actions must define eventHandlers'
             self.event_handler_lists = []
-            for event_handler_spec in spec['eventHandlers']:
+            for event_handler_spec in spec.get('eventHandlers', []):
                 self.event_handler_lists.append(
                     AnarchyGovernor.EventHandlerList(event_handler_spec)
                 )
@@ -221,8 +213,8 @@ class AnarchyGovernor(object):
         if 'parameters' in self.spec:
             for name, value in self.spec['parameters'].items():
                 if isinstance(value, dict):
-                    assert 'secret_name' in value, 'dictionary parameters must define secret_name'
-                    assert 'secret_key' in value, 'dictionary parameters must define secret_key'
+                    assert 'secretName' in value, 'dictionary parameters must define secretName'
+                    assert 'secretKey' in value, 'dictionary parameters must define secretKey'
 
     def name(self):
         return self.metadata['name']
@@ -268,7 +260,7 @@ class AnarchyGovernor(object):
         for header in api.headers():
             headers[header['name']] = jinja2render(header['value'], jinja2vars)
 
-        resp, url, method = api.call(path, parameters, headers, action_config.request)
+        resp, url, method = api.call(runtime, path, parameters, headers, action_config.request)
 
         resp_data = None
         try:
