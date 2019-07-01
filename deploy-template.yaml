@@ -15,7 +15,7 @@ parameters:
   value: anarchy-operator:latest
 - name: ANARCHY_SERVICE_NAME
   value: anarchy-operator
-- name: CALLBACK_BASE_URL
+- name: APP_DOMAIN
   required: true
 
 objects:
@@ -72,6 +72,7 @@ objects:
     name: ${ANARCHY_SERVICE_NAME}
     namespace: ${ANARCHY_NAMESPACE}
   spec:
+    host: ${ANARCHY_NAMESPACE}.${APP_DOMAIN}
     port:
       targetPort: api
     tls:
@@ -105,7 +106,7 @@ objects:
         - name: manager
           env:
           - name: CALLBACK_BASE_URL
-            value: ${CALLBACK_BASE_URL}
+            value: https://${ANARCHY_NAMESPACE}.${APP_DOMAIN}/
           image: image-registry.openshift-image-registry.svc:5000/${ANARCHY_IMAGESTREAM_NAMESPACE}/${ANARCHY_IMAGE}
           imagePullPolicy: Always
           # FIXME - Add probes
