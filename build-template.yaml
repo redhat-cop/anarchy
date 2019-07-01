@@ -45,5 +45,5 @@ objects:
       dockerStrategy:
         from:
           kind: DockerImage
-          name: registry.redhat.io/ubi8/python-36:latest
+          name: registry.access.redhat.com/ubi8/python-36:latest
     triggers: []

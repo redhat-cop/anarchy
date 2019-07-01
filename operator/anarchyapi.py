@@ -64,6 +64,11 @@ class AnarchyAPI(object):
     def ca_certificate_file(self):
         if self._ca_certificate_file:
             return self._ca_certificate_file
+        ca_certificate_text = self.spec['caCertificate']
+
+        if not ca_certificate_text:
+            return None
+
         cert = tempfile.NamedTemporaryFile(delete=False, mode='w')
         cert.write(self.spec['caCertificate'])
         cert.close()
