@@ -1,4 +1,4 @@
-FROM registry.redhat.io/ubi8/python-36:latest
+FROM registry.access.redhat.com/ubi8/python-36:latest
 
 USER 0
 
