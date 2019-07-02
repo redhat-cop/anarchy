@@ -11,13 +11,13 @@ spec:
   # Values may strings or dictionaries that give details on how to fetch the
   # value from a secret.
   parameters:
-    cloud_provider: ec2    
+    cloud_provider: ec2
     aws_access_key_id:
-      secret_name: test-aws-creds
-      secret_key: aws_access_key_id
+      secretName: test-aws-creds
+      secretKey: aws_access_key_id
     aws_secret_access_key:
-      secret_name: test-aws-creds
-      secret_key: aws_secret_access_key
+      secretName: test-aws-creds
+      secretKey: aws_secret_access_key
   subjectEventHandlers:
   - event: added
     handlers:
@@ -34,6 +34,8 @@ spec:
     request:
       api: test
       callbackUrlParameter: anarchy_callback_url
+      data: >-
+        {{ { "extra_vars": parameters } | to_json }}
       method: POST
       path: /api/v2/job_templates/deploy/launch/
     callbackEventNameParameter: event
@@ -79,6 +81,8 @@ spec:
     request:
       api: test
       callbackUrlParameter: anarchy_callback_url
+      data: >-
+        {{ { "extra_vars": parameters } | to_json }}
       method: POST
       path: /api/v2/job_templates/destroy/launch/
     callbackEventNameParameter: event

@@ -1,0 +1,13 @@
+---
+apiVersion: gpte.redhat.com/v1
+kind: AnarchySubject
+metadata:
+  generateName: babylon1-ping-
+  namespace: anarchy-operator
+spec:
+  requester:
+    name: someone-example.com
+    email: someone@example.com
+  governor: babylon1-ping
+  parameters:
+    foo: bar

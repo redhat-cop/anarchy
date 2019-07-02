@@ -36,6 +36,8 @@ spec:
   headers:
   - name: Authorization
     value: "Bearer {{ parameters.api_auth_token }}"
+  - name: Content-type
+    value: application/json
   parameters:
     api_auth_token:
       secret_name: test-api-creds

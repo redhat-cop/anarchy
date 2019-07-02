@@ -1,0 +1,28 @@
+---
+apiVersion: gpte.redhat.com/v1
+kind: AnarchyGovernor
+metadata:
+  name: babylon1-agnosticd
+spec:
+  parameters:
+    aws_access_key_id:
+      secretName: gpte-rw-aws-creds
+      secretKey: aws_access_key_id
+    aws_secret_access_key:
+      secretName: gpte-rw-aws-creds
+      secretKey: aws_secret_access_key
+    output_dir: /tmp/workdir
+  subjectEventHandlers:
+  - event: added
+    handlers:
+    - handlerType: scheduleAction
+      scheduleActionParams:
+        action: deploy
+  actions:
+  - name: deploy
+    request:
+      api: babylon1
+      data: >-
+        {{ { "extra_vars": parameters } | to_json }}
+      method: POST
+      path: /api/v2/job_templates/agnosticd-deploy/launch/

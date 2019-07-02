@@ -1,0 +1,31 @@
+apiVersion: gpte.redhat.com/v1
+kind: AnarchyGovernor
+metadata:
+  name: babylon1-ping
+  namespace: anarchy-operator
+spec:
+  actions:
+  - callbackEventNameParameter: event
+    eventHandlers:
+    - event: complete
+      handlers:
+      - handlerType: setLabels
+        setLabelsParams:
+          setLabels:
+          - value: complete
+            name: status
+    name: ping
+    request:
+      api: babylon1
+      callbackUrlParameter: anarchy_callback_url
+      data: >-
+        {{ { "extra_vars": parameters } | to_json }}
+      method: POST
+      path: /api/v2/job_templates/deployer-ping/launch/
+  parameters: {}
+  subjectEventHandlers:
+  - event: added
+    handlers:
+    - handlerType: scheduleAction
+      scheduleActionParams:
+        action: ping

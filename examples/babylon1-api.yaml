@@ -1,0 +1,17 @@
+apiVersion: gpte.redhat.com/v1
+kind: AnarchyAPI
+metadata:
+  name: babylon1
+  namespace: anarchy-operator
+spec:
+  baseUrl: https://tower1.babylon1.example.opentlc.com/
+  caCertificate: ""
+  basicAuth:
+    secretName: babylon1-creds
+  headers:
+  - name: Content-type
+    value: application/json
+  parameters:
+    api_auth_token:
+      secret_key: api_auth_token
+      secret_name: test-api-creds

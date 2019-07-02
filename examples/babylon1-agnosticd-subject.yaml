@@ -1,0 +1,21 @@
+---
+apiVersion: gpte.redhat.com/v1
+kind: AnarchySubject
+metadata:
+  generateName: babylon1-agnosticd-
+  namespace: anarchy-operator
+spec:
+  requester:
+    name: someone-example.com
+    email: someone@example.com
+  governor: babylon1-agnosticd
+  parameters:
+    aws_region: east-1
+    cloud_provider: ec2    
+    email: name@example.com
+    env_type: ansible-windows
+    guid: test
+    HostedZoneId: Z3IHLWJZOU9SRT
+    key_name: ocpkey
+    own_repo_path: http://admin.na.shared.opentlc.com/repos/ocp/3.6
+    subdomain_base_suffix: .example.opentlc.com

@@ -1,10 +1,14 @@
 import jinja2
+import json
 import logging
 import six
 
 logger = logging.getLogger('anarchy')
 
 from anarchyapi import AnarchyAPI
+
+jinja2env = jinja2.Environment()
+jinja2env.filters['to_json'] = lambda x: json.dumps(x)
 
 def add_parameters(parameters, runtime, add):
     secrets = {}
@@ -22,7 +26,7 @@ def add_parameters(parameters, runtime, add):
             parameters[name] = value
 
 def jinja2render(template_string, template_vars):
-    template = jinja2.Template(template_string)
+    template = jinja2env.from_string(template_string)
     return template.render(template_vars)
 
 def time_to_seconds(time):
@@ -102,8 +106,8 @@ class AnarchyGovernor(object):
             self.set_labels = {}
             for set_label in handler_params.get('setLabels', []):
                 assert 'name' in set_label, 'setLabels must define name'
-                assert 'jinja2Template' in set_label, 'setLabels must define jinja2Template'
-                set_labels[set_label['name']] = jinja2.Template(set_label['jinja2Template'])
+                assert 'value' in set_label, 'setLabels must define value'
+                self.set_labels[set_label['name']] = jinja2env.from_string(set_label['value'])
 
         def process(self, runtime, governor, subject, action, event_data, event_name):
             set_labels = {}
@@ -115,7 +119,10 @@ class AnarchyGovernor(object):
                     'governor': governor,
                     'subject': subject
                 })
-            subject.metadata['labels'].update(set_labels)
+            if 'labels' in subject.metadata:
+                subject.metadata['labels'].update(set_labels)
+            else:
+                subject.metadata['labels'] = set_labels
             subject.update(runtime)
 
     class SetStatusEventHandler(object):
@@ -124,8 +131,8 @@ class AnarchyGovernor(object):
             self.set_status = {}
             for set_status in handler_params.get('setStatus', []):
                 assert 'name' in set_status, 'setStatus must define name'
-                assert 'jinja2Template' in set_status, 'setStatus must define jinja2Template'
-                set_status[set_status['name']] = jinja2.Template(set_status['jinja2Template'])
+                assert 'value' in set_status, 'setStatus must define value'
+                self.set_status[set_status['name']] = jinja2env.from_string(set_status['value'])
 
         def process(self, runtime, governor, subject, action, event_data, event_name):
             set_status = {}
@@ -149,8 +156,31 @@ class AnarchyGovernor(object):
             self.path = spec['path']
             self.status_code_events = spec.get('statusCodeEvents', {})
 
+            if 'data' in spec:
+                self.data_template = jinja2env.from_string(spec['data'])
+            else:
+                self.data_template = None
+
+            self.header_templates = {}
+            for header in spec.get('headers', []):
+                self.header_templates[header['name']] = jinja2env.from_string(header['value'])
+
         def status_code_event(self, status_code):
             return self.status_code_events.get(str(status_code), None)
+
+        def data(self, jinja2vars):
+            if self.data_template:
+                return self.data_template.render(jinja2vars)
+            else:
+                return jinja2vars['parameters']
+
+        def headers(self, api, jinja2vars):
+            headers = {}
+            for header in api.headers():
+                headers[header['name']] = jinja2render(header['value'], jinja2vars)
+            for name, template in self.header_templates.items():
+                headers[name] = template.render(jinja2vars)
+            return headers
 
     class ActionConfig(object):
         def __init__(self, spec):
@@ -256,11 +286,13 @@ class AnarchyGovernor(object):
 
         path = jinja2render(action_config.request.path, jinja2vars)
 
-        headers = {}
-        for header in api.headers():
-            headers[header['name']] = jinja2render(header['value'], jinja2vars)
-
-        resp, url, method = api.call(runtime, path, parameters, headers, action_config.request)
+        resp, url = api.call(
+            runtime,
+            path,
+            action_config.request.method,
+            action_config.request.headers(api, jinja2vars),
+            action_config.request.data(jinja2vars)
+        )
 
         resp_data = None
         try:
@@ -270,7 +302,7 @@ class AnarchyGovernor(object):
 
         action.set_status(runtime, {
             "apiUrl": url,
-            "apiMethod": method,
+            "apiMethod": action_config.request.method,
             "apiResponse": {
                 "status_code": resp.status_code,
                 "text": resp.text,

@@ -87,45 +87,46 @@ class AnarchyAPI(object):
         self._ca_certificate_file = cert.name
         return cert.name
 
-    def call(self, runtime, path, parameters, headers, request_config):
+    def call(self, runtime, path, method, headers, data):
         url = self.base_url() + path
 
-        logger.debug("%s to %s", request_config.method, url)
+        logger.debug("%s to %s", method, url)
+        logger.debug(headers)
 
         resp = None
-        if request_config.method == 'GET':
+        if method == 'GET':
             resp = requests.get(
                 url,
                 auth=self.auth(runtime),
                 headers=headers,
-                params=parameters,
+                params=data,
                 verify=self.ca_certificate_file()
             )
-        elif request_config.method == 'DELETE':
+        elif method == 'DELETE':
             resp = requests.delete(
                 url,
                 auth=self.auth(runtime),
                 headers=headers,
-                params=parameters,
+                params=data,
                 verify=self.ca_certificate_file()
             )
-        elif request_config.method == 'POST':
+        elif method == 'POST':
             resp = requests.post(
                 url,
                 auth=self.auth(runtime),
                 headers=headers,
-                json=parameters,
+                data=data,
                 verify=self.ca_certificate_file()
             )
-        elif request_config.method == 'PUT':
+        elif method == 'PUT':
             resp = requests.put(
                 url,
                 auth=self.auth(runtime),
                 headers=headers,
-                json=parameters,
+                data=data,
                 verify=self.ca_certificate_file()
             )
         else:
-            raise Exception('unknown request method ' + request_config.method)
+            raise Exception('unknown request method ' + method)
 
-        return resp, url, request_config.method
+        return resp, url
