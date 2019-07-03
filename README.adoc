@@ -1,5 +1,4 @@
-Anarchy Operator
-================
+== Anarchy Operator
 
 The Anarchy operator provides a method of managing state for otherwise stateless API operations.
 The name "anarchy" is both ironic and to the point.
@@ -9,7 +8,87 @@ Anarchy is configured through the definition of governors.
 Anarchy governors define the strategy for controlling an anarchy subject by defining actions to execute on the subject.
 Actions are tracked as custom resources, allowing for complete visibility of current state of the subject.
 
-Examples
---------
+=== Installation
+
+. Clone this repo to your local workstation:
++
+----
+$ git clone https://github.com/redhat-gpte-devopsautomation/anarchy-operator.git
+----
+
+. Change to the project directory and create a Build Config using the provided template:
++
+----
+$ oc process -f build-template.yaml | oc apply -f -
+----
+
+. Check your work:
++
+----
+$ oc get all
+----
+
+. Start the build:
++
+----
+$ oc start-build anarchy-operator --from-dir=.
+----
+
+. Watch the build process:
++
+----
+$ oc logs -f anarchy-operator-1-build
+----
+
+. For the "deploy" step you'll have to provide the `APP_DOMAIN` parameter.
+Find out your app domain from the output of this command:
++
+----
+$ oc whoami --show-console
+https://console-openshift-console.apps.cluster-396f.sandbox663.opentlc.com
+----
+
+. Use the part starting with `apps.` as the `APP_DOMAIN` parameter and deploy the operator:
++
+----
+$ oc process -f deploy-template.yaml -p APP_DOMAIN=apps.cluster-396f.sandbox663.opentlc.com | oc apply -f -
+Warning: oc apply should be used on resource created by either oc create --save-config or oc apply
+namespace/anarchy-operator configured
+serviceaccount/anarchy-operator created
+rolebinding.rbac.authorization.k8s.io/anarchy-operator-edit created
+service/anarchy-operator created
+route.route.openshift.io/anarchy-operator created
+deployment.extensions/anarchy-operator created
+clusterrole.authorization.openshift.io/anarchy-operator created
+clusterrolebinding.authorization.openshift.io/anarchy-operator:anarchy-operator:anarchy-operator created
+customresourcedefinition.apiextensions.k8s.io/anarchyapis.gpte.redhat.com created
+customresourcedefinition.apiextensions.k8s.io/anarchygovernors.gpte.redhat.com created
+customresourcedefinition.apiextensions.k8s.io/anarchysubjects.gpte.redhat.com created
+customresourcedefinition.apiextensions.k8s.io/anarchyactions.gpte.redhat.com created
+----
+
+. Check your work: make sure these 4 CRDs have been created:
++
+----
+$ oc get crd | grep gpte.redhat.com
+anarchyactions.gpte.redhat.com                              2019-07-03T17:11:22Z
+anarchyapis.gpte.redhat.com                                 2019-07-03T17:11:22Z
+anarchygovernors.gpte.redhat.com                            2019-07-03T17:11:22Z
+anarchysubjects.gpte.redhat.com                             2019-07-03T17:11:22Z
+----
+
+. Check your work: make sure the operator's pod is running:
++
+----
+$ oc get pods
+NAME                                READY   STATUS      RESTARTS   AGE
+anarchy-operator-1-build            0/1     Completed   0          22m
+anarchy-operator-5f7d7898d7-f6dww   1/1     Running     0          19m
+----
+
+== Testing
+
+
+=== Examples
 
 Examples are found in the examples folder.
