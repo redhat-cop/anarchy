@@ -89,14 +89,24 @@ def event_callback(job_template):
     if not flask.request.json:
         flask.abort(400)
 
-    assert 'anarchy_callback_url' in flask.request.json, \
-        'anarchy_callback_url not provided'
+    assert 'extra_vars' in flask.request.json, \
+        'extra_vars'
+    assert 'anarchy_callback_url' in flask.request.json['extra_vars'], \
+        'anarchy_callback_url not provided in extra_vars'
 
     job_id = random.randint(1,10000000)
     if job_template.startswith('deploy'):
-        add_deploy_job(job_template, flask.request.json['anarchy_callback_url'], job_id)
+        add_deploy_job(
+            job_template,
+            flask.request.json['extra_vars']['anarchy_callback_url'],
+            job_id
+        )
     elif job_template.startswith('destroy'):
-        add_destroy_job(job_template, flask.request.json['anarchy_callback_url'], job_id)
+        add_destroy_job(
+            job_template,
+            flask.request.json['extra_vars']['anarchy_callback_url'],
+            job_id
+        )
 
     return flask.jsonify({
         "id": job_id,

@@ -162,6 +162,35 @@ objects:
     - patch
     - delete
 
+- kind: ClusterRole
+  apiVersion: v1
+  metadata:
+    name: admin-anarchy-subjects
+    labels:
+      rbac.authorization.k8s.io/aggregate-to-admin: "true"
+  rules:
+  - apiGroups:
+    - gpte.redhat.com
+    resources:
+    - anarchysubjects
+    verbs:
+    - create
+    - delete
+    - deletecollection
+    - get
+    - list
+    - watch
+  - apiGroups:
+    - gpte.redhat.com
+    resources:
+    - anarchyactions
+    - anarchyactions/status
+    - anarchysubjects/status
+    verbs:
+    - get
+    - list
+    - watch
+
 - kind: ClusterRoleBinding
   apiVersion: v1
   metadata:

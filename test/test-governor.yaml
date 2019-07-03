@@ -34,8 +34,7 @@ spec:
     request:
       api: test
       callbackUrlParameter: anarchy_callback_url
-      data: >-
-        {{ { "extra_vars": parameters } | to_json }}
+      data: '{{ { "extra_vars": parameters } | to_json }}'
       method: POST
       path: /api/v2/job_templates/deploy/launch/
     callbackEventNameParameter: event
@@ -81,8 +80,7 @@ spec:
     request:
       api: test
       callbackUrlParameter: anarchy_callback_url
-      data: >-
-        {{ { "extra_vars": parameters } | to_json }}
+      data: '{{ { "extra_vars": parameters } | to_json }}'
       method: POST
       path: /api/v2/job_templates/destroy/launch/
     callbackEventNameParameter: event

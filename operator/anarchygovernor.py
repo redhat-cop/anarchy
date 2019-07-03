@@ -119,11 +119,7 @@ class AnarchyGovernor(object):
                     'governor': governor,
                     'subject': subject
                 })
-            if 'labels' in subject.metadata:
-                subject.metadata['labels'].update(set_labels)
-            else:
-                subject.metadata['labels'] = set_labels
-            subject.update(runtime)
+            subject.patch(runtime, {'metadata': {'labels': set_labels } })
 
     class SetStatusEventHandler(object):
         def __init__(self, handler_params):
@@ -144,7 +140,7 @@ class AnarchyGovernor(object):
                     'governor': governor,
                     'subject': subject
                 })
-            subject.set_status(runtime, set_status)
+            subject.patch_status(runtime, set_status)
 
     class RequestConfig(object):
         def __init__(self, spec):

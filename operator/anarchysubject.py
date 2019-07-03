@@ -157,40 +157,31 @@ class AnarchySubject(object):
             }
         })
         action.create(runtime)
-        self.set_status(runtime, {
+        self.patch_status(runtime, {
             "currentAction": action.name()
         })
 
-    def update(self, runtime):
-        resource = runtime.kube_custom_objects.replace_namespaced_custom_object(
-            runtime.crd_domain, 'v1', self.namespace(), 'anarchysubjects', self.name(),
-            {
-                "apiVersion": runtime.crd_domain + "/v1",
-                "kind": "AnarchySubject",
-                "metadata": self.metadata,
-                "spec": self.spec,
-                "status": self.status
-            }
+    def patch(self, runtime, patch):
+        resource = runtime.kube_custom_objects.patch_namespaced_custom_object(
+            runtime.crd_domain,
+            'v1',
+            self.namespace(),
+            'anarchysubjects',
+            self.name(),
+            patch
         )
         self.metadata = resource['metadata']
         self.spec = resource['spec']
         self.status = resource['status']
 
-    def set_status(self, runtime, status_update):
-        if self.status == None:
-            self.status = status_update
-        else:
-            self.status.update(status_update)
-
-        resource = runtime.kube_custom_objects.replace_namespaced_custom_object_status(
-            runtime.crd_domain, 'v1', self.namespace(), 'anarchysubjects', self.name(),
-            {
-                "apiVersion": runtime.crd_domain + "/v1",
-                "kind": "AnarchySubject",
-                "metadata": self.metadata,
-                "spec": self.spec,
-                "status": self.status
-            }
+    def patch_status(self, runtime, patch):
+        resource = runtime.kube_custom_objects.patch_namespaced_custom_object_status(
+            runtime.crd_domain,
+            'v1',
+            self.namespace(),
+            'anarchysubjects',
+            self.name(),
+            {"status": patch}
         )
         self.metadata = resource['metadata']
         self.spec = resource['spec']

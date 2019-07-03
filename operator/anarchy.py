@@ -128,13 +128,18 @@ def handle_subject_added(resource):
     if subject and subject.is_new():
         subject.process_subject_event_handlers(anarchy_runtime, 'added')
 
-def handle_subject_modified(subject_resource):
-    # FIXME
-    pass
+def handle_subject_modified(resource):
+    handle_subject_added(resource)
 
-def handle_subject_deleted(subject_resource):
-    # FIXME
-    pass
+def handle_subject_deleted(resource):
+    logger.info("resource %s/%s deleted", resource['metadata']['namespace'], resource['metadata']['name'])
+    logger.debug(resource)
+    subject = AnarchySubject.get(
+        resource['metadata']['namespace'],
+        resource['metadata']['name'],
+    )
+    if subject:
+        subject.process_subject_event_handlers(anarchy_runtime, 'deleted')
 
 def watch_subjects():
     logger.debug('Starting watch for anarchysubjects')
