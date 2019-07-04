@@ -35,10 +35,10 @@ spec:
     -----END CERTIFICATE-----
   headers:
   - name: Authorization
-    value: "Bearer {{ parameters.api_auth_token }}"
+    value: "Bearer {{ vars.api_auth_token }}"
   - name: Content-type
     value: application/json
-  parameters:
+  vars:
     api_auth_token:
-      secret_name: test-api-creds
-      secret_key: api_auth_token
+      secretName: test-api-creds
+      secretKey: api_auth_token

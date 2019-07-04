@@ -50,6 +50,9 @@ class AnarchyAPI(object):
     def parameters(self):
         return self.spec.get('parameters', {})
 
+    def _vars(self):
+        return self.spec.get('vars', {})
+
     def resource_version(self):
         return self.metadata['resourceVersion']
 

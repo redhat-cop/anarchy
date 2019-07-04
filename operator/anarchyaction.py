@@ -11,7 +11,7 @@ class AnarchyAction(object):
     def __init__(self, resource):
         self.metadata = resource['metadata']
         self.spec = resource['spec']
-        self.status = resource.get('status', None)
+        self.status = resource.get('status', {})
         self.sanity_check()
 
     def sanity_check(self):
@@ -40,7 +40,7 @@ class AnarchyAction(object):
             return callback_url
 
     def has_started(self):
-        return self.status != None
+        return len(self.status) > 0
 
     def is_due(self):
         after_datetime = self.spec.get('after','')
@@ -81,22 +81,18 @@ class AnarchyAction(object):
         self.metadata = resource['metadata']
         self.spec = resource['spec']
 
-    def set_status(self, runtime, status_update):
-        if self.status == None:
-            self.status = status_update
-        else:
-            self.status.update(status_update)
-
-        runtime.kube_custom_objects.replace_namespaced_custom_object_status(
-            runtime.crd_domain, 'v1', self.namespace(), 'anarchyactions', self.name(),
-            {
-                "apiVersion": runtime.crd_domain + "/v1",
-                "kind": "AnarchyAction",
-                "metadata": self.metadata,
-                "spec": self.spec,
-                "status": self.status
-            }
+    def patch_status(self, runtime, patch):
+        resource = runtime.kube_custom_objects.patch_namespaced_custom_object_status(
+            runtime.crd_domain,
+            'v1',
+            self.namespace(),
+            'anarchyactions',
+            self.name(),
+            {"status": patch}
         )
+        self.metadata = resource['metadata']
+        self.spec = resource['spec']
+        self.status = resource['status']
 
     def status_event_log(self, runtime, event_name, event_data):
         events = self.status.get('events', [])
@@ -104,7 +100,7 @@ class AnarchyAction(object):
             "name": event_name,
             "data": event_data
         })
-        self.set_status(runtime, {
+        self.patch_status(runtime, {
             "events": events
         })
 

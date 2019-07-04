@@ -10,7 +10,7 @@ from anarchyapi import AnarchyAPI
 jinja2env = jinja2.Environment()
 jinja2env.filters['to_json'] = lambda x: json.dumps(x)
 
-def add_parameters(parameters, runtime, add):
+def add_values(parameters, runtime, add):
     secrets = {}
     for name, value in add.items():
         if isinstance(value, dict):
@@ -251,11 +251,19 @@ class AnarchyGovernor(object):
     def resource_version(self):
         return self.metadata['resourceVersion']
 
-    def get_parameters(self, runtime, api):
+    def get_parameters(self, runtime, api, subject):
         parameters = {}
-        add_parameters(parameters, runtime, api.parameters())
-        add_parameters(parameters, runtime, self.spec.get('parameters', {}))
+        add_values(parameters, runtime, api.parameters())
+        add_values(parameters, runtime, self.spec.get('parameters', {}))
+        add_values(parameters, runtime, subject.parameters())
         return parameters
+
+    def get_vars(self, runtime, api, subject):
+        _vars = {}
+        add_values(_vars, runtime, api._vars())
+        add_values(_vars, runtime, self.spec.get('vars', {}))
+        add_values(_vars, runtime, subject._vars())
+        return _vars
 
     def action_config(self, name):
         assert name in self.actions, \
@@ -268,16 +276,18 @@ class AnarchyGovernor(object):
 
         api = AnarchyAPI.get(action_config.request.api)
 
-        parameters = self.get_parameters(runtime, api)
-        parameters.update(subject.parameters())
+        parameters = self.get_parameters(runtime, api, subject)
         if action_config.request.callback_url_parameter:
             parameters[action_config.request.callback_url_parameter] = action.callback_url()
+
+        _vars = self.get_vars(runtime, api, subject)
 
         jinja2vars = {
             'governor': self,
             'subject': subject,
             'action': action,
-            'parameters': parameters
+            'parameters': parameters,
+            'vars': _vars
         }
 
         path = jinja2render(action_config.request.path, jinja2vars)
@@ -296,7 +306,7 @@ class AnarchyGovernor(object):
         except ValueError as e:
             pass
 
-        action.set_status(runtime, {
+        action.patch_status(runtime, {
             "apiUrl": url,
             "apiMethod": action_config.request.method,
             "apiResponse": {

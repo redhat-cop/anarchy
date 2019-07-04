@@ -11,7 +11,3 @@ spec:
   headers:
   - name: Content-type
     value: application/json
-  parameters:
-    api_auth_token:
-      secret_key: api_auth_token
-      secret_name: test-api-creds

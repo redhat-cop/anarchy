@@ -77,6 +77,7 @@ def callback_loop():
         for job_id, job in jobs.copy().items():
             for event_name, event in job['callback_events'].copy().items():
                 if time.time() > event['after']:
+                    logger.info("Doing callback to %s with %s", job['callback_url'], event['data'])
                     requests.post(job['callback_url'], json=event['data'], verify=False)
                     del job['callback_events'][event_name]
             if not job['callback_events']:
@@ -93,6 +94,8 @@ def event_callback(job_template):
         'extra_vars'
     assert 'anarchy_callback_url' in flask.request.json['extra_vars'], \
         'anarchy_callback_url not provided in extra_vars'
+
+    logger.info("Callback URL %s", flask.request.json['extra_vars']['anarchy_callback_url'])
 
     job_id = random.randint(1,10000000)
     if job_template.startswith('deploy'):

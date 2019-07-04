@@ -76,6 +76,27 @@ def init_service_account_token():
     with open('/run/secrets/kubernetes.io/serviceaccount/token') as f:
         service_account_token = f.read()
 
+def override_select_header_content_type(content_types):
+    """
+    Returns `Content-Type` based on an array of content_types provided.
+
+    Override default behavior to select application/merge-patch+json
+
+    :param content_types: List of content-types.
+    :return: Content-Type (e.g. application/json).
+    """
+    if not content_types:
+        return 'application/json'
+
+    content_types = [x.lower() for x in content_types]
+
+    if 'application/json' in content_types or '*/*' in content_types:
+        return 'application/json'
+    if 'application/merge-patch+json' in content_types:
+        return 'application/merge-patch+json'
+    else:
+        return content_types[0]
+
 def init_kube_api():
     """Set kube_api global to communicate with the local kubernetes cluster."""
     global kube_api, kube_custom_objects, anarchy_crd_domain
@@ -90,6 +111,8 @@ def init_kube_api():
     kube_custom_objects = kubernetes.client.CustomObjectsApi(
         kubernetes.client.ApiClient(kube_config)
     )
+    kube_custom_objects.api_client.select_header_content_type = override_select_header_content_type
+
     anarchy_crd_domain = os.environ.get('ANARCHY_CRD_DOMAIN','gpte.redhat.com')
 
 def init_runtime():
