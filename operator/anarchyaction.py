@@ -24,6 +24,12 @@ class AnarchyAction(object):
     def namespace(self):
         return self.metadata['namespace']
 
+    def namespace_name(self):
+        return self.metadata['namespace'] + '/' + self.metadata['name']
+
+    def uid(self):
+        return self.metadata['uid']
+
     def action(self):
         return self.spec['action']
 

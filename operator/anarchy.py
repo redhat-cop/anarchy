@@ -191,17 +191,18 @@ def watch_subjects_loop():
 
 def handle_action_added(action_resource):
     action = AnarchyAction(action_resource)
-    logger.debug("Action status on %s is %s", action.name(), action.status)
-    if not action.has_started():
-        action.subject().queue_action(action)
+    logger.debug("Action add on %s", action.namespace_name())
+    action.subject().queue_action(action)
 
 def handle_action_modified(action_resource):
-    # FIXME
-    pass
+    action = AnarchyAction(action_resource)
+    logger.debug("Action update on %s", action.namespace_name())
+    action.subject().requeue_action(action)
 
 def handle_action_deleted(action_resource):
-    # FIXME
-    pass
+    action = AnarchyAction(action_resource)
+    logger.debug("Action delete on %s", action.namespace_name())
+    action.subject().dequeue_action(action)
 
 def watch_actions():
     logger.debug('Starting watch for anarchyactions')

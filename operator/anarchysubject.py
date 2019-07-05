@@ -1,6 +1,7 @@
 import datetime
 import logging
 import os
+import threading
 import uuid
 
 logger = logging.getLogger('anarchy')
@@ -58,6 +59,7 @@ class AnarchySubject(object):
         self.spec = resource['spec']
         self.status = resource.get('status', None)
         self.action_queue = []
+        self.action_queue_lock = threading.RLock()
         self.sanity_check()
 
     def sanity_check(self):
@@ -94,19 +96,53 @@ class AnarchySubject(object):
     def resource_version(self):
         return self.metadata['resourceVersion']
 
+    def lock_action_queue(self):
+        self.action_queue_lock.acquire()
+
+    def unlock_action_queue(self):
+        self.action_queue_lock.release()
+
     def queue_action(self, action):
-        logger.debug("Queued action %s on %s",
-            action.name(),
-            self.namespace_name()
-        )
-        self.action_queue.append(action)
+        self.lock_action_queue()
+        if not action.has_started():
+            logger.info("Queue action %s on %s", action.name(), self.namespace_name())
+            self.action_queue.append(action)
+        self.unlock_action_queue()
+
+    def requeue_action(self, action):
+        self.lock_action_queue()
+        if not action.has_started():
+            for i in range(len(self.action_queue)):
+                if action.uid == self.action_queue[i].uid:
+                    logger.warn("Requeuing action %s", action.namespace_name())
+                    self.action_queue[i] = action
+                    self.unlock_action_queue()
+                    return
+            logger.warn("Requeuing action %s, but was not found in queue?", action.namespace_name())
+            self.action_queue.append(action)
+        self.unlock_action_queue()
+
+    def dequeue_action(self, action):
+        self.lock_action_queue()
+        for i in range(len(self.action_queue)):
+            if action.uid == self.action_queue[i].uid:
+                logger.warn("Dequeuing action %s", action.namespace_name())
+                del self.action_queue[i]
+        self.unlock_action_queue()
 
     def start_actions(self, runtime):
         logger.debug("Starting actions that are due on %s", self.namespace_name())
+        due_actions = []
+
+        self.lock_action_queue()
         for action in self.action_queue[:]:
             if action.is_due():
-                self.governor().start_action(runtime, self, action)
+                due_actions.append(action)
                 self.action_queue.remove(action)
+        self.unlock_action_queue()
+
+        for action in due_actions:
+            self.governor().start_action(runtime, self, action)
 
     def process_subject_event_handlers(self, runtime, event_name):
         return self.governor().process_subject_event_handlers(runtime, self, event_name)
