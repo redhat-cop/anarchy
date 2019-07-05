@@ -1,6 +1,7 @@
 import datetime
 import logging
 import os
+import uuid
 
 logger = logging.getLogger('anarchy')
 
@@ -143,6 +144,7 @@ class AnarchySubject(object):
             "spec": {
                 "action": action_name,
                 "after": after,
+                "callbackToken": uuid.uuid4().hex,
                 "governorRef": {
                     "apiVersion": runtime.crd_domain + "/v1",
                     "kind": "AnarchyGovernor",

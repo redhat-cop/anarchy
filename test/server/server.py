@@ -28,10 +28,11 @@ logger.setLevel(os.environ.get('LOGGING_LEVEL', 'DEBUG'))
 
 jobs = {}
 
-def add_deploy_job(job_template, callback_url, job_id):
+def add_deploy_job(job_template, callback_url, callback_token, job_id):
     jobs[job_id] = {
         "id": job_id,
         "callback_url": callback_url,
+        "callback_token": callback_token,
         "callback_events": {
             "started": {
                 "after": time.time() + 10,
@@ -50,10 +51,11 @@ def add_deploy_job(job_template, callback_url, job_id):
         }
     }
 
-def add_destroy_job(job_template, callback_url, job_id):
+def add_destroy_job(job_template, callback_url, callback_token, job_id):
     jobs[job_id] = {
         "id": job_id,
         "callback_url": callback_url,
+        "callback_token": callback_token,
         "callback_events": {
             "started": {
                 "after": time.time() + 10,
@@ -78,7 +80,12 @@ def callback_loop():
             for event_name, event in job['callback_events'].copy().items():
                 if time.time() > event['after']:
                     logger.info("Doing callback to %s with %s", job['callback_url'], event['data'])
-                    requests.post(job['callback_url'], json=event['data'], verify=False)
+                    requests.post(
+                        job['callback_url'],
+                        json=event['data'],
+                        headers={ "Authorization": "Bearer " + job['callback_token'] },
+                        verify=False
+                    )
                     del job['callback_events'][event_name]
             if not job['callback_events']:
                 del jobs[job_id]
@@ -102,12 +109,14 @@ def event_callback(job_template):
         add_deploy_job(
             job_template,
             flask.request.json['extra_vars']['anarchy_callback_url'],
+            flask.request.json['extra_vars']['anarchy_callback_token'],
             job_id
         )
     elif job_template.startswith('destroy'):
         add_destroy_job(
             job_template,
             flask.request.json['extra_vars']['anarchy_callback_url'],
+            flask.request.json['extra_vars']['anarchy_callback_token'],
             job_id
         )
 

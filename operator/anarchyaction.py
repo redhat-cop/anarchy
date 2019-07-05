@@ -27,6 +27,9 @@ class AnarchyAction(object):
     def action(self):
         return self.spec['action']
 
+    def callback_token(self):
+        return self.spec.get('callbackToken', '')
+
     def callback_url(self, event_name = None):
         # FIXME - ensure that callback base url is set
         callback_url = '{}/event/{}/{}'.format(
@@ -38,6 +41,11 @@ class AnarchyAction(object):
             return callback_url + '/' + event_name
         else:
             return callback_url
+
+    def check_callback_token(self, authorization_header):
+        if not authorization_header.startswith('Bearer '):
+            return false
+        return self.callback_token() == authorization_header[7:]
 
     def has_started(self):
         return len(self.status) > 0

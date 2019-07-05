@@ -269,22 +269,31 @@ def action_release_loop():
             logger.exception("Error in action_release_loop " + str(e))
             time.sleep(60)
 
-# FIXME? Do we need a security mechanism on the callback? or is the random
-# string in the action name sufficient?
+def __event_callback(action_namespace, action_name, event_name):
+    if not flask.request.json:
+        flask.abort(400)
+        return
+
+    action_resource = kube_custom_objects.get_namespaced_custom_object(
+        anarchy_crd_domain, 'v1', action_namespace, 'anarchyactions', action_name
+    )
+    action = AnarchyAction(action_resource)
+
+    if not action.check_callback_token(flask.request.headers.get('Authorization')):
+        logger.warn("Invalid callback token for %s/%s", action_namespace, action_name)
+        flask.abort(403)
+        return
+
+    action.process_event(anarchy_runtime, flask.request.json)
+    return flask.jsonify({'status': 'ok'})
+
 @flask_api.route(
     '/event/<string:action_namespace>/<string:action_name>',
     methods=['POST']
 )
 def action_callback(action_namespace, action_name):
     logger.info("Action callback for %s/%s", action_namespace, action_name)
-    if not flask.request.json:
-        flask.abort(400)
-    action_resource = kube_custom_objects.get_namespaced_custom_object(
-        anarchy_crd_domain, 'v1', action_namespace, 'anarchyactions', action_name
-    )
-    action = AnarchyAction(action_resource)
-    action.process_event(anarchy_runtime, flask.request.json)
-    return flask.jsonify({'status': 'ok'})
+    return __event_callback(action_namespace, action_name, None)
 
 @flask_api.route(
     '/event/<string:action_namespace>/<string:action_name>/<string:event_name>',
@@ -292,14 +301,7 @@ def action_callback(action_namespace, action_name):
 )
 def event_callback(action_namespace, action_name, event_name):
     logger.info("Event %s called for %s/%s", event_name, action_namespace, action_name)
-    if not flask.request.json:
-        flask.abort(400)
-    action_resource = kube_custom_objects.get_namespaced_custom_object(
-        anarchy_crd_domain, 'v1', action_namespace, 'anarchyactions', action_name
-    )
-    action = AnarchyAction(action_resource)
-    action.process_event(anarchy_runtime, flask.request.json, event_name)
-    return flask.jsonify({'status': 'ok'})
+    return __event_callback(action_namespace, action_name, event_name)
 
 def main():
     """Main function."""

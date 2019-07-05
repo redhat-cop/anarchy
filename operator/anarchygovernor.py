@@ -147,6 +147,7 @@ class AnarchyGovernor(object):
             assert 'api' in spec, 'request must define api'
             self.api = spec['api']
             self.callback_url_parameter = spec.get('callbackUrlParameter', None)
+            self.callback_token_parameter = spec.get('callbackTokenParameter', None)
             self.method = spec.get('method', 'POST')
             assert 'path' in spec, 'request must define path'
             self.path = spec['path']
@@ -279,6 +280,7 @@ class AnarchyGovernor(object):
         parameters = self.get_parameters(runtime, api, subject)
         if action_config.request.callback_url_parameter:
             parameters[action_config.request.callback_url_parameter] = action.callback_url()
+            parameters[action_config.request.callback_token_parameter] = action.callback_token()
 
         _vars = self.get_vars(runtime, api, subject)
 
