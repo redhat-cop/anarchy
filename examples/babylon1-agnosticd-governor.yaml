@@ -22,6 +22,8 @@ spec:
   - name: deploy
     request:
       api: babylon1
+      callbackTokenParameter: babylon_callback_token
+      callbackUrlParameter: babylon_callback_url
       data: >-
         {{ { "extra_vars": parameters } | to_json }}
       method: POST

@@ -33,6 +33,7 @@ spec:
   - name: deploy
     request:
       api: test
+      callbackTokenParameter: babylon_callback_token
       callbackUrlParameter: anarchy_callback_url
       data: '{{ { "extra_vars": parameters } | to_json }}'
       method: POST
@@ -79,6 +80,7 @@ spec:
   - name: destroy
     request:
       api: test
+      callbackTokenParameter: babylon_callback_token
       callbackUrlParameter: anarchy_callback_url
       data: '{{ { "extra_vars": parameters } | to_json }}'
       method: POST
