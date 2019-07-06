@@ -145,10 +145,7 @@ class AnarchyGovernor(object):
     class RequestConfig(object):
         def __init__(self, spec):
             assert 'api' in spec, 'request must define api'
-            self.api = spec['api']
-            self.callback_url_parameter = spec.get('callbackUrlParameter', None)
-            self.callback_token_parameter = spec.get('callbackTokenParameter', None)
-            self.method = spec.get('method', 'POST')
+            self.spec = spec
             assert 'path' in spec, 'request must define path'
             self.path = spec['path']
             self.status_code_events = spec.get('statusCodeEvents', {})
@@ -161,6 +158,18 @@ class AnarchyGovernor(object):
             self.header_templates = {}
             for header in spec.get('headers', []):
                 self.header_templates[header['name']] = jinja2env.from_string(header['value'])
+
+        def api(self):
+            return AnarchyAPI.get(self.spec['api'])
+
+        def callback_token_parameter(self):
+            return self.spec.get('callbackTokenParameter', self.api().callback_token_parameter())
+
+        def callback_url_parameter(self):
+            return self.spec.get('callbackUrlParameter', self.api().callback_url_parameter())
+
+        def method(self):
+            return self.spec.get('method', self.api().method())
 
         def status_code_event(self, status_code):
             return self.status_code_events.get(str(status_code), None)
@@ -275,12 +284,12 @@ class AnarchyGovernor(object):
         action_name = action.action()
         action_config = self.action_config(action_name)
 
-        api = AnarchyAPI.get(action_config.request.api)
+        api = action_config.request.api()
 
         parameters = self.get_parameters(runtime, api, subject)
         if action_config.request.callback_url_parameter:
-            parameters[action_config.request.callback_url_parameter] = action.callback_url()
-            parameters[action_config.request.callback_token_parameter] = action.callback_token()
+            parameters[action_config.request.callback_url_parameter()] = action.callback_url()
+            parameters[action_config.request.callback_token_parameter()] = action.callback_token()
 
         _vars = self.get_vars(runtime, api, subject)
 
@@ -297,7 +306,7 @@ class AnarchyGovernor(object):
         resp, url = api.call(
             runtime,
             path,
-            action_config.request.method,
+            action_config.request.method(),
             action_config.request.headers(api, jinja2vars),
             action_config.request.data(jinja2vars)
         )
@@ -310,7 +319,7 @@ class AnarchyGovernor(object):
 
         action.patch_status(runtime, {
             "apiUrl": url,
-            "apiMethod": action_config.request.method,
+            "apiMethod": action_config.request.method(),
             "apiResponse": {
                 "status_code": resp.status_code,
                 "text": resp.text,

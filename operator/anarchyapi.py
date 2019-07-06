@@ -44,6 +44,9 @@ class AnarchyAPI(object):
     def name(self):
         return self.metadata['name']
 
+    def resource_version(self):
+        return self.metadata['resourceVersion']
+
     def headers(self):
         return self.spec.get('headers', [])
 
@@ -53,11 +56,17 @@ class AnarchyAPI(object):
     def _vars(self):
         return self.spec.get('vars', {})
 
-    def resource_version(self):
-        return self.metadata['resourceVersion']
-
     def base_url(self):
         return self.spec['baseUrl']
+
+    def callback_token_parameter(self):
+        return self.spec.get('callbackTokenParameter', None)
+
+    def callback_url_parameter(self):
+        return self.spec.get('callbackUrlParameter', None)
+
+    def method(self):
+        return self.spec.get('method', 'POST')
 
     def is_https(self):
         return self.spec['baseUrl'].startswith('https://')
