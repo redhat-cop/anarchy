@@ -163,6 +163,7 @@ def handle_subject_deleted(resource):
     )
     if subject:
         subject.process_subject_event_handlers(anarchy_runtime, 'deleted')
+    AnarchySubject.unregister(subject)
 
 def watch_subjects():
     logger.debug('Starting watch for anarchysubjects')
@@ -202,7 +203,9 @@ def handle_action_modified(action_resource):
 def handle_action_deleted(action_resource):
     action = AnarchyAction(action_resource)
     logger.debug("Action delete on %s", action.namespace_name())
-    action.subject().dequeue_action(action)
+    subject = action.subject()
+    if subject:
+        subject.dequeue_action(action)
 
 def watch_actions():
     logger.debug('Starting watch for anarchyactions')

@@ -11,10 +11,13 @@ from anarchygovernor import AnarchyGovernor
 class AnarchySubject(object):
     """AnarchySubject class"""
 
+    subjects_lock = threading.RLock()
     subjects = {}
 
     @classmethod
     def register(_class, resource):
+        _class.subjects_lock.acquire()
+
         subject = AnarchySubject.get(
             resource['metadata']['namespace'],
             resource['metadata']['name']
@@ -26,6 +29,7 @@ class AnarchySubject(object):
                 subject.namespace_name(),
                 subject.resource_version()
             )
+            _class.subjects_lock.release()
             return None
 
         subject = _class(resource)
@@ -35,14 +39,14 @@ class AnarchySubject(object):
         )
         AnarchySubject.subjects[subject.namespace_name()] = subject
 
+        _class.subjects_lock.release()
         return subject
 
     @classmethod
     def unregister(_class, subject):
-        if isinstance(subject, AnarchySubject):
-            del AnarchySubject.subjects[subject.name()]
-        else:
-            del AnarchySubject.subjects[subject]
+        _class.subjects_lock.acquire()
+        del AnarchySubject.subjects[subject.namespace_name()]
+        _class.subjects_lock.release()
 
     @classmethod
     def get(_class, namespace, name):
@@ -50,8 +54,10 @@ class AnarchySubject(object):
 
     @classmethod
     def start_subject_actions(_class, runtime):
+        _class.subjects_lock.acquire()
         for subject in AnarchySubject.subjects.values():
             subject.start_actions(runtime)
+        _class.subjects_lock.release()
 
     def __init__(self, resource):
         """Initialize AnarchySubject from resource object data."""
