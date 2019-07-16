@@ -86,8 +86,175 @@ anarchy-operator-1-build            0/1     Completed   0          22m
 anarchy-operator-5f7d7898d7-f6dww   1/1     Running     0          19m
 ----
 
-== Testing
+== Anarchy Design
 
+The Anarchy Operator is configured with custom resource types AnarchyAPI and AnarchyGovernor in order to manage AnarchySubject resources.
+AnarchyAPI resources define how to communicate with an API endpoint while AnarchyGovernor resources define how to interact with APIs to create and manage AnarchySubject resources.
+Each AnarchySubject is managed according to a single AnarchyGovernor.
+The AnarchyGovernor defines actions to perform against APIs to instantiate and manage the AnarchySubject.
+Each action performed for an AnarchySubject according to the AnarchyGovernor definition is represented as an AnarchyAction custom resource.
+An AnarchyAction always begins with an call to an API.
+The Anarchy operator listens for callbacks to its own API for events relating to actions such as notifications that an action has completed, or encountered an error.
+The AnarchyGovernor defines event handlers for actions which may include scheduling further AnarchyActions to occur for the AnarchySubject.
+
+This repository includes a test suite that demonstrates these capabilities by calling a test API.
+The usage of the test suite is explained in the "Testing" section below.
+The conceptual overview of the test design is described here.
+
+Let's start with the AnarchySubject definition:
+
+----
+apiVersion: gpte.redhat.com/v1
+kind: AnarchySubject
+metadata:
+  generateName: test-
+  namespace: anarchy-operator
+spec:
+  governor: test <1>
+  parameters: <2>
+    openshift_release: "4.1"
+    aws_region: us-east-1
+    repo_version: "3.11"
+    subdomain_base_suffix: .example.opentlc.com
+----
+
+<1> The test AnarchySubject references the name of the AnarchyGovernor that will manage it.
+<2> Each subject may include a list of parameters to pass to the API, though the governor and API get the final say in how and when the parameters are used.
+
+The test AnarchyGovernor definition is shown here:
+
+// FIXME _ Includes?
+----
+apiVersion: gpte.redhat.com/v1
+kind: AnarchyGovernor
+metadata:
+  name: test
+spec:
+  parameters: <1>
+    cloud_provider: ec2
+    aws_access_key_id: <2>
+      secretName: test-aws-creds
+      secretKey: aws_access_key_id
+    aws_secret_access_key:
+      secretName: test-aws-creds
+      secretKey: aws_secret_access_key
+  deleteFinalizerCondition: <3>
+    check: status.state
+    value: destroyed
+  subjectEventHandlers: <4>
+  - event: add
+    handlers:
+    - handlerType: scheduleAction
+      scheduleActionParams:
+        action: deploy
+  - event: delete
+    handlers:
+    - handlerType: scheduleAction
+      scheduleActionParams:
+        action: destroy
+  actions: <5>
+  - name: deploy
+    request:
+      api: test
+      callbackTokenParameter: babylon_callback_token
+      callbackUrlParameter: anarchy_callback_url
+      data: '{{ { "extra_vars": parameters } | to_json }}'
+      method: POST
+      path: /api/v2/job_templates/deploy/launch/
+    callbackEventNameParameter: event
+    eventHandlers:
+    - event: started
+      handlers:
+      - handlerType: email
+        emailParams:
+          to: ["{{ subject.spec.requester.email }}"]
+          from: noreply@opentlc.com
+          subject: >-
+            {{ governor.metadata.name }} {{ subject.metadata.name }}
+            deployment has started
+          body: |-
+            ... jinja template ...
+    - event: complete
+      handlers:
+      - handlerType: scheduleAction
+        scheduleActionParams:
+          action: destroy
+          after: 6d
+      - handlerType: email
+        emailParams:
+          to: ["{{ subject.spec.requester.email }}"]
+          from: noreply@opentlc.com
+          subject: >-
+            {{ governor.metadata.name }} {{ subject.metadata.name }}
+            deployed
+          body: |-
+            ... jinja template ...
+    - event: error
+      handlers:
+      - handlerType: email
+        emailParams:
+          to: ["{{ subject.spec.requester.email }}"]
+          from: noreply@opentlc.com
+          subject: >-
+            {{ governor.metadata.name }} {{ subject.metadata.name }}
+            deploy error
+          body: |-
+            ... jinja template ...
+  - name: destroy
+    request:
+      api: test
+      callbackTokenParameter: babylon_callback_token
+      callbackUrlParameter: anarchy_callback_url
+      data: '{{ { "extra_vars": parameters } | to_json }}'
+      method: POST
+      path: /api/v2/job_templates/destroy/launch/
+    callbackEventNameParameter: event
+    eventHandlers:
+    - event: complete
+      handlers:
+      - handlerType: email
+        emailParams:
+          to: ["{{ subject.spec.requester.email }}"]
+          from: noreply@opentlc.com
+          subject: >-
+            {{ governor.metadata.name }} {{ subject.metadata.name }}
+            destroyed
+          body: |-
+            ... jinja template …
+      - handlerType: setStatus
+        setStatusParams:
+          setStatus:
+          - name: state
+            value: destroyed
+    - event: error
+      handlers:
+      - handlerType: email
+        emailParams:
+          to: ["{{ subject.spec.requester.email }}"]
+          from: noreply@opentlc.com
+          subject: >-
+            {{ governor.metadata.name }} {{ subject.metadata.name }}
+            destroy error
+          body: |-
+            ... jinja template ...
+#  - name: suspend
+#    api:
+#      url: https://...
+#    ...
+#  - name: resume
+#    api:
+#      url: https://...
+#    eventHandlers:
+#    - event: complete
+#      handlers:
+#      - handlerType: scheduleAction
+#        scheduleActionParams:
+#          action: suspend
+#          after: 8h
+#    ...
+----
+
+== Testing
 
 === Examples
 

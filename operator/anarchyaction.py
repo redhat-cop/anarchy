@@ -83,6 +83,7 @@ class AnarchyAction(object):
         self.subject().start_action(self)
 
     def create(self, runtime):
+        logger.debug('Creating action...')
         resource = runtime.kube_custom_objects.create_namespaced_custom_object(
             runtime.crd_domain, 'v1', self.subject_namespace(), 'anarchyactions',
             {
@@ -94,6 +95,7 @@ class AnarchyAction(object):
         )
         self.metadata = resource['metadata']
         self.spec = resource['spec']
+        logger.debug('Created action %s', self.namespace_name())
 
     def patch_status(self, runtime, patch):
         resource = runtime.kube_custom_objects.patch_namespaced_custom_object_status(
@@ -112,12 +114,12 @@ class AnarchyAction(object):
         events = self.status.get('events', [])
         events.append({
             "name": event_name,
-            "data": event_data
+            "data": event_data,
+            "timestamp": datetime.datetime.utcnow().strftime('%FT%TZ')
         })
         self.patch_status(runtime, {
             "events": events
         })
-
 
     def process_event(self, runtime, event_data, event_name=None):
         subject = self.subject()

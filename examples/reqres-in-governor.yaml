@@ -6,12 +6,12 @@ metadata:
 spec:
   parameters: {}
   subjectEventHandlers:
-  - event: added
+  - event: add
     handlers:
     - handlerType: scheduleAction
       scheduleActionParams:
         action: register
-  - event: modified
+  - event: modify
     handlers:
     - handlerType: scheduleAction
       scheduleActionParams:

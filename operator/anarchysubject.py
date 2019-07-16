@@ -23,21 +23,29 @@ class AnarchySubject(object):
             resource['metadata']['name']
         )
 
-        if subject \
-        and subject.resource_version() == resource['metadata']['resourceVersion']:
-            logger.debug("Ignoring subject at same resource version %s (%s)",
+        if subject:
+            # Subject must not be new, because it is already registered
+            subject.is_new = False
+            if subject.resource_version() == resource['metadata']['resourceVersion']:
+                logger.debug("Ignoring subject at same resource version %s (%s)",
+                    subject.namespace_name(),
+                    subject.resource_version()
+                )
+            else:
+                logger.debug("Updating subject %s (%s)",
+                    subject.namespace_name(),
+                    subject.resource_version()
+                )
+                subject.metadata = resource['metadata']
+                subject.spec = resource['spec']
+                subject.status = resource.get('status', None)
+        else:
+            subject = _class(resource)
+            logger.info("Registered subject %s (%s)",
                 subject.namespace_name(),
                 subject.resource_version()
             )
-            _class.subjects_lock.release()
-            return None
-
-        subject = _class(resource)
-        logger.info("Registered subject %s (%s)",
-            subject.namespace_name(),
-            subject.resource_version()
-        )
-        AnarchySubject.subjects[subject.namespace_name()] = subject
+            AnarchySubject.subjects[subject.namespace_name()] = subject
 
         _class.subjects_lock.release()
         return subject
@@ -54,6 +62,7 @@ class AnarchySubject(object):
 
     @classmethod
     def start_subject_actions(_class, runtime):
+        logger.debug("Acquiring subjects_lock in start_subject_actions")
         _class.subjects_lock.acquire()
         for subject in AnarchySubject.subjects.values():
             subject.start_actions(runtime)
@@ -64,6 +73,7 @@ class AnarchySubject(object):
         self.metadata = resource['metadata']
         self.spec = resource['spec']
         self.status = resource.get('status', None)
+        self.is_new = 'status' not in resource
         self.action_queue = []
         self.action_queue_lock = threading.RLock()
         self.sanity_check()
@@ -84,8 +94,18 @@ class AnarchySubject(object):
     def namespace_name(self):
         return self.metadata['namespace'] + '/' + self.metadata['name']
 
-    def is_new(self):
-        return not self.status
+    def delete_complete(self):
+        delete_finalizer_condition = self.governor().delete_finalizer_condition()
+        if delete_finalizer_condition:
+            return delete_finalizer_condition.check(self)
+        else:
+            return self.delete_started()
+
+    def delete_started(self):
+        return 'deleteHandlersStarted' in self.status
+
+    def is_pending_delete(self):
+        return 'deletionTimestamp' in self.metadata
 
     def governor(self):
         return AnarchyGovernor.get(self.spec['governor'])
@@ -142,13 +162,19 @@ class AnarchySubject(object):
 
         self.lock_action_queue()
         for action in self.action_queue[:]:
+            logger.debug(action)
+            logger.debug(action.is_due())
             if action.is_due():
                 due_actions.append(action)
                 self.action_queue.remove(action)
         self.unlock_action_queue()
+        logger.debug(due_actions)
 
         for action in due_actions:
             self.governor().start_action(runtime, self, action)
+
+        if self.is_pending_delete() and self.delete_complete():
+            self.remove_finalizer(runtime)
 
     def process_subject_event_handlers(self, runtime, event_name):
         return self.governor().process_subject_event_handlers(runtime, self, event_name)
@@ -172,6 +198,7 @@ class AnarchySubject(object):
             "metadata": {
                 "generateName": self.name() + '-' + action_name + '-',
                 "labels": {
+                    runtime.crd_domain + "/action": action_name,
                     runtime.crd_domain + "/anarchy-subject": self.name(),
                     runtime.crd_domain + "/anarchy-governor": self.governor_name(),
                 },
@@ -207,6 +234,29 @@ class AnarchySubject(object):
         self.patch_status(runtime, {
             "currentAction": action.name()
         })
+        return action
+
+    def add_finalizer(self, runtime):
+        finalizer_id = runtime.crd_domain + '/anarchy'
+        finalizers = self.metadata.get('finalizers', [])
+        if finalizer_id in finalizers:
+            return
+        self.patch(runtime, {
+            'metadata': {
+                'finalizers': finalizers + [finalizer_id]
+            }
+        })
+
+    def remove_finalizer(self, runtime):
+        finalizer_id = runtime.crd_domain + '/anarchy'
+        finalizers = self.metadata.get('finalizers', [])
+        if finalizer_id not in finalizers:
+            return
+        self.patch(runtime, {
+            'metadata': {
+                'finalizers': [s for s in finalizers if s != finalizer_id]
+            }
+        })
 
     def patch(self, runtime, patch):
         resource = runtime.kube_custom_objects.patch_namespaced_custom_object(
@@ -219,7 +269,7 @@ class AnarchySubject(object):
         )
         self.metadata = resource['metadata']
         self.spec = resource['spec']
-        self.status = resource['status']
+        self.status = resource.get('status', None)
 
     def patch_status(self, runtime, patch):
         resource = runtime.kube_custom_objects.patch_namespaced_custom_object_status(

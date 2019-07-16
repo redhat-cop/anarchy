@@ -148,21 +148,29 @@ def init_subjects():
 
 def handle_subject_added(resource):
     subject = AnarchySubject.register(resource)
-    if subject and subject.is_new():
-        subject.process_subject_event_handlers(anarchy_runtime, 'added')
+    if subject.is_pending_delete():
+        logger.debug("Subject %s is pending delete", subject.namespace_name)
+        if not subject.delete_started():
+            subject.process_subject_event_handlers(anarchy_runtime, 'delete')
+            subject.patch_status(anarchy_runtime, {
+                'deleteHandlersStarted': True
+            })
+        elif subject.delete_complete():
+            subject.remove_finalizer(anarchy_runtime)
+    elif subject.is_new:
+        subject.add_finalizer(anarchy_runtime)
+        subject.process_subject_event_handlers(anarchy_runtime, 'add')
 
 def handle_subject_modified(resource):
     handle_subject_added(resource)
 
 def handle_subject_deleted(resource):
-    logger.info("resource %s/%s deleted", resource['metadata']['namespace'], resource['metadata']['name'])
+    logger.info("AnarchySubject %s/%s deleted", resource['metadata']['namespace'], resource['metadata']['name'])
     logger.debug(resource)
     subject = AnarchySubject.get(
         resource['metadata']['namespace'],
         resource['metadata']['name'],
     )
-    if subject:
-        subject.process_subject_event_handlers(anarchy_runtime, 'deleted')
     AnarchySubject.unregister(subject)
 
 def watch_subjects():
@@ -175,12 +183,26 @@ def watch_subjects():
         'anarchysubjects'
     )
     for event in stream:
-        if event['type'] == 'ADDED':
-            handle_subject_added(event['object'])
-        elif event['type'] == 'MODIFIED':
-            handle_subject_modified(event['object'])
-        elif event['type'] == 'DELETED':
-            handle_subject_deleted(event['object'])
+        logger.debug(event)
+        event_obj = event['object']
+        if event_obj['kind'] == 'Status':
+            logger.info('Watch %s - reason %s, %s',
+                event_obj['status'],
+                event_obj['reason'],
+                event_obj['message']
+            )
+        else:
+            logger.debug("Action %s/%s %s",
+                event_obj['metadata']['namespace'],
+                event_obj['metadata']['name'],
+                event['type']
+            )
+            if event['type'] == 'ADDED':
+                handle_subject_added(event_obj)
+            elif event['type'] == 'MODIFIED':
+                handle_subject_modified(event_obj)
+            elif event['type'] == 'DELETED':
+                handle_subject_deleted(event_obj)
 
 def watch_subjects_loop():
     while True:
@@ -217,18 +239,26 @@ def watch_actions():
         'anarchyactions'
     )
     for event in stream:
-        logger.debug(event['object'])
-        logger.debug("Action %s/%s %s",
-            event['object']['metadata']['namespace'],
-            event['object']['metadata']['name'],
-            event['type']
-        )
-        if event['type'] == 'ADDED':
-            handle_action_added(event['object'])
-        elif event['type'] == 'MODIFIED':
-            handle_action_modified(event['object'])
-        elif event['type'] == 'DELETED':
-            handle_action_deleted(event['object'])
+        logger.debug(event)
+        event_obj = event['object']
+        if event_obj['kind'] == 'Status':
+            logger.info('Watch %s - reason %s, %s',
+                event_obj['status'],
+                event_obj['reason'],
+                event_obj['message']
+            )
+        else:
+            logger.debug("Action %s/%s %s",
+                event_obj['metadata']['namespace'],
+                event_obj['metadata']['name'],
+                event['type']
+            )
+            if event['type'] == 'ADDED':
+                handle_action_added(event_obj)
+            elif event['type'] == 'MODIFIED':
+                handle_action_modified(event_obj)
+            elif event['type'] == 'DELETED':
+                handle_action_deleted(event_obj)
 
 def watch_actions_loop():
     while True:

@@ -4,8 +4,7 @@ import base64
 import datetime
 import flask
 import gevent.pywsgi
-import kubernetes
-import kubernetes.client.rest
+import json
 import logging
 import os
 import random
@@ -21,7 +20,7 @@ import yaml
 api = flask.Flask('rest')
 
 logging.basicConfig(
-    format='%(levelname)s %(threadName)s - %(message)s',
+    format='%(asctime)s %(levelname)s %(threadName)s - %(message)s',
 )
 logger = logging.getLogger('anarchy')
 logger.setLevel(os.environ.get('LOGGING_LEVEL', 'DEBUG'))
@@ -35,14 +34,14 @@ def add_deploy_job(job_template, callback_url, callback_token, job_id):
         "callback_token": callback_token,
         "callback_events": {
             "started": {
-                "after": time.time() + 10,
+                "after": time.time() + 1,
                 "data": {
                     "event": "started",
-                    "msg": "deployment of {} {} complete".format(job_template, job_id)
+                    "msg": "deployment of {} {} started".format(job_template, job_id)
                 }
             },
             "complete": {
-                "after": time.time() + 30,
+                "after": time.time() + 12,
                 "data": {
                     "event": "complete",
                     "msg": "deployment of {} {} complete".format(job_template, job_id)
@@ -57,15 +56,8 @@ def add_destroy_job(job_template, callback_url, callback_token, job_id):
         "callback_url": callback_url,
         "callback_token": callback_token,
         "callback_events": {
-            "started": {
-                "after": time.time() + 10,
-                "data": {
-                    "event": "started",
-                    "msg": "destroy of {} {} complete".format(job_template, job_id)
-                }
-            },
             "complete": {
-                "after": time.time() + 60,
+                "after": time.time() + 1,
                 "data": {
                     "event": "complete",
                     "msg": "destroy of {} {} complete".format(job_template, job_id)
@@ -80,12 +72,13 @@ def callback_loop():
             for event_name, event in job['callback_events'].copy().items():
                 if time.time() > event['after']:
                     logger.info("Doing callback to %s with %s", job['callback_url'], event['data'])
-                    requests.post(
+                    resp = requests.post(
                         job['callback_url'],
                         json=event['data'],
                         headers={ "Authorization": "Bearer " + job['callback_token'] },
                         verify=False
                     )
+                    logger.info(" %s: %s", resp.status_code, resp.text)
                     del job['callback_events'][event_name]
             if not job['callback_events']:
                 del jobs[job_id]
@@ -98,13 +91,16 @@ def event_callback(job_template):
         flask.abort(400)
 
     assert 'extra_vars' in flask.request.json, \
-        'extra_vars'
+        'extra_vars not provided'
     assert 'anarchy_callback_url' in flask.request.json['extra_vars'], \
         'anarchy_callback_url not provided in extra_vars'
+    assert 'anarchy_callback_token' in flask.request.json['extra_vars'], \
+        'anarchy_callback_token not provided in extra_vars'
 
     logger.info("Callback URL %s", flask.request.json['extra_vars']['anarchy_callback_url'])
 
     job_id = random.randint(1,10000000)
+
     if job_template.startswith('deploy'):
         add_deploy_job(
             job_template,

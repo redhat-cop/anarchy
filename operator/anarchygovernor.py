@@ -1,4 +1,5 @@
 import jinja2
+import jmespath
 import json
 import logging
 import six
@@ -13,7 +14,9 @@ jinja2env.filters['to_json'] = lambda x: json.dumps(x)
 def add_values(parameters, runtime, add):
     secrets = {}
     for name, value in add.items():
-        if isinstance(value, dict):
+        if isinstance(value, dict) \
+        and 'secretName' in value \
+        and 'secretKey' in value:
             secret_name = value['secretName']
             secret_key = value['secretKey']
             secret = secrets.get(secret_name, None)
@@ -48,6 +51,23 @@ def time_to_seconds(time):
 
 class AnarchyGovernor(object):
     """AnarchyGovernor class"""
+
+    class DeleteFinalizerCondition(object):
+        def __init__(self, spec):
+            assert 'check' in spec, 'deleteFinalizerCondition must define check'
+            self.check_jmespath = spec['check']
+            assert 'value' in spec, 'deleteFinalizerCondition must define check'
+            self.value = spec['value']
+
+        def check(self, subject):
+            return jmespath.search(
+                self.check_jmespath,
+                {
+                    'metadata': subject.metadata,
+                    'spec': subject.spec,
+                    'status': subject.status
+                }
+            ) == self.value
 
     class EventHandlerList(object):
         def __init__(self, spec):
@@ -252,6 +272,9 @@ class AnarchyGovernor(object):
                     assert 'secretName' in value, 'dictionary parameters must define secretName'
                     assert 'secretKey' in value, 'dictionary parameters must define secretKey'
 
+        # Check validity of delete finalizer condition
+        self.delete_finalizer_condition()
+
     def name(self):
         return self.metadata['name']
 
@@ -260,6 +283,12 @@ class AnarchyGovernor(object):
 
     def resource_version(self):
         return self.metadata['resourceVersion']
+
+    def delete_finalizer_condition(self):
+        if 'deleteFinalizerCondition' in self.spec:
+            return AnarchyGovernor.DeleteFinalizerCondition(self.spec['deleteFinalizerCondition'])
+        else:
+            return None
 
     def get_parameters(self, runtime, api, subject):
         parameters = {}

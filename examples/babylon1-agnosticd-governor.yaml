@@ -13,7 +13,7 @@ spec:
       secretKey: aws_secret_access_key
     output_dir: /tmp/workdir
   subjectEventHandlers:
-  - event: added
+  - event: add
     handlers:
     - handlerType: scheduleAction
       scheduleActionParams:

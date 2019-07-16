@@ -9,10 +9,9 @@ metadata:
 parameters:
 - name: ANARCHY_NAMESPACE
   value: anarchy-operator
-- name: ANARCHY_IMAGESTREAM_NAMESPACE
-  value: anarchy-operator
 - name: ANARCHY_IMAGE
-  value: anarchy-operator:latest
+  value: quay.io/gpte-devops-automation/anarchy-operator:latest
+  #value: image-registry.openshift-image-registry.svc:5000/anarchy-operator/anarchy-operator:latest
 - name: ANARCHY_SERVICE_NAME
   value: anarchy-operator
 - name: APP_DOMAIN
@@ -107,7 +106,7 @@ objects:
           env:
           - name: CALLBACK_BASE_URL
             value: https://${ANARCHY_NAMESPACE}.${APP_DOMAIN}
-          image: image-registry.openshift-image-registry.svc:5000/${ANARCHY_IMAGESTREAM_NAMESPACE}/${ANARCHY_IMAGE}
+          image: ${ANARCHY_IMAGE}
           imagePullPolicy: Always
           # FIXME - Add probes
           #livenessProbe:

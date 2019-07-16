@@ -1,0 +1,20 @@
+---
+apiVersion: gpte.redhat.com/v1
+kind: AnarchyAPI
+metadata:
+  name: test
+  namespace: {{ anarchy_operator_namespace | to_json }}
+spec:
+  baseUrl: https://anarchy-operator-test-server-{{ anarchy_operator_test_namespace }}.{{ openshift_app_domain }}
+  caCertificate: ""
+{% raw %}
+  headers:
+  - name: Authorization
+    value: "Bearer {{ vars.api_auth_token }}"
+  - name: Content-type
+    value: application/json
+  vars:
+    api_auth_token:
+      secretName: test-api-creds
+      secretKey: api_auth_token
+{% endraw %}

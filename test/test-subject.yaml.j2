@@ -1,0 +1,12 @@
+---
+apiVersion: gpte.redhat.com/v1
+kind: AnarchySubject
+metadata:
+  name: {{ anarchy_subject_name | to_json }}
+  namespace: {{ anarchy_operator_namespace | to_json }}
+  labels:
+    governor: {{ anarchy_governor_name | to_json }}
+spec:
+  requester: {{ anarchy_subject_requester | to_json }}
+  governor: {{ anarchy_governor_name | to_json }}
+  parameters: {{ anarchy_subject_parameters | to_json }}

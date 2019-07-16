@@ -25,7 +25,7 @@ spec:
       path: /api/v2/job_templates/deployer-ping/launch/
   parameters: {}
   subjectEventHandlers:
-  - event: added
+  - event: add
     handlers:
     - handlerType: scheduleAction
       scheduleActionParams:
