@@ -149,12 +149,12 @@ def init_subjects():
 def handle_subject_added(resource):
     subject = AnarchySubject.register(resource)
     if subject.is_pending_delete():
-        logger.debug("Subject %s is pending delete", subject.namespace_name)
+        logger.debug("Subject %s is pending delete", subject.namespace_name())
         if not subject.delete_started():
-            subject.process_subject_event_handlers(anarchy_runtime, 'delete')
             subject.patch_status(anarchy_runtime, {
                 'deleteHandlersStarted': True
             })
+            subject.process_subject_event_handlers(anarchy_runtime, 'delete')
         elif subject.delete_complete():
             subject.remove_finalizer(anarchy_runtime)
     elif subject.is_new:
@@ -183,14 +183,17 @@ def watch_subjects():
         'anarchysubjects'
     )
     for event in stream:
-        logger.debug(event)
         event_obj = event['object']
-        if event_obj['kind'] == 'Status':
+        if event_obj['kind'] == 'Status' \
+        and event_obj['apiVersion'] == 'v1':
             logger.info('Watch %s - reason %s, %s',
                 event_obj['status'],
                 event_obj['reason'],
                 event_obj['message']
             )
+            if event_obj['status'] == 'Failure' \
+            and event_obj['reason'] == 'Expired':
+                return
         else:
             logger.debug("Action %s/%s %s",
                 event_obj['metadata']['namespace'],
@@ -241,12 +244,16 @@ def watch_actions():
     for event in stream:
         logger.debug(event)
         event_obj = event['object']
-        if event_obj['kind'] == 'Status':
+        if event_obj['kind'] == 'Status' \
+        and event_obj['apiVersion'] == 'v1':
             logger.info('Watch %s - reason %s, %s',
                 event_obj['status'],
                 event_obj['reason'],
                 event_obj['message']
             )
+            if event_obj['status'] == 'Failure' \
+            and event_obj['reason'] == 'Expired':
+                return
         else:
             logger.debug("Action %s/%s %s",
                 event_obj['metadata']['namespace'],
@@ -266,6 +273,48 @@ def watch_actions_loop():
             watch_actions()
         except Exception as e:
             logger.exception("Error in actions loop " + str(e))
+            time.sleep(60)
+
+def watch_action_pods():
+    logger.debug('Starting watch for action pods')
+    stream = kubernetes.watch.Watch().stream(
+        kube_api.list_namespaced_pod,
+        namespace,
+        label_selector='gpte.redhat.com/anarchy-action-name'
+    )
+    for event in stream:
+        logger.debug(event)
+        obj = event['object']
+        if event['type'] == 'ERROR' \
+        and obj['kind'] == 'Status' \
+        and obj['apiVersion'] == 'v1':
+            logger.info('Watch %s - reason %s, %s',
+                obj['status'],
+                obj['reason'],
+                obj['message']
+            )
+            if obj['status'] == 'Failure' \
+            and obj['reason'] == 'Expired':
+                return
+        else:
+            logger.debug("Pod %s/%s %s",
+                obj.metadata.namespace,
+                obj.metadata.name,
+                event['type']
+            )
+            if obj.status.phase in ('Succeeded', 'Failed') \
+            and not obj.metadata.deletion_timestamp:
+                kube_api.delete_namespaced_pod(
+                    obj.metadata.name,
+                    obj.metadata.namespace
+                )
+
+def watch_action_pods_loop():
+    while True:
+        try:
+            watch_action_pods()
+        except Exception as e:
+            logger.exception("Error in action pods loop " + str(e))
             time.sleep(60)
 
 def action_release():
@@ -361,6 +410,11 @@ def main():
     threading.Thread(
         name = 'actions',
         target = watch_actions_loop
+    ).start()
+
+    threading.Thread(
+        name = 'action-pods',
+        target = watch_action_pods_loop
     ).start()
 
     threading.Thread(

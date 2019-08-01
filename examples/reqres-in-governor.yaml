@@ -8,19 +8,16 @@ spec:
   subjectEventHandlers:
   - event: add
     handlers:
-    - handlerType: scheduleAction
-      scheduleActionParams:
-        action: register
+    - type: scheduleAction
+      action: register
   - event: modify
     handlers:
-    - handlerType: scheduleAction
-      scheduleActionParams:
-        action: update
+    - type: scheduleAction
+      action: update
   - event: delete
     handlers:
-    - handlerType: scheduleAction
-      scheduleActionParams:
-        action: delete
+    - type: scheduleAction
+      action: delete
   actions:
   - name: register
     request:
@@ -32,20 +29,17 @@ spec:
     eventHandlers:
     - event: registered
       handlers:
-      - handlerType: scheduleAction
-        scheduleActionParams:
-          action: check
-          after: 1m 
-      - handlerType: setLabels
-        setLabelsParams:
-          setLabels:
-          - name: userid
-            jinja2Template: "{{ response.json.data.id }}"
-      - handlerType: setStatus
-        setStatusParams:
-          setStatus:
-          - name: userId
-            jinja2Template: '{{ action.status.apiResponse.data.id }}'
+      - type: scheduleAction
+        action: check
+        after: 1m
+      - type: setLabels
+        setLabels:
+        - name: userid
+          jinja2Template: "{{ response.json.data.id }}"
+      - type: setStatus
+        setStatus:
+        - name: userId
+          jinja2Template: '{{ action.status.apiResponse.data.id }}'
   - name: check
     api:
       url: "https://reqres.in/api/users/{{ subject.status.userId }}"
@@ -55,15 +49,13 @@ spec:
     eventHandlers:
     - event: okay
       handlers:
-      - handlerType: scheduleAction
-        scheduleActionParams:
-          action: check
-          after: 1m 
+      - type: scheduleAction
+        action: check
+        after: 1m
     - event: not_found
       handlers:
-      - handlerType: scheduleAction
-        scheduleActionParams:
-          action: register
+      - type: scheduleAction
+        action: register
   - name: update
     api:
       url: "https://reqres.in/api/users/{{ subject.status.userId }}"
@@ -74,9 +66,8 @@ spec:
     eventHandlers:
     - event: okay
       handlers:
-      - handlerType: setStatus
-        setStatusParams:
-          updatedAt: "{{ response.json.updatedAt }}"
+      - type: setStatus
+        updatedAt: "{{ response.json.updatedAt }}"
   - name: delete
     api:
       url: "https://reqres.in/api/users/{{ subject.status.userId }}"
@@ -88,13 +79,11 @@ spec:
     eventHandlers:
     - event: okay
       handlers:
-      - handlerType: scheduleAction
-        scheduleActionParams:
-          action: check
-          after: 1m 
+      - type: scheduleAction
+        action: check
+        after: 1m
     - event: not_found
       handlers:
-      - handlerType: scheduleAction
-        scheduleActionParams:
-          action: register
-          after: 5m 
+      - type: scheduleAction
+        action: register
+        after: 5m

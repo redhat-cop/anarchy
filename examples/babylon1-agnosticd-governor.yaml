@@ -15,9 +15,8 @@ spec:
   subjectEventHandlers:
   - event: add
     handlers:
-    - handlerType: scheduleAction
-      scheduleActionParams:
-        action: deploy
+    - type: scheduleAction
+      action: deploy
   actions:
   - name: deploy
     request:

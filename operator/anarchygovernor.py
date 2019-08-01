@@ -2,6 +2,7 @@ import jinja2
 import jmespath
 import json
 import logging
+import os
 import six
 
 logger = logging.getLogger('anarchy')
@@ -68,25 +69,22 @@ class AnarchyGovernor(object):
                     'status': subject.status
                 }
             ) == self.value
-
     class EventHandlerList(object):
         def __init__(self, spec):
             assert 'event' in spec, 'eventHandlers list must define event'
             self.event = spec['event']
             self.handlers = []
             for handler_spec in spec.get('handlers', []):
-                assert 'handlerType' in handler_spec, \
-                    'eventHandlers must define handlerType'
-                handlerType = handler_spec['handlerType']
-                assert handlerType + 'Params' in handler_spec, \
-                    '{0}EventHandler must define {0}Params'.format(handlerType)
+                assert 'type' in handler_spec, \
+                    'eventHandlers must define type'
+                handler_type = handler_spec['type']
                 handler_class_name = (
-                    handlerType[0].upper() +
-                    handlerType[1:] +
+                    handler_type[0].upper() +
+                    handler_type[1:] +
                     'EventHandler'
                 )
                 handler_class = getattr(AnarchyGovernor, handler_class_name)
-                self.handlers.append( handler_class(handler_spec[handlerType + 'Params']) )
+                self.handlers.append( handler_class(handler_spec) )
 
         def process(self, runtime, governor, subject, action, event_data, event_name):
             logger.info("Processing event handlers for %s",
@@ -95,12 +93,10 @@ class AnarchyGovernor(object):
             for handler in self.handlers:
                 handler.process(runtime, governor, subject, action, event_data, event_name)
 
-    class EmailEventHandler(object):
-        def __init__(self, handler_params):
-            self.email_to = handler_params['to']
-            self.email_from = handler_params['from']
-            self.email_subject_template = handler_params['subject']
-            self.email_body_template = handler_params['body']
+    class AnsibleEventHandler(object):
+        def __init__(self, handler_spec):
+            self.tasks = handler_spec.get('tasks', [])
+            self.service_account = handler_spec.get('service_account', None)
             self.sanity_check()
 
         def sanity_check(self):
@@ -108,8 +104,79 @@ class AnarchyGovernor(object):
             pass
 
         def process(self, runtime, governor, subject, action, event_data, event_name):
-            # FIXME
-            pass
+            ansible_vars = {
+                "anarchy_governor": {
+                    "metadata": governor.metadata,
+                    "spec": governor.spec
+                },
+                "anarchy_subject": {
+                    "metadata": subject.metadata,
+                    "spec": subject.spec
+                },
+                "anarchy_action": {
+                    "metadata": action.metadata,
+                    "spec": action.spec
+                },
+                "event_name": event_name,
+                "event_data": event_data
+            }
+            service_account = self.service_account or \
+                os.environ.get('ANSIBLE_RUNNER_SERVICE_ACCOUNT', 'anarchy-operator')
+            runtime.kube_api.create_namespaced_pod(
+                runtime.namespace,
+                {
+                    "apiVersion": "v1",
+                    "kind": "Pod",
+                    "metadata": {
+                        "generateName": "{}-{}-{}-".format(
+                            action.namespace(),
+                            action.name(),
+                            event_name
+                        ),
+                        "labels": {
+                            runtime.crd_domain + '/anarchy-subject-namespace': subject.namespace(),
+                            runtime.crd_domain + '/anarchy-subject-name': subject.name(),
+                            runtime.crd_domain + '/anarchy-action-namespace': action.namespace(),
+                            runtime.crd_domain + '/anarchy-action-name': action.name(),
+                            runtime.crd_domain + '/anarchy-event-name': event_name
+                        },
+                        "namespace": subject.namespace(),
+                    },
+                    "spec": {
+                        "containers": [{
+                            "name": "ansible",
+                            "env": [{
+                                "name": "VARS",
+                                "value": json.dumps(ansible_vars)
+                            },{
+                                "name": "TASKS",
+                                "value": json.dumps(self.tasks)
+                            },{
+                                "name": "POD_NAME",
+                                "valueFrom": {
+                                    "fieldRef": {
+                                        "fieldPath": "metadata.name"
+                                    }
+                                }
+                            }],
+                            "image": os.environ['ANSIBLE_RUNNER_IMAGE'],
+                            "imagePullPolicy": "Always",
+                            "resources": {
+                                "limits": {
+                                    "cpu": os.environ.get('ANSIBLE_RUNNER_CPU_LIMIT', '1'),
+                                    "memory": os.environ.get('ANSIBLE_RUNNER_MEMORY_LIMIT', '1Gi')
+                                },
+                                "requests": {
+                                    "cpu": os.environ.get('ANSIBLE_RUNNER_CPU_REQUEST', '100m'),
+                                    "memory": os.environ.get('ANSIBLE_RUNNER_MEMORY_REQUEST', '512Mi')
+                                }
+                            }
+                        }],
+                        "restartPolicy": "Never",
+                        "serviceAccountName": service_account
+                    }
+                }
+            )
 
     class ScheduleActionEventHandler(object):
         def __init__(self, handler_params):

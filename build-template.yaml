@@ -8,7 +8,7 @@ metadata:
 
 parameters:
 - name: GIT_REPO
-  value: https://github.com/gnuthought/anarchy-operator.git
+  value: https://github.com/redhat-gpte-devopsautomation/anarchy-operator.git
 - name: NAMESPACE
   value: anarchy-operator
 
@@ -17,6 +17,15 @@ objects:
   kind: ImageStream
   metadata:
     name: anarchy-operator
+    namespace: ${NAMESPACE}
+  spec:
+    lookupPolicy:
+      local: false
+
+- apiVersion: image.openshift.io/v1
+  kind: ImageStream
+  metadata:
+    name: anarchy-ansible-runner
     namespace: ${NAMESPACE}
   spec:
     lookupPolicy:
@@ -37,6 +46,32 @@ objects:
     runPolicy: Serial
     source:
       contextDir: operator
+      git:
+        uri: ${GIT_REPO}
+        ref: master
+    strategy:
+      type: Docker
+      dockerStrategy:
+        from:
+          kind: DockerImage
+          name: registry.access.redhat.com/ubi8/python-36:latest
+    triggers: []
+
+- apiVersion: v1
+  kind: BuildConfig
+  metadata:
+    name: anarchy-ansible-runner
+    namespace: ${NAMESPACE}
+  spec:
+    output:
+      to:
+        kind: ImageStreamTag
+        name: anarchy-ansible-runner:latest
+    postCommit: {}
+    resources: {}
+    runPolicy: Serial
+    source:
+      contextDir: ansible-runner
       git:
         uri: ${GIT_REPO}
         ref: master

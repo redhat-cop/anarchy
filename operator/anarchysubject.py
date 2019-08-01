@@ -231,9 +231,6 @@ class AnarchySubject(object):
             }
         })
         action.create(runtime)
-        self.patch_status(runtime, {
-            "currentAction": action.name()
-        })
         return action
 
     def add_finalizer(self, runtime):

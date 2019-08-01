@@ -9,11 +9,10 @@ spec:
     eventHandlers:
     - event: complete
       handlers:
-      - handlerType: setLabels
-        setLabelsParams:
-          setLabels:
-          - value: complete
-            name: status
+      - type: setLabels
+        setLabels:
+        - value: complete
+          name: status
     name: ping
     request:
       api: babylon1
@@ -27,6 +26,5 @@ spec:
   subjectEventHandlers:
   - event: add
     handlers:
-    - handlerType: scheduleAction
-      scheduleActionParams:
-        action: ping
+    - type: scheduleAction
+      action: ping

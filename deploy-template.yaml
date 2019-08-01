@@ -3,14 +3,19 @@ apiVersion: template.openshift.io/v1
 kind: Template
 metadata:
   annotations:
-    description: openshift-provision-manager
-  name: openshift-provision-manager
+    description: anarchy-operator deploy
+  name: anarchy-operator-deploy
 
 parameters:
 - name: ANARCHY_NAMESPACE
   value: anarchy-operator
 - name: ANARCHY_IMAGE
   value: quay.io/gpte-devops-automation/anarchy-operator:latest
+  #value: docker-registry.default.svc:5000/anarchy-operator/anarchy-operator:latest
+  #value: image-registry.openshift-image-registry.svc:5000/anarchy-operator/anarchy-operator:latest
+- name: ANSIBLE_RUNNER_IMAGE
+  value: quay.io/gpte-devops-automation/anarchy-ansible-runner:latest
+  #value: docker-registry.default.svc:5000/anarchy-operator/anarchy-ansible-runner:latest
   #value: image-registry.openshift-image-registry.svc:5000/anarchy-operator/anarchy-operator:latest
 - name: ANARCHY_SERVICE_NAME
   value: anarchy-operator
@@ -104,6 +109,8 @@ objects:
         containers:
         - name: manager
           env:
+          - name: ANSIBLE_RUNNER_IMAGE
+            value: ${ANSIBLE_RUNNER_IMAGE}
           - name: CALLBACK_BASE_URL
             value: https://${ANARCHY_NAMESPACE}.${APP_DOMAIN}
           image: ${ANARCHY_IMAGE}

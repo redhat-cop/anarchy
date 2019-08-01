@@ -86,7 +86,7 @@
     - name: Pause for scale-down
       pause:
         seconds: 5
-      
+
     - name: Scale up anarchy-operator-test-server
       k8s_scale:
         api_version: extensions/v1beta1

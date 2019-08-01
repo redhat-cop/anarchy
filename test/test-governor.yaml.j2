@@ -20,14 +20,12 @@ spec:
   subjectEventHandlers:
   - event: add
     handlers:
-    - handlerType: scheduleAction
-      scheduleActionParams:
-        action: deploy
+    - type: scheduleAction
+      action: deploy
   - event: delete
     handlers:
-    - handlerType: scheduleAction
-      scheduleActionParams:
-        action: destroy
+    - type: scheduleAction
+      action: destroy
   actions:
   - name: deploy
     request:
@@ -41,51 +39,26 @@ spec:
     eventHandlers:
     - event: started
       handlers:
-      - handlerType: email
-        emailParams:
-          to: ["{{ subject.spec.requester.email }}"]
-          from: noreply@opentlc.com
-          subject: >-
-            {{ governor.metadata.name }} {{ subject.metadata.name }}
-            deployment has started
-          body: |-
-            ... jinja template ...
+      - type: ansible
+        tasks:
+        - name: Say Hello
+          debug:
+            msg: Hello, World
+        - name: Check identity
+          command: oc whoami
     - event: complete
       handlers:
-      - handlerType: setLabels
-        setLabelsParams:
-          setLabels:
-          - name: state
-            value: deployed
-      - handlerType: setStatus
-        setStatusParams:
-          setStatus:
-          - name: state
-            value: deployed
-      - handlerType: scheduleAction
-        scheduleActionParams:
-          action: destroy
-          after: 6d
-      - handlerType: email
-        emailParams:
-          to: ["{{ subject.spec.requester.email }}"]
-          from: noreply@opentlc.com
-          subject: >-
-            {{ governor.metadata.name }} {{ subject.metadata.name }}
-            deployed
-          body: |-
-            ... jinja template ...
-    - event: error
-      handlers:
-      - handlerType: email
-        emailParams:
-          to: ["{{ subject.spec.requester.email }}"]
-          from: noreply@opentlc.com
-          subject: >-
-            {{ governor.metadata.name }} {{ subject.metadata.name }}
-            deploy error
-          body: |-
-            ... jinja template ...
+      - type: setLabels
+        setLabels:
+        - name: state
+          value: deployed
+      - type: setStatus
+        setStatus:
+        - name: state
+          value: deployed
+      - type: scheduleAction
+        action: destroy
+        after: 6d
   - name: destroy
     request:
       api: test
@@ -98,49 +71,12 @@ spec:
     eventHandlers:
     - event: complete
       handlers:
-      - handlerType: email
-        emailParams:
-          to: ["{{ subject.spec.requester.email }}"]
-          from: noreply@opentlc.com
-          subject: >-
-            {{ governor.metadata.name }} {{ subject.metadata.name }}
-            destroyed
-          body: |-
-            ... jinja template …
-      - handlerType: setLabels
-        setLabelsParams:
-          setLabels:
-          - name: state
-            value: deployed
-      - handlerType: setStatus
-        setStatusParams:
-          setStatus:
-          - name: state
-            value: destroyed
-    - event: error
-      handlers:
-      - handlerType: email
-        emailParams:
-          to: ["{{ subject.spec.requester.email }}"]
-          from: noreply@opentlc.com
-          subject: >-
-            {{ governor.metadata.name }} {{ subject.metadata.name }}
-            destroy error
-          body: |-
-            ... jinja template ...
-#  - name: suspend
-#    api:
-#      url: https://...
-#    ...
-#  - name: resume
-#    api:
-#      url: https://...
-#    eventHandlers:
-#    - event: complete
-#      handlers:
-#      - handlerType: scheduleAction
-#        scheduleActionParams:
-#          action: suspend
-#          after: 8h
-#    ...
+      - type: setLabels
+        setLabels:
+        - name: state
+          value: deployed
+      - type: setStatus
+        setStatus:
+        - name: state
+          value: destroyed
 {% endraw %}
