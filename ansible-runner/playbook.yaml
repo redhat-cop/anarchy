@@ -50,16 +50,6 @@
       set_fact:
         callback_data: {}
 
-    - name: Write vars to file
-      copy:
-        content: "{{ lookup('env', 'VARS') }}"
-        dest: dynamic/vars.yaml
-
-    - name: Write tasks to file
-      copy:
-        content: "{{ lookup('env', 'TASKS') }}"
-        dest: dynamic/tasks.yaml
-
     - name: Include vars
       include_vars: dynamic/vars.yaml
 

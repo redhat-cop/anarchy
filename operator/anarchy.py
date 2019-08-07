@@ -1,19 +1,14 @@
 #!/usr/bin/env python
 
-import base64
+import datetime
 import flask
 import gevent.pywsgi
 import kubernetes
 import kubernetes.client.rest
 import logging
-import jinja2
 import os
 import prometheus_client
-import random
-import re
-import socket
 import sys
-import string
 import threading
 import time
 import yaml
@@ -160,6 +155,8 @@ def handle_subject_added(resource):
     elif subject.is_new:
         subject.add_finalizer(anarchy_runtime)
         subject.process_subject_event_handlers(anarchy_runtime, 'add')
+    elif subject.is_updated:
+        subject.process_subject_event_handlers(anarchy_runtime, 'update')
 
 def handle_subject_modified(resource):
     handle_subject_added(resource)
@@ -277,13 +274,18 @@ def watch_actions_loop():
 
 def watch_action_pods():
     logger.debug('Starting watch for action pods')
-    stream = kubernetes.watch.Watch().stream(
+    watch = kubernetes.watch.Watch()
+    stream = watch.stream(
         kube_api.list_namespaced_pod,
         namespace,
         label_selector='gpte.redhat.com/anarchy-action-name'
     )
+    action_pod_keep_seconds = int(os.environ.get('ACTION_POD_KEEP_SECONDS', 600))
+    watch_start = time.time()
+    restart_watch_after = watch_start + action_pod_keep_seconds / 2
+    if restart_watch_after < 60:
+        restart_watch_after = 60
     for event in stream:
-        logger.debug(event)
         obj = event['object']
         if event['type'] == 'ERROR' \
         and obj['kind'] == 'Status' \
@@ -302,12 +304,25 @@ def watch_action_pods():
                 obj.metadata.name,
                 event['type']
             )
+
+            delete_older_than = (
+                datetime.datetime.utcnow().replace(tzinfo=datetime.timezone.utc) -
+                datetime.timedelta(0, action_pod_keep_seconds)
+            )
+
+            # Delete pods that have completed, are older than the threshold
+            # and are not already marked for deletion.
             if obj.status.phase in ('Succeeded', 'Failed') \
+            and obj.metadata.creation_timestamp < delete_older_than \
             and not obj.metadata.deletion_timestamp:
                 kube_api.delete_namespaced_pod(
                     obj.metadata.name,
                     obj.metadata.namespace
                 )
+
+        if restart_watch_after < time.time():
+            watch.stop()
+
 
 def watch_action_pods_loop():
     while True:

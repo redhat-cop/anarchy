@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 
 import base64
 import datetime
@@ -18,104 +18,89 @@ import time
 import yaml
 
 api = flask.Flask('rest')
+callbacks = {}
 
-logging.basicConfig(
-    format='%(asctime)s %(levelname)s %(threadName)s - %(message)s',
-)
-logger = logging.getLogger('anarchy')
-logger.setLevel(os.environ.get('LOGGING_LEVEL', 'DEBUG'))
+def init():
+    global logger
+    handler = logging.StreamHandler(sys.stdout)
+    handler.setLevel(os.environ.get('LOGGING_LEVEL', 'DEBUG'))
+    formatter = logging.Formatter('%(asctime)s %(levelname)s %(threadName)s - %(message)s')
+    handler.setFormatter(formatter)
+    logger = logging.getLogger()
+    logger.setLevel(os.environ.get('LOGGING_LEVEL', 'DEBUG'))
+    logger.addHandler(handler)
 
-jobs = {}
-
-def add_deploy_job(job_template, callback_url, callback_token, job_id):
-    jobs[job_id] = {
-        "id": job_id,
-        "callback_url": callback_url,
-        "callback_token": callback_token,
-        "callback_events": {
-            "started": {
-                "after": time.time() + 1,
-                "data": {
-                    "event": "started",
-                    "msg": "deployment of {} {} started".format(job_template, job_id)
-                }
-            },
-            "complete": {
-                "after": time.time() + 12,
-                "data": {
-                    "event": "complete",
-                    "msg": "deployment of {} {} complete".format(job_template, job_id)
-                }
-            }
-        }
-    }
-
-def add_destroy_job(job_template, callback_url, callback_token, job_id):
-    jobs[job_id] = {
-        "id": job_id,
-        "callback_url": callback_url,
-        "callback_token": callback_token,
-        "callback_events": {
-            "complete": {
-                "after": time.time() + 1,
-                "data": {
-                    "event": "complete",
-                    "msg": "destroy of {} {} complete".format(job_template, job_id)
-                }
-            }
+def schedule_callback(after, event, job_id, msg, token, url):
+    callbacks[(job_id,event)] = {
+        "after": after,
+        "token": token,
+        "url": url,
+        "data": {
+            "event": event,
+            "job_id": job_id,
+            "msg": msg,
         }
     }
 
 def callback_loop():
     while True:
-        for job_id, job in jobs.copy().items():
-            for event_name, event in job['callback_events'].copy().items():
-                if time.time() > event['after']:
-                    logger.info("Doing callback to %s with %s", job['callback_url'], event['data'])
-                    resp = requests.post(
-                        job['callback_url'],
-                        json=event['data'],
-                        headers={ "Authorization": "Bearer " + job['callback_token'] },
-                        verify=False
-                    )
-                    logger.info(" %s: %s", resp.status_code, resp.text)
-                    del job['callback_events'][event_name]
-            if not job['callback_events']:
-                del jobs[job_id]
+        completed = []
+        for key, callback in callbacks.copy().items():
+            if time.time() < callback['after']:
+                continue
+            resp = requests.post(
+                callback['url'],
+                json=callback['data'],
+                headers={ "Authorization": "Bearer " + callback['token'] },
+                verify=False
+            )
+            logger.info(
+                "%s - %s: %s",
+                callback['url'],
+                resp.status_code,
+                resp.text
+            )
+            del callbacks[key]
         time.sleep(1)
 
-@api.route('/api/v2/job_templates/<job_template>/launch/', methods=['POST'])
-def event_callback(job_template):
-    logger.info("Call to job template %s", job_template)
-    if not flask.request.json:
+@api.route('/api/v2/job_templates/job-runner/launch/', methods=['POST'])
+def launch():
+    logger.info("Call to job job-runner launch")
+
+    try:
+        assert flask.request.json, \
+            'no json data provided'
+        assert 'extra_vars' in flask.request.json, \
+            'extra_vars not provided'
+        assert 'babylon_callback_url' in flask.request.json['extra_vars'], \
+            'babylon_callback_url not provided in extra_vars'
+        assert 'babylon_callback_token' in flask.request.json['extra_vars'], \
+            'babylon_callback_token not provided in extra_vars'
+        assert 'babylon_deployer_action' in flask.request.json['extra_vars'], \
+            'babylon_deployer_action not provided in extra_vars'
+    except Exception as e:
+        logger.exception("Invalid parameters passed to job-runner launch: " + str(e))
         flask.abort(400)
 
-    assert 'extra_vars' in flask.request.json, \
-        'extra_vars not provided'
-    assert 'anarchy_callback_url' in flask.request.json['extra_vars'], \
-        'anarchy_callback_url not provided in extra_vars'
-    assert 'anarchy_callback_token' in flask.request.json['extra_vars'], \
-        'anarchy_callback_token not provided in extra_vars'
-
-    logger.info("Callback URL %s", flask.request.json['extra_vars']['anarchy_callback_url'])
+    logger.info("Callback URL %s", flask.request.json['extra_vars']['babylon_callback_url'])
 
     job_id = random.randint(1,10000000)
-
-    if job_template.startswith('deploy'):
-        add_deploy_job(
-            job_template,
-            flask.request.json['extra_vars']['anarchy_callback_url'],
-            flask.request.json['extra_vars']['anarchy_callback_token'],
-            job_id
-        )
-    elif job_template.startswith('destroy'):
-        add_destroy_job(
-            job_template,
-            flask.request.json['extra_vars']['anarchy_callback_url'],
-            flask.request.json['extra_vars']['anarchy_callback_token'],
-            job_id
-        )
-
+    schedule_callback(
+        after=time.time() + 1,
+        event='started',
+        job_id=job_id,
+        msg='started ' + flask.request.json['extra_vars']['babylon_deployer_action'],
+        token=flask.request.json['extra_vars']['babylon_callback_token'],
+        url=flask.request.json['extra_vars']['babylon_callback_url']
+    )
+    schedule_callback(
+        after=time.time() + 15,
+        event='complete',
+        job_id=job_id,
+        msg='completed ' + flask.request.json['extra_vars']['babylon_deployer_action'],
+        token=flask.request.json['extra_vars']['babylon_callback_token'],
+        url=flask.request.json['extra_vars']['babylon_callback_url']
+    )
     return flask.jsonify({
         "id": job_id,
         "job": job_id
@@ -123,6 +108,9 @@ def event_callback(job_template):
 
 def main():
     """Main function."""
+
+    init()
+    logger.info("Starting test server")
 
     threading.Thread(
         name = 'callback',

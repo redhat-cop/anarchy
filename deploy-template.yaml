@@ -130,8 +130,6 @@ objects:
   apiVersion: v1
   metadata:
     name: anarchy-operator
-    labels:
-      template: "cronjob-ldap-group-sync"
   rules:
   - apiGroups:
     - gpte.redhat.com
@@ -172,8 +170,6 @@ objects:
   apiVersion: v1
   metadata:
     name: admin-anarchy-subjects
-    labels:
-      rbac.authorization.k8s.io/aggregate-to-admin: "true"
   rules:
   - apiGroups:
     - gpte.redhat.com

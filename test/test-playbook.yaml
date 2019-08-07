@@ -8,7 +8,7 @@
     build: true
     build_anarchy_operator: "{{ build }}"
     build_anarchy_operator_test: "{{ build }}"
-    openshift_app_domain: apps.shared.na.openshift.opentlc.com
+    openshift_app_domain: apps.babydev.babylon.open.redhat.com
   tasks:
   - name: Start anarchy-operator build
     command: >-
@@ -204,6 +204,7 @@
           labels:
             governor: test
         spec:
+          desiredState: deployed
           governor: test
           parameters:
             name: test-1
@@ -213,7 +214,7 @@
 
   - name: Pause for deploy start
     pause:
-      seconds: 10
+      seconds: 30
 
   - name: Get test-1 deploy action
     k8s_facts:
@@ -237,7 +238,7 @@
     assert:
       that:
       - action.spec.action == 'deploy'
-      - action.status.events | length == 1
+      - action.status.events | length >= 1
       - action.status.events[0].name == 'started'
       fail_msg: test-1 deploy not started
       success_msg: test-1 deploy not found started
@@ -246,7 +247,7 @@
 
   - name: Pause for deploy completion
     pause:
-      seconds: 12
+      seconds: 15
 
   - name: Get test-1 deploy action
     k8s_facts:
@@ -280,8 +281,8 @@
     k8s_facts:
       api_version: gpte.redhat.com/v1
       kind: AnarchySubject
-      namespace: "{{ anarchy_operator_namespace }}"
       name: test-1
+      namespace: "{{ anarchy_operator_namespace }}"
     register: test_1_subject
 
   - name: Check test-1 subject
@@ -294,6 +295,72 @@
     vars:
       subject: "{{ test_1_subject.resources[0] }}"
 
+  - name: Idle test-1 subject
+    k8s:
+      api_version: gpte.redhat.com/v1
+      kind: AnarchySubject
+      name: test-1
+      namespace: "{{ anarchy_operator_namespace }}"
+      merge_type: merge
+      definition:
+        spec:
+          desiredState: idled
+
+  - name: Pause for idle completion
+    pause:
+      seconds: 40
+
+  - name: Get test-1 subject
+    k8s_facts:
+      api_version: gpte.redhat.com/v1
+      kind: AnarchySubject
+      name: test-1
+      namespace: "{{ anarchy_operator_namespace }}"
+    register: test_1_subject
+
+  - name: Check test-1 subject idled
+    assert:
+      that:
+      - subject.metadata.labels.state == 'idled'
+      - subject.status.state == 'idled'
+      fail_msg: test-1 subject not defined as expected
+      success_msg: test-1 subject defined as expected
+    vars:
+      subject: "{{ test_1_subject.resources[0] }}"
+
+  - name: Resume test-1 subject
+    k8s:
+      api_version: gpte.redhat.com/v1
+      kind: AnarchySubject
+      name: test-1
+      namespace: "{{ anarchy_operator_namespace }}"
+      merge_type: merge
+      definition:
+        spec:
+          desiredState: deployed
+
+  - name: Pause for resume completion
+    pause:
+      seconds: 40
+
+  - name: Get test-1 subject
+    k8s_facts:
+      api_version: gpte.redhat.com/v1
+      kind: AnarchySubject
+      name: test-1
+      namespace: "{{ anarchy_operator_namespace }}"
+    register: test_1_subject
+
+  - name: Check test-1 subject resumed
+    assert:
+      that:
+      - subject.metadata.labels.state == 'deployed'
+      - subject.status.state == 'deployed'
+      fail_msg: test-1 subject not defined as expected
+      success_msg: test-1 subject defined as expected
+    vars:
+      subject: "{{ test_1_subject.resources[0] }}"
+  
   - name: Delete test-1 subject
     k8s:
       state: absent
@@ -304,7 +371,7 @@
 
   - name: Pause for delete completion
     pause:
-      seconds: 10
+      seconds: 40
 
   - name: Get test-1 subject
     k8s_facts:

@@ -6,15 +6,19 @@ metadata:
   namespace: {{ anarchy_operator_namespace | to_json }}
 spec:
   baseUrl: https://anarchy-operator-test-server-{{ anarchy_operator_test_namespace }}.{{ openshift_app_domain }}
-  caCertificate: ""
 {% raw %}
+  basicAuth:
+    secretName: test-api-creds
+  caCertificate: ""
+  callbackEventNameParameter: event
+  callbackTokenParameter: babylon_callback_token
+  callbackUrlParameter: babylon_callback_url
+  data: '{{: { "extra_vars": parameters } | to_json :}}'
+  parameters:
+    babylon_deployer_action: '{{: parameters.ACTION :}}'
+  path: /api/v2/job_templates/job-runner/launch/
   headers:
-  - name: Authorization
-    value: "Bearer {{ vars.api_auth_token }}"
   - name: Content-type
     value: application/json
-  vars:
-    api_auth_token:
-      secretName: test-api-creds
-      secretKey: api_auth_token
+  method: POST
 {% endraw %}

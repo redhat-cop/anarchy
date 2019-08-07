@@ -6,6 +6,8 @@ metadata:
   namespace: {{ anarchy_operator_namespace | to_json }}
 {% raw %}
 spec:
+  api: test
+
   parameters:
     cloud_provider: ec2
     aws_access_key_id:
@@ -14,69 +16,156 @@ spec:
     aws_secret_access_key:
       secretName: test-aws-creds
       secretKey: aws_secret_access_key
+
   deleteFinalizerCondition:
     check: status.state
     value: destroyed
+
   subjectEventHandlers:
   - event: add
-    handlers:
-    - type: scheduleAction
-      action: deploy
+    tasks:
+    - name: Set state deploy-pending in subject status
+      anarchy_subject_update:
+        metadata:
+          labels:
+            state: deploy-pending
+        status:
+          state: deploy-pending
+    - name: Start Deploy
+      anarchy_schedule_action:
+        action: deploy
+
+  - event: update
+    tasks:
+    - when: >-
+        anarchy_subject.spec.desiredState|default('') == 'deployed' and
+        (anarchy_subject.status|default({})).state|default('') == 'idled'
+      block:
+      - name: Set state resuming in subject status
+        anarchy_subject_update:
+          metadata:
+            labels:
+              state: resume-pending
+          status:
+            state: resume-pending
+      - name: Start Resume
+        anarchy_schedule_action:
+          action: resume
+    - when: >-
+        anarchy_subject.spec.desiredState|default('idled') == 'idled' and
+        (anarchy_subject.status|default({})).state|default('') == 'deployed'
+      block:
+      - name: Set state idle-pending in subject status
+        anarchy_subject_update:
+          metadata:
+            labels:
+              state: idle-pending
+          status:
+            state: idle-pending
+      - name: Start Idle
+        anarchy_schedule_action:
+          action: idle
+
   - event: delete
-    handlers:
-    - type: scheduleAction
-      action: destroy
+    tasks:
+    - name: Start Destroy
+      anarchy_schedule_action:
+        action: destroy
+
   actions:
   - name: deploy
     request:
-      api: test
-      callbackTokenParameter: anarchy_callback_token
-      callbackUrlParameter: anarchy_callback_url
-      data: '{{ { "extra_vars": parameters } | to_json }}'
-      method: POST
-      path: /api/v2/job_templates/deploy/launch/
-    callbackEventNameParameter: event
+      parameters:
+        ACTION: provision
     eventHandlers:
     - event: started
-      handlers:
-      - type: ansible
-        tasks:
-        - name: Say Hello
-          debug:
-            msg: Hello, World
-        - name: Check identity
-          command: oc whoami
+      tasks:
+      - name: Set state deploying in subject status
+        anarchy_subject_update:
+          metadata:
+            labels:
+              state: deploying
+          status:
+            state: deploying
     - event: complete
-      handlers:
-      - type: setLabels
-        setLabels:
-        - name: state
-          value: deployed
-      - type: setStatus
-        setStatus:
-        - name: state
-          value: deployed
-      - type: scheduleAction
-        action: destroy
-        after: 6d
+      tasks:
+      - name: Set state deployed in subject status
+        anarchy_subject_update:
+          metadata:
+            labels:
+              state: deployed
+          status:
+            state: deployed
+      - name: Schedule idle
+        anarchy_schedule_action:
+          action: idle
+          after: 2m
+      - name: Schedule destroy
+        anarchy_schedule_action:
+          action: destroy
+          after: 6d
+
+  - name: idle
+    request:
+      parameters:
+        ACTION: idle
+    eventHandlers:
+    - event: started
+      tasks:
+      - name: Set state idling in subject status
+        anarchy_subject_update:
+          metadata:
+            labels:
+              state: idling
+          status:
+            state: idling
+    - event: complete
+      tasks:
+      - name: Set state deployed in subject status
+        anarchy_subject_update:
+          metadata:
+            labels:
+              state: idled
+          status:
+            state: idled
+
+  - name: resume
+    request:
+      parameters:
+        ACTION: destroy
+    eventHandlers:
+    - event: started
+      tasks:
+      - name: Set state resuming in subject status
+        anarchy_subject_update:
+          metadata:
+            labels:
+              state: resuming
+          status:
+            state: resuming
+    - event: complete
+      tasks:
+      - name: Set state deployed in subject status
+        anarchy_subject_update:
+          metadata:
+            labels:
+              state: deployed
+          status:
+            state: deployed
+      - name: Schedule idle
+        anarchy_schedule_action:
+          action: idle
+          after: 2m
+
   - name: destroy
     request:
-      api: test
-      callbackTokenParameter: anarchy_callback_token
-      callbackUrlParameter: anarchy_callback_url
-      data: '{{ { "extra_vars": parameters } | to_json }}'
-      method: POST
-      path: /api/v2/job_templates/destroy/launch/
-    callbackEventNameParameter: event
+      parameters:
+        ACTION: destroy
     eventHandlers:
     - event: complete
-      handlers:
-      - type: setLabels
-        setLabels:
-        - name: state
-          value: deployed
-      - type: setStatus
-        setStatus:
-        - name: state
-          value: destroyed
+      tasks:
+      - name: Set state destroyed in subject status
+        anarchy_subject_update:
+          status:
+            state: destroyed
 {% endraw %}

@@ -27,7 +27,7 @@ class AnarchySubject(object):
             # Subject must not be new, because it is already registered
             subject.is_new = False
             if subject.resource_version() == resource['metadata']['resourceVersion']:
-                logger.debug("Ignoring subject at same resource version %s (%s)",
+                logger.debug("Subject at same resource version %s (%s)",
                     subject.namespace_name(),
                     subject.resource_version()
                 )
@@ -36,6 +36,7 @@ class AnarchySubject(object):
                     subject.namespace_name(),
                     subject.resource_version()
                 )
+                subject.is_updated = subject.spec != resource['spec']
                 subject.metadata = resource['metadata']
                 subject.spec = resource['spec']
                 subject.status = resource.get('status', None)
@@ -74,6 +75,7 @@ class AnarchySubject(object):
         self.spec = resource['spec']
         self.status = resource.get('status', None)
         self.is_new = 'status' not in resource
+        self.is_updated = False
         self.action_queue = []
         self.action_queue_lock = threading.RLock()
         self.sanity_check()
@@ -178,60 +180,6 @@ class AnarchySubject(object):
 
     def process_subject_event_handlers(self, runtime, event_name):
         return self.governor().process_subject_event_handlers(runtime, self, event_name)
-
-    def schedule_action(self, runtime, action_name, after_seconds):
-        after = (
-            datetime.datetime.utcnow() +
-            datetime.timedelta(0, after_seconds)
-        ).strftime('%FT%TZ')
-
-        logger.info("Scheduling action %s for %s governed by %s to run after %s",
-            action_name,
-            self.namespace_name(),
-            self.governor_name(),
-            after
-        )
-
-        # Late import to avoid circular import at start
-        import anarchyaction
-        action = anarchyaction.AnarchyAction({
-            "metadata": {
-                "generateName": self.name() + '-' + action_name + '-',
-                "labels": {
-                    runtime.crd_domain + "/action": action_name,
-                    runtime.crd_domain + "/anarchy-subject": self.name(),
-                    runtime.crd_domain + "/anarchy-governor": self.governor_name(),
-                },
-                "ownerReferences": [{
-                    "apiVersion": runtime.crd_domain + "/v1",
-                    "controller": True,
-                    "kind": "AnarchySubject",
-                    "name": self.name(),
-                    "uid": self.uid()
-                }]
-            },
-            "spec": {
-                "action": action_name,
-                "after": after,
-                "callbackToken": uuid.uuid4().hex,
-                "governorRef": {
-                    "apiVersion": runtime.crd_domain + "/v1",
-                    "kind": "AnarchyGovernor",
-                    "name": self.governor_name(),
-                    "namespace": runtime.namespace,
-                    "uid": self.governor().uid()
-                },
-                "subjectRef": {
-                    "apiVersion": runtime.crd_domain + "/v1",
-                    "kind": "AnarchySubject",
-                    "name": self.name(),
-                    "namespace": self.namespace(),
-                    "uid": self.uid()
-                }
-            }
-        })
-        action.create(runtime)
-        return action
 
     def add_finalizer(self, runtime):
         finalizer_id = runtime.crd_domain + '/anarchy'

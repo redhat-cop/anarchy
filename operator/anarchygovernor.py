@@ -9,8 +9,15 @@ logger = logging.getLogger('anarchy')
 
 from anarchyapi import AnarchyAPI
 
-jinja2env = jinja2.Environment()
-jinja2env.filters['to_json'] = lambda x: json.dumps(x)
+jinja2env = jinja2.Environment(
+    block_start_string='{%:',
+    block_end_string=':%}',
+    comment_start_string='{#:',
+    comment_end_string=':#}',
+    variable_start_string='{{:',
+    variable_end_string=':}}'
+)
+jinja2env.filters['to_json'] = lambda x: json.dumps(x, separators=(',', ':'))
 
 def add_values(parameters, runtime, add):
     secrets = {}
@@ -69,39 +76,30 @@ class AnarchyGovernor(object):
                     'status': subject.status
                 }
             ) == self.value
-    class EventHandlerList(object):
+    class EventHandler(object):
         def __init__(self, spec):
-            assert 'event' in spec, 'eventHandlers list must define event'
+            assert 'event' in spec, 'eventHandlers must define event'
+            assert 'tasks' in spec, 'eventHandlers must define tasks'
             self.event = spec['event']
-            self.handlers = []
-            for handler_spec in spec.get('handlers', []):
-                assert 'type' in handler_spec, \
-                    'eventHandlers must define type'
-                handler_type = handler_spec['type']
-                handler_class_name = (
-                    handler_type[0].upper() +
-                    handler_type[1:] +
-                    'EventHandler'
-                )
-                handler_class = getattr(AnarchyGovernor, handler_class_name)
-                self.handlers.append( handler_class(handler_spec) )
-
-        def process(self, runtime, governor, subject, action, event_data, event_name):
-            logger.info("Processing event handlers for %s",
-                subject.namespace_name()
-            )
-            for handler in self.handlers:
-                handler.process(runtime, governor, subject, action, event_data, event_name)
-
-    class AnsibleEventHandler(object):
-        def __init__(self, handler_spec):
-            self.tasks = handler_spec.get('tasks', [])
-            self.service_account = handler_spec.get('service_account', None)
-            self.sanity_check()
-
-        def sanity_check(self):
-            # FIXME
-            pass
+            self.tasks = spec['tasks']
+            self.runner_image = spec.get('runner_image', os.environ.get(
+                'ANSIBLE_RUNNER_IMAGE', 'quay.io/gpte-devops-automation/anarchy-ansible-runner:latest'
+            ))
+            self.service_account = spec.get('service_account', os.environ.get(
+                'ANSIBLE_RUNNER_SERVICE_ACCOUNT', 'anarchy-operator'
+            ))
+            self.cpu_limit = spec.get('cpu_limit', os.environ.get(
+                'ANSIBLE_RUNNER_CPU_LIMIT', '1'
+            ))
+            self.cpu_request = spec.get('cpu_request', os.environ.get(
+                'ANSIBLE_RUNNER_CPU_REQUEST', '200m'
+            ))
+            self.memory_limit = spec.get('memory_limit', os.environ.get(
+                'ANSIBLE_RUNNER_MEMORY_LIMIT', '1Gi'
+            ))
+            self.memory_request = spec.get('memory_request', os.environ.get(
+                'ANSIBLE_RUNNER_MEMORY_REQUEST', '250Mi'
+            ))
 
         def process(self, runtime, governor, subject, action, event_data, event_name):
             ansible_vars = {
@@ -111,46 +109,77 @@ class AnarchyGovernor(object):
                 },
                 "anarchy_subject": {
                     "metadata": subject.metadata,
-                    "spec": subject.spec
-                },
-                "anarchy_action": {
-                    "metadata": action.metadata,
-                    "spec": action.spec
+                    "spec": subject.spec,
+                    "status": subject.status
                 },
                 "event_name": event_name,
                 "event_data": event_data
             }
-            service_account = self.service_account or \
-                os.environ.get('ANSIBLE_RUNNER_SERVICE_ACCOUNT', 'anarchy-operator')
+            labels = {
+                runtime.crd_domain + '/anarchy-subject-namespace': subject.namespace(),
+                runtime.crd_domain + '/anarchy-subject-name': subject.name(),
+                runtime.crd_domain + '/anarchy-subject-namespace': subject.namespace(),
+                runtime.crd_domain + '/anarchy-event-name': event_name
+            }
+
+            if action:
+                ansible_vars['anarchy_action'] = {
+                    "metadata": action.metadata,
+                    "spec": action.spec
+                }
+                generate_name = "{}-{}-{}-".format(
+                    action.namespace(),
+                    action.name(),
+                    event_name
+                )
+                labels.update({
+                    runtime.crd_domain + '/anarchy-action-namespace': action.namespace(),
+                    runtime.crd_domain + '/anarchy-action-name': action.name()
+                })
+                owner_ref = {
+                    "apiVersion": "gpte.redhat.com/v1",
+                    "controller": True,
+                    "kind": "AnarchyAction",
+                    "name": action.name(),
+                    "uid": action.uid()
+                }
+            else:
+                generate_name = "{}-{}-{}-".format(
+                    subject.namespace(),
+                    subject.name(),
+                    event_name
+                )
+                owner_ref = {
+                    "apiVersion": "gpte.redhat.com/v1",
+                    "controller": True,
+                    "kind": "AnarchySubject",
+                    "name": subject.name(),
+                    "uid": subject.uid()
+                }
+
             runtime.kube_api.create_namespaced_pod(
                 runtime.namespace,
                 {
                     "apiVersion": "v1",
                     "kind": "Pod",
                     "metadata": {
-                        "generateName": "{}-{}-{}-".format(
-                            action.namespace(),
-                            action.name(),
-                            event_name
-                        ),
-                        "labels": {
-                            runtime.crd_domain + '/anarchy-subject-namespace': subject.namespace(),
-                            runtime.crd_domain + '/anarchy-subject-name': subject.name(),
-                            runtime.crd_domain + '/anarchy-action-namespace': action.namespace(),
-                            runtime.crd_domain + '/anarchy-action-name': action.name(),
-                            runtime.crd_domain + '/anarchy-event-name': event_name
-                        },
+                        "generateName": generate_name,
+                        "labels": labels,
                         "namespace": subject.namespace(),
+                        "ownerReferences": [owner_ref]
                     },
                     "spec": {
                         "containers": [{
                             "name": "ansible",
                             "env": [{
                                 "name": "VARS",
-                                "value": json.dumps(ansible_vars)
+                                "value": json.dumps(ansible_vars, separators=(',', ':'))
                             },{
                                 "name": "TASKS",
-                                "value": json.dumps(self.tasks)
+                                "value": json.dumps(self.tasks, separators=(',', ':'))
+                            },{
+                                "name": "OPERATOR_DOMAIN",
+                                "value": runtime.crd_domain
                             },{
                                 "name": "POD_NAME",
                                 "valueFrom": {
@@ -159,82 +188,29 @@ class AnarchyGovernor(object):
                                     }
                                 }
                             }],
-                            "image": os.environ['ANSIBLE_RUNNER_IMAGE'],
+                            "image": self.runner_image,
                             "imagePullPolicy": "Always",
                             "resources": {
                                 "limits": {
-                                    "cpu": os.environ.get('ANSIBLE_RUNNER_CPU_LIMIT', '1'),
-                                    "memory": os.environ.get('ANSIBLE_RUNNER_MEMORY_LIMIT', '1Gi')
+                                    "cpu": self.cpu_limit,
+                                    "memory": self.memory_limit
                                 },
                                 "requests": {
-                                    "cpu": os.environ.get('ANSIBLE_RUNNER_CPU_REQUEST', '100m'),
-                                    "memory": os.environ.get('ANSIBLE_RUNNER_MEMORY_REQUEST', '512Mi')
+                                    "cpu": self.cpu_request,
+                                    "memory": self.memory_request
                                 }
                             }
                         }],
                         "restartPolicy": "Never",
-                        "serviceAccountName": service_account
+                        "serviceAccountName": self.service_account
                     }
                 }
             )
 
-    class ScheduleActionEventHandler(object):
-        def __init__(self, handler_params):
-            assert 'action' in handler_params, 'scheduleAction event handler requires action'
-            self.action = handler_params['action']
-            self.after_seconds = time_to_seconds(handler_params.get('after',0))
-
-        def process(self, runtime, governor, subject, action, event_data, event_name):
-            subject.schedule_action(runtime, self.action, self.after_seconds)
-
-    class SetLabelsEventHandler(object):
-        def __init__(self, handler_params):
-            assert 'setLabels' in handler_params, 'setLabelsParams must include setLabels list'
-            self.set_labels = {}
-            for set_label in handler_params.get('setLabels', []):
-                assert 'name' in set_label, 'setLabels must define name'
-                assert 'value' in set_label, 'setLabels must define value'
-                self.set_labels[set_label['name']] = jinja2env.from_string(set_label['value'])
-
-        def process(self, runtime, governor, subject, action, event_data, event_name):
-            set_labels = {}
-            for label, jinja2_template in self.set_labels.items():
-                set_labels[label] = jinja2_template.render({
-                    'action': action,
-                    'event': event_name,
-                    'event_data': event_data,
-                    'governor': governor,
-                    'subject': subject
-                })
-            subject.patch(runtime, {'metadata': {'labels': set_labels } })
-
-    class SetStatusEventHandler(object):
-        def __init__(self, handler_params):
-            assert 'setStatus' in handler_params, 'setStatusParams must include setStatus list'
-            self.set_status = {}
-            for set_status in handler_params.get('setStatus', []):
-                assert 'name' in set_status, 'setStatus must define name'
-                assert 'value' in set_status, 'setStatus must define value'
-                self.set_status[set_status['name']] = jinja2env.from_string(set_status['value'])
-
-        def process(self, runtime, governor, subject, action, event_data, event_name):
-            set_status = {}
-            for status, jinja2_template in self.set_status.items():
-                set_status[status] = jinja2_template.render({
-                    'action': action,
-                    'event': event_name,
-                    'event_data': event_data,
-                    'governor': governor,
-                    'subject': subject
-                })
-            subject.patch_status(runtime, set_status)
-
     class RequestConfig(object):
-        def __init__(self, spec):
-            assert 'api' in spec, 'request must define api'
+        def __init__(self, spec, action_config, governor):
+            self.governor_name = governor.name()
             self.spec = spec
-            assert 'path' in spec, 'request must define path'
-            self.path = spec['path']
             self.status_code_events = spec.get('statusCodeEvents', {})
 
             if 'data' in spec:
@@ -246,17 +222,35 @@ class AnarchyGovernor(object):
             for header in spec.get('headers', []):
                 self.header_templates[header['name']] = jinja2env.from_string(header['value'])
 
+        @property
         def api(self):
-            return AnarchyAPI.get(self.spec['api'])
+            if 'api' in self.spec:
+                return AnarchyAPI.get(self.spec['api'])
+            else:
+                return self.governor.api
+        @property
+        def governor(self):
+            return AnarchyGovernor.governors[self.governor_name]
 
+        @property
         def callback_token_parameter(self):
-            return self.spec.get('callbackTokenParameter', self.api().callback_token_parameter())
+            return self.spec.get('callbackTokenParameter', self.api.callback_token_parameter)
 
+        @property
         def callback_url_parameter(self):
-            return self.spec.get('callbackUrlParameter', self.api().callback_url_parameter())
+            return self.spec.get('callbackUrlParameter', self.api.callback_url_parameter)
 
+        @property
         def method(self):
-            return self.spec.get('method', self.api().method())
+            return self.spec.get('method', self.api.method)
+
+        @property
+        def parameters(self):
+            return self.spec.get('parameters', {})
+
+        @property
+        def path(self):
+            return self.spec.get('path', self.api.path)
 
         def status_code_event(self, status_code):
             return self.status_code_events.get(str(status_code), None)
@@ -264,31 +258,49 @@ class AnarchyGovernor(object):
         def data(self, jinja2vars):
             if self.data_template:
                 return self.data_template.render(jinja2vars)
+            elif self.api.data:
+                return jinja2render(self.api.data, jinja2vars)
             else:
+                # Otherwise data payload is the parameters
                 return jinja2vars['parameters']
 
-        def headers(self, api, jinja2vars):
+        def headers(self, jinja2vars):
             headers = {}
-            for header in api.headers():
+            for header in self.api.headers:
                 headers[header['name']] = jinja2render(header['value'], jinja2vars)
             for name, template in self.header_templates.items():
                 headers[name] = template.render(jinja2vars)
             return headers
 
     class ActionConfig(object):
-        def __init__(self, spec):
+        def __init__(self, spec, governor):
             assert 'name' in spec, 'actions must define a name'
-            self.name = spec['name']
-            self.callback_event_name_parameter = spec.get('callbackEventNameParameter', None)
+            self.governor_name = governor.name()
+            self.spec = spec
 
             assert 'request' in spec, 'actions must define request'
-            self.request = AnarchyGovernor.RequestConfig(spec['request'])
+            self.request = AnarchyGovernor.RequestConfig(spec['request'], self, governor)
 
-            self.event_handler_lists = []
+            self.event_handlers = []
             for event_handler_spec in spec.get('eventHandlers', []):
-                self.event_handler_lists.append(
-                    AnarchyGovernor.EventHandlerList(event_handler_spec)
+                self.event_handlers.append(
+                    AnarchyGovernor.EventHandler(event_handler_spec)
                 )
+
+        @property
+        def callback_event_name_parameter(self):
+            return self.spec.get(
+                'callbackEventNameParameter',
+                self.governor.callback_event_name_parameter
+            )
+
+        @property
+        def governor(self):
+            return AnarchyGovernor.get(self.governor_name)
+
+        @property
+        def name(self):
+            return self.spec['name']
 
     governors = {}
 
@@ -316,7 +328,7 @@ class AnarchyGovernor(object):
         self.set_subject_event_handlers(self.spec.get('subjectEventHandlers',{}))
         self.actions = {}
         for action_spec in self.spec.get('actions', []):
-            action = AnarchyGovernor.ActionConfig(action_spec)
+            action = AnarchyGovernor.ActionConfig(action_spec, self)
             self.actions[action.name] = action
         self.sanity_check()
 
@@ -325,11 +337,11 @@ class AnarchyGovernor(object):
         self.actions = actions
 
     def set_subject_event_handlers(self, event_handlers):
-        self.subject_event_handler_lists = []
+        self.subject_event_handlers = []
         for event_handler_spec in event_handlers:
             logger.debug(event_handler_spec)
-            self.subject_event_handler_lists.append(
-                AnarchyGovernor.EventHandlerList(event_handler_spec)
+            self.subject_event_handlers.append(
+                AnarchyGovernor.EventHandler(event_handler_spec)
             )
 
     def sanity_check(self):
@@ -341,6 +353,17 @@ class AnarchyGovernor(object):
 
         # Check validity of delete finalizer condition
         self.delete_finalizer_condition()
+
+    @property
+    def api(self):
+        return AnarchyAPI.get(self.spec.get('api', None))
+
+    @property
+    def callback_event_name_parameter(self):
+        return self.spec.get(
+            'callbackEventNameParameter',
+            self.api.callback_event_name_parameter
+        )
 
     def name(self):
         return self.metadata['name']
@@ -357,16 +380,17 @@ class AnarchyGovernor(object):
         else:
             return None
 
-    def get_parameters(self, runtime, api, subject):
+    def get_parameters(self, runtime, api, subject, action_config):
         parameters = {}
-        add_values(parameters, runtime, api.parameters())
+        add_values(parameters, runtime, api.parameters)
         add_values(parameters, runtime, self.spec.get('parameters', {}))
         add_values(parameters, runtime, subject.parameters())
+        add_values(parameters, runtime, action_config.request.parameters)
         return parameters
 
     def get_vars(self, runtime, api, subject):
         _vars = {}
-        add_values(_vars, runtime, api._vars())
+        add_values(_vars, runtime, api.vars)
         add_values(_vars, runtime, self.spec.get('vars', {}))
         add_values(_vars, runtime, subject._vars())
         return _vars
@@ -380,12 +404,13 @@ class AnarchyGovernor(object):
         action_name = action.action()
         action_config = self.action_config(action_name)
 
-        api = action_config.request.api()
+        api = action_config.request.api
 
-        parameters = self.get_parameters(runtime, api, subject)
+        parameters = self.get_parameters(runtime, api, subject, action_config)
         if action_config.request.callback_url_parameter:
-            parameters[action_config.request.callback_url_parameter()] = action.callback_url()
-            parameters[action_config.request.callback_token_parameter()] = action.callback_token()
+            parameters[action_config.request.callback_url_parameter] = action.callback_url()
+        if action_config.request.callback_token_parameter:
+            parameters[action_config.request.callback_token_parameter] = action.callback_token()
 
         _vars = self.get_vars(runtime, api, subject)
 
@@ -402,9 +427,9 @@ class AnarchyGovernor(object):
         resp, url = api.call(
             runtime,
             path,
-            action_config.request.method(),
-            action_config.request.headers(api, jinja2vars),
-            action_config.request.data(jinja2vars)
+            action_config.request.method,
+            headers=action_config.request.headers(jinja2vars),
+            data=action_config.request.data(jinja2vars)
         )
 
         resp_data = None
@@ -415,7 +440,7 @@ class AnarchyGovernor(object):
 
         action.patch_status(runtime, {
             "apiUrl": url,
-            "apiMethod": action_config.request.method(),
+            "apiMethod": action_config.request.method,
             "apiResponse": {
                 "status_code": resp.status_code,
                 "text": resp.text,
@@ -443,13 +468,12 @@ class AnarchyGovernor(object):
 
         action.status_event_log(runtime, event_name, event_data)
 
-        self.process_event_handlers(runtime, action_config.event_handler_lists, subject, action, event_data, event_name)
+        self.process_event_handlers(runtime, action_config.event_handlers, subject, action, event_data, event_name)
 
     def process_subject_event_handlers(self, runtime, subject, event_name):
-        self.process_event_handlers(runtime, self.subject_event_handler_lists, subject, None, {}, event_name)
+        self.process_event_handlers(runtime, self.subject_event_handlers, subject, None, {}, event_name)
 
-    def process_event_handlers(self, runtime, event_handler_lists, subject, action, event_data, event_name):
-        for event_handler_list in event_handler_lists:
-            if event_handler_list.event == event_name:
-                for event_handler in event_handler_list.handlers:
-                    event_handler.process(runtime, self, subject, action, event_data, event_name)
+    def process_event_handlers(self, runtime, event_handlers, subject, action, event_data, event_name):
+        for event_handler in event_handlers:
+            if event_handler.event == event_name:
+                event_handler.process(runtime, self, subject, action, event_data, event_name)

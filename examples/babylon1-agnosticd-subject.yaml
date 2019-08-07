@@ -10,12 +10,14 @@ spec:
     email: someone@example.com
   governor: babylon1-agnosticd
   parameters:
-    aws_region: east-1
+    account_id: gpte
+    aws_hosted_zone_id: Z3IHLWJZOU9SRT
+    aws_region: us-east-1
+    babylon_scm_reference: three-tier-app-prod-1.14
     cloud_provider: ec2
-    email: name@example.com
-    env_type: ansible-windows
+    email: babylon@example.com
+    env_type: three-tier-app
     guid: test
-    HostedZoneId: Z3IHLWJZOU9SRT
     key_name: ocpkey
     own_repo_path: http://admin.na.shared.opentlc.com/repos/ocp/3.6
     subdomain_base_suffix: .example.opentlc.com

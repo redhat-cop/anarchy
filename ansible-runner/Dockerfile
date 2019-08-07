@@ -8,15 +8,15 @@ RUN yum install -y nss_wrapper \
  && pip install --ignore-installed \
       ansible \
       jmespath \
+      jsonpatch \
       kubernetes \
- && mkdir /ansible \
- && mkdir /ansible/bin \
- && mkdir /ansible/dynamic \
- && chmod a+rwx /ansible/dynamic \
+ && mkdir -p /ansible/bin /ansible/dynamic/modules \
+ && chmod --recursive a+rwx /ansible/dynamic \
  && curl -s https://mirror.openshift.com/pub/openshift-v4/clients/ocp/${OCP_VERSION}/openshift-client-linux-${OCP_VERSION}.tar.gz \
   | tar zxvf - -C /bin
 
-COPY hosts ansible.cfg playbook.yaml run.sh /ansible/
+COPY ansible.cfg hosts playbook.yaml run.sh /ansible/
+COPY modules /ansible/modules
 
 USER 1000
 
