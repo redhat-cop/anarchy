@@ -114,11 +114,47 @@ spec:
       tasks:
       - name: Set state idling in subject status
         anarchy_subject_update:
+          spec:
+            desiredState: idled
           metadata:
             labels:
               state: idling
           status:
             state: idling
+      - name: Update desiredState idled in subject resource handle
+        when: >-
+          'gpte.redhat.com/resource-handle-name' in subject.metadata.annotations and
+          'gpte.redhat.com/resource-handle-namespace' in subject.metadata.annotations
+        k8s:
+          api_version: gpte.redhat.com/v1
+          kind: ResourceHandle
+          name: >-
+            {{ subject.metadata.annotations['gpte.redhat.com/resource-handle-name'] }}
+          namespace: >-
+            {{ subject.metadata.annotations['gpte.redhat.com/resource-handle-namespace'] }}
+          merge_type: merge
+          definition:
+            spec:
+              template:
+                spec:
+                  desiredState: idled
+      - name: Update desiredState idled in subject resource claim
+        when: >-
+          'gpte.redhat.com/resource-claim-name' in subject.metadata.annotations and
+          'gpte.redhat.com/resource-claim-namespace' in subject.metadata.annotations
+        k8s:
+          api_version: gpte.redhat.com/v1
+          kind: ResourceClaim
+          name: >-
+            {{ subject.metadata.annotations['gpte.redhat.com/resource-claim-name'] }}
+          namespace: >-
+            {{ subject.metadata.annotations['gpte.redhat.com/resource-claim-namespace'] }}
+          merge_type: merge
+          definition:
+            spec:
+              template:
+                spec:
+                  desiredState: idled
     - event: complete
       tasks:
       - name: Set state deployed in subject status
@@ -168,4 +204,28 @@ spec:
         anarchy_subject_update:
           status:
             state: destroyed
+      - name: Delete resource handle
+        when: >-
+          'gpte.redhat.com/resource-handle-name' in subject.metadata.annotations and
+          'gpte.redhat.com/resource-handle-namespace' in subject.metadata.annotations
+        k8s:
+          api_version: gpte.redhat.com/v1
+          kind: ResourceHandle
+          name: >-
+            {{ subject.metadata.annotations['gpte.redhat.com/resource-handle-name'] }}
+          namespace: >-
+            {{ subject.metadata.annotations['gpte.redhat.com/resource-handle-namespace'] }}
+          state: absent
+      - name: Delete resource claim
+        when: >-
+          'gpte.redhat.com/resource-claim-name' in subject.metadata.annotations and
+          'gpte.redhat.com/resource-claim-namespace' in subject.metadata.annotations
+        k8s:
+          api_version: gpte.redhat.com/v1
+          kind: ResourceClaim
+          name: >-
+            {{ subject.metadata.annotations['gpte.redhat.com/resource-claim-name'] }}
+          namespace: >-
+            {{ subject.metadata.annotations['gpte.redhat.com/resource-claim-namespace'] }}
+          state: absent
 {% endraw %}
