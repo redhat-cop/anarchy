@@ -1,4 +1,4 @@
-== Anarchy Operator
+= Anarchy Operator
 
 The Anarchy operator provides a method of managing state for otherwise stateless API operations.
 The name "anarchy" is both ironic and to the point.
@@ -8,7 +8,7 @@ Anarchy is configured through the definition of governors.
 Anarchy governors define the strategy for controlling an anarchy subject by defining actions to execute on the subject.
 Actions are tracked as custom resources, allowing for complete visibility of current state of the subject.
 
-=== Installation
+== Installation
 
 . Clone this repo to your local workstation:
 +
@@ -28,10 +28,15 @@ $ oc process -f build-template.yaml | oc apply -f -
 $ oc get all
 ----
 
-. Start the build:
+. Start the operator build:
 +
 ----
 $ oc start-build anarchy-operator --from-dir=.
+----
+
+. Start the ansible-runner build:
+----
+$ oc start-build anarchy-ansible-runner --from-dir=.
 ----
 
 . Watch the build process:
@@ -110,90 +115,221 @@ metadata:
   generateName: test-
   namespace: anarchy-operator
 spec:
-  governor: test <1>
-  parameters: <2>
+  desiredState: started <1>
+  governor: test <2>
+  parameters: <3>
     openshift_release: "4.1"
     aws_region: us-east-1
     repo_version: "3.11"
     subdomain_base_suffix: .example.opentlc.com
 ----
 
-<1> The test AnarchySubject references the name of the AnarchyGovernor that will manage it.
-<2> Each subject may include a list of parameters to pass to the API, though the governor and API get the final say in how and when the parameters are used.
+<1> The desired state of the resource, this is an arbitrary string which should be implemented by the AnarchyGovernor.
+<2> The test AnarchySubject references the name of the AnarchyGovernor that will manage it.
+<3> Each subject may include a list of parameters to pass to the API, though the governor and API get the final say in how and when the parameters are used.
 
 The test AnarchyGovernor definition is shown here:
 
-// FIXME _ Includes?
 ----
 apiVersion: gpte.redhat.com/v1
 kind: AnarchyGovernor
 metadata:
   name: test
 spec:
-  parameters: <1>
+  # The name of the default AnarchyAPI which is used to handle api requests
+  # for actions. This may be overridden for specific actions with
+  # spec.actions[].request
+  api: test
+
+  # Parameters to pass to API calls for this governor. These override
+  # parameters set on the AnarchyAPI and are overridden by parameters set on
+  # the AnarchySubject
+  parameters:
     cloud_provider: ec2
-    aws_access_key_id: <2>
+    aws_access_key_id:
+      # Parameter values can refer to secrets with a `secretName` and
+      # `secretKey`. Secrets used as parameter values must be in the
+      # anarchy-operator namespace.
       secretName: test-aws-creds
       secretKey: aws_access_key_id
     aws_secret_access_key:
       secretName: test-aws-creds
       secretKey: aws_secret_access_key
-  deleteFinalizerCondition: <3>
-    check: status.state
-    value: destroyed
-  subjectEventHandlers: <4>
+
+  # The `subjectEventHandlers` provide configuration for how to respond to
+  # AnarchySubjects being added, updated, and deleted.
+  subjectEventHandlers:
+  # The `add` event is processed only for subjects that are newly created. 
   - event: add
-    handlers:
-    - type: scheduleAction
-      action: deploy
+    # Ansible tasks to run in response to this event...
+    tasks:
+    # The `anarchy_subject_update` module is provided to make it easy to update
+    # the AnarchySubject relating to the current action.
+    - name: Set state provision-scheduled in subject status
+      anarchy_subject_update:
+        metadata:
+          labels:
+            state: provision-scheduled
+        status:
+          state: provision-scheduled
+    # The `anarchy_schedule_action` module is used to create AnarchyActions
+    # for the current AnarchySubject. In this case it schedules an
+    # AnarchyAction to be processed immediately.
+    - name: Start Provision
+      anarchy_schedule_action:
+        action: provision
+
+  # The `update` event is processed when a resource changes and also when the
+  # anarchy operator is restarted.
+  - event: update
+    tasks:
+    # The `anarchy_subject` variable stores the state of the AnarchySubject
+    # which triggered this update. A useful pattern is to implement state
+    # handling using `spec.desiredState` and `status.state`.
+    - when: >-
+        anarchy_subject.spec.desiredState|default('') == 'started' and
+        (anarchy_subject.status|default({})).state|default('') == 'stopped'
+      block:
+      - name: Set state start-scheduled in subject status
+        anarchy_subject_update:
+          metadata:
+            labels:
+              state: start-scheduled
+          status:
+            state: start-scheduled
+      - name: Schedule start
+        anarchy_schedule_action:
+          action: start
+    - when: >-
+        anarchy_subject.spec.desiredState|default('stopped') == 'stopped' and
+        (anarchy_subject.status|default({})).state|default('') == 'started'
+      block:
+      - name: Set state stop-scheduled in subject status
+        anarchy_subject_update:
+          metadata:
+            labels:
+              state: stop-scheduled
+          status:
+            state: stop-scheduled
+      - name: Schedule stop
+        anarchy_schedule_action:
+          action: stop
+
+  # The `delete` event is processed when a subject delete is requsted. This
+  # is detected by the presence of a `metadata.deletionTimestamp`. This should
+  # schedule an action that will result in removing the finalizer from the
+  # subject when complete.
   - event: delete
-    handlers:
-    - type: scheduleAction
-      action: destroy
-  actions: <5>
-  - name: deploy
+    tasks:
+    - name: Schedule destroy
+      anarchy_schedule_action:
+        action: destroy
+
+  # Actions represent entry points for doing something related to a resource.
+  # Each action consists of an API request followed by `eventHandlers` to
+  # respond to callbacks from the API endpoint.
+  actions:
+  - name: provision
     request:
-      api: test
-      callbackTokenParameter: babylon_callback_token
-      callbackUrlParameter: anarchy_callback_url
-      data: '{{ { "extra_vars": parameters } | to_json }}'
-      method: POST
-      path: /api/v2/job_templates/deploy/launch/
-    callbackEventNameParameter: event
+      # Requests can add or override parameters sent to the request.
+      parameters:
+        ACTION: provision
+    eventHandlers:
+    # The names of events sent by callbacks must be aligned to the API endpoint.
+    - event: started
+      tasks:
+      - name: Set state provisioning in subject status
+        anarchy_subject_update:
+          metadata:
+            labels:
+              state: provisioning
+          status:
+            state: provisioning
+    - event: complete
+      tasks:
+      - name: Set state started in subject status
+        anarchy_subject_update:
+          metadata:
+            labels:
+              state: started
+          status:
+            state: started
+      # Subsequent actions are scheduled to run later with the `after` parameter.
+      - name: Schedule stop
+        anarchy_schedule_action:
+          action: stop
+          after: 8h
+      - name: Schedule destroy
+        anarchy_schedule_action:
+          action: destroy
+          after: 6d
+
+  - name: stop
+    request:
+      parameters:
+        ACTION: stop
     eventHandlers:
     - event: started
-      handlers:
-      - type: ansible
-        tasks:
-        - debug:
-            msg: Hello, World
+      tasks:
+      - name: Set state stopping in subject status
+        anarchy_subject_update:
+          spec:
+            desiredState: stopped
+          metadata:
+            labels:
+              state: stopping
+          status:
+            state: stopping
     - event: complete
-      handlers:
-      - type: scheduleAction
-        action: destroy
-        after: 6d
-    - event: error
-      handlers:
-      - type: ansible
-        tasks:
-        - debug:
-            msg: Hello, World
+      tasks:
+      - name: Set state stopped in subject status
+        anarchy_subject_update:
+          metadata:
+            labels:
+              state: stopped
+          status:
+            state: stopped
+
+  - name: start
+    request:
+      parameters:
+        ACTION: start
+    eventHandlers:
+    - event: started
+      tasks:
+      - name: Set state starting in subject status
+        anarchy_subject_update:
+          metadata:
+            labels:
+              state: starting
+          status:
+            state: starting
+    - event: complete
+      tasks:
+      - name: Set state started in subject status
+        anarchy_subject_update:
+          metadata:
+            labels:
+              state: started
+          status:
+            state: started
+      - name: Schedule stop
+        anarchy_schedule_action:
+          action: stop
+          after: 8h
+
   - name: destroy
     request:
-      api: test
-      callbackTokenParameter: babylon_callback_token
-      callbackUrlParameter: anarchy_callback_url
-      data: '{{ { "extra_vars": parameters } | to_json }}'
-      method: POST
-      path: /api/v2/job_templates/destroy/launch/
-    callbackEventNameParameter: event
+      parameters:
+        ACTION: destroy
     eventHandlers:
     - event: complete
-      handlers:
-      - type: setStatus
-        setStatus:
-        - name: state
-          value: destroyed
+      tasks:
+      - name: Delete anarchy subject
+        # The `anarchy_subject_delete` handler completes AnarchySubject deletion
+        # by removing the finalizers from the AnarchySubject metadata.
+        anarchy_subject_delete:
+          remove_finalizers: true
 ----
 
 == Testing
