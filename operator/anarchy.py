@@ -163,7 +163,6 @@ def handle_subject_modified(resource):
 
 def handle_subject_deleted(resource):
     logger.info("AnarchySubject %s/%s deleted", resource['metadata']['namespace'], resource['metadata']['name'])
-    logger.debug(resource)
     subject = AnarchySubject.get(
         resource['metadata']['namespace'],
         resource['metadata']['name'],

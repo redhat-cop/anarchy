@@ -126,17 +126,19 @@
     register: anarchy_subjects
 
   - name: Remove finalizer from test anarchy subjects
-    command: >-
-      {{ oc_cmd }} patch anarchysubject.gpte.redhat.com {{ anarchy_subject.metadata.name }}
-      --type=merge -p {{ patch | to_json | quote}}
+    k8s:
+      api_version: gpte.redhat.com/v1
+      kind: AnarchySubject
+      name: "{{ anarchy_subject.metadata.name }}"
+      namespace: "{{ anarchy_subject.metadata.namespace }}"
+      merge_type: merge
+      definition:
+        metadata:
+          finalizers: []
     loop: "{{ anarchy_subjects.resources }}"
     loop_control:
       label: "{{ anarchy_subject.metadata.name }}"
       loop_var: anarchy_subject
-    vars:
-      patch:
-        metadata:
-          finalizers: []
 
   - name: Remove test subjects
     command: >-
@@ -204,78 +206,75 @@
           labels:
             governor: test
         spec:
-          desiredState: deployed
+          desiredState: started
           governor: test
           parameters:
             name: test-1
-          requester:
-            name: someone-example.com
-            email: someone@example.com
 
-  - name: Pause for deploy start
+  - name: Pause for provision start
     pause:
       seconds: 30
 
-  - name: Get test-1 deploy action
+  - name: Get test-1 provision action
     k8s_facts:
       api_version: gpte.redhat.com/v1
       kind: AnarchyAction
       label_selectors:
-      - gpte.redhat.com/action=deploy
+      - gpte.redhat.com/action=provision
       - gpte.redhat.com/anarchy-subject=test-1
-    register: test_1_deploy
+    register: test_1_provision
 
-  - debug: var=test_1_deploy
+  - debug: var=test_1_provision
 
-  - name: Assert that exactly one deploy action for test-1 was found
+  - name: Assert that exactly one provision action for test-1 was found
     assert:
       that:
-      - test_1_deploy.resources | length == 1
-      fail_msg: One test-1 deploy action not found
-      success_msg: One test-1 deploy action found
+      - test_1_provision.resources | length == 1
+      fail_msg: One test-1 provision action not found
+      success_msg: One test-1 provision action found
 
-  - name: Check test-1 deploy action
+  - name: Check test-1 provision action
     assert:
       that:
-      - action.spec.action == 'deploy'
+      - action.spec.action == 'provision'
       - action.status.events | length >= 1
       - action.status.events[0].name == 'started'
-      fail_msg: test-1 deploy not started
-      success_msg: test-1 deploy not found started
+      fail_msg: test-1 provision not started
+      success_msg: test-1 provision not found started
     vars:
-      action: "{{ test_1_deploy.resources[0] }}"
+      action: "{{ test_1_provision.resources[0] }}"
 
-  - name: Pause for deploy completion
+  - name: Pause for provision completion
     pause:
       seconds: 15
 
-  - name: Get test-1 deploy action
+  - name: Get test-1 provision action
     k8s_facts:
       api_version: gpte.redhat.com/v1
       kind: AnarchyAction
       namespace: "{{ anarchy_operator_namespace }}"
       label_selectors:
-      - gpte.redhat.com/action=deploy
+      - gpte.redhat.com/action=provision
       - gpte.redhat.com/anarchy-subject=test-1
-    register: test_1_deploy
+    register: test_1_provision
 
-  - name: Assert that exactly one deploy action for test-1 was found
+  - name: Assert that exactly one provision action for test-1 was found
     assert:
       that:
-      - test_1_deploy.resources | length == 1
-      fail_msg: One test-1 deploy action not found
-      success_msg: One test-1 deploy action found
+      - test_1_provision.resources | length == 1
+      fail_msg: One test-1 provision action not found
+      success_msg: One test-1 provision action found
 
-  - name: Check test-1 deploy action
+  - name: Check test-1 provision action
     assert:
       that:
-      - action.spec.action == 'deploy'
+      - action.spec.action == 'provision'
       - action.status.events | length == 2
       - action.status.events[1].name == 'complete'
-      fail_msg: test-1 deploy not complete
-      success_msg: test-1 deploy complete
+      fail_msg: test-1 provision not complete
+      success_msg: test-1 provision complete
     vars:
-      action: "{{ test_1_deploy.resources[0] }}"
+      action: "{{ test_1_provision.resources[0] }}"
 
   - name: Get test-1 subject
     k8s_facts:
@@ -288,8 +287,8 @@
   - name: Check test-1 subject
     assert:
       that:
-      - subject.metadata.labels.state == 'deployed'
-      - subject.status.state == 'deployed'
+      - subject.metadata.labels.state == 'started'
+      - subject.status.state == 'started'
       fail_msg: test-1 subject not defined as expected
       success_msg: test-1 subject defined as expected
     vars:
@@ -304,9 +303,9 @@
       merge_type: merge
       definition:
         spec:
-          desiredState: idled
+          desiredState: stopped
 
-  - name: Pause for idle completion
+  - name: Pause for stop completion
     pause:
       seconds: 40
 
@@ -318,11 +317,11 @@
       namespace: "{{ anarchy_operator_namespace }}"
     register: test_1_subject
 
-  - name: Check test-1 subject idled
+  - name: Check test-1 subject stopped
     assert:
       that:
-      - subject.metadata.labels.state == 'idled'
-      - subject.status.state == 'idled'
+      - subject.metadata.labels.state == 'stopped'
+      - subject.status.state == 'stopped'
       fail_msg: test-1 subject not defined as expected
       success_msg: test-1 subject defined as expected
     vars:
@@ -337,9 +336,9 @@
       merge_type: merge
       definition:
         spec:
-          desiredState: deployed
+          desiredState: started
 
-  - name: Pause for resume completion
+  - name: Pause for re-start completion
     pause:
       seconds: 40
 
@@ -351,11 +350,11 @@
       namespace: "{{ anarchy_operator_namespace }}"
     register: test_1_subject
 
-  - name: Check test-1 subject resumed
+  - name: Check test-1 subject re-started
     assert:
       that:
-      - subject.metadata.labels.state == 'deployed'
-      - subject.status.state == 'deployed'
+      - subject.metadata.labels.state == 'started'
+      - subject.status.state == 'started'
       fail_msg: test-1 subject not defined as expected
       success_msg: test-1 subject defined as expected
     vars:

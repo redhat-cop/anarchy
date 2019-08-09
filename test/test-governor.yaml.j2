@@ -24,104 +24,104 @@ spec:
   subjectEventHandlers:
   - event: add
     tasks:
-    - name: Set state deploy-pending in subject status
+    - name: Set state provision-scheduled in subject status
       anarchy_subject_update:
         metadata:
           labels:
-            state: deploy-pending
+            state: provision-scheduled
         status:
-          state: deploy-pending
-    - name: Start Deploy
+          state: provision-scheduled
+    - name: Start Provision
       anarchy_schedule_action:
-        action: deploy
+        action: provision
 
   - event: update
     tasks:
     - when: >-
-        anarchy_subject.spec.desiredState|default('') == 'deployed' and
-        (anarchy_subject.status|default({})).state|default('') == 'idled'
+        anarchy_subject.spec.desiredState|default('') == 'started' and
+        (anarchy_subject.status|default({})).state|default('') == 'stopped'
       block:
-      - name: Set state resuming in subject status
+      - name: Set state start-scheduled in subject status
         anarchy_subject_update:
           metadata:
             labels:
-              state: resume-pending
+              state: start-scheduled
           status:
-            state: resume-pending
-      - name: Start Resume
+            state: start-scheduled
+      - name: Schedule start
         anarchy_schedule_action:
-          action: resume
+          action: start
     - when: >-
-        anarchy_subject.spec.desiredState|default('idled') == 'idled' and
-        (anarchy_subject.status|default({})).state|default('') == 'deployed'
+        anarchy_subject.spec.desiredState|default('stopped') == 'stopped' and
+        (anarchy_subject.status|default({})).state|default('') == 'started'
       block:
-      - name: Set state idle-pending in subject status
+      - name: Set state stop-scheduled in subject status
         anarchy_subject_update:
           metadata:
             labels:
-              state: idle-pending
+              state: stop-scheduled
           status:
-            state: idle-pending
-      - name: Start Idle
+            state: stop-scheduled
+      - name: Schedule stop
         anarchy_schedule_action:
-          action: idle
+          action: stop
 
   - event: delete
     tasks:
-    - name: Start Destroy
+    - name: Schedule destroy
       anarchy_schedule_action:
         action: destroy
 
   actions:
-  - name: deploy
+  - name: provision
     request:
       parameters:
         ACTION: provision
     eventHandlers:
     - event: started
       tasks:
-      - name: Set state deploying in subject status
+      - name: Set state provisioning in subject status
         anarchy_subject_update:
           metadata:
             labels:
-              state: deploying
+              state: provisioning
           status:
-            state: deploying
+            state: provisioning
     - event: complete
       tasks:
-      - name: Set state deployed in subject status
+      - name: Set state started in subject status
         anarchy_subject_update:
           metadata:
             labels:
-              state: deployed
+              state: started
           status:
-            state: deployed
-      - name: Schedule idle
+            state: started
+      - name: Schedule stop
         anarchy_schedule_action:
-          action: idle
-          after: 2m
+          action: stop
+          after: 8h
       - name: Schedule destroy
         anarchy_schedule_action:
           action: destroy
           after: 6d
 
-  - name: idle
+  - name: stop
     request:
       parameters:
-        ACTION: idle
+        ACTION: stop
     eventHandlers:
     - event: started
       tasks:
-      - name: Set state idling in subject status
+      - name: Set state stopping in subject status
         anarchy_subject_update:
           spec:
-            desiredState: idled
+            desiredState: stopped
           metadata:
             labels:
-              state: idling
+              state: stopping
           status:
-            state: idling
-      - name: Update desiredState idled in subject resource handle
+            state: stopping
+      - name: Update desiredState stopped in subject resource handle
         when: >-
           'gpte.redhat.com/resource-handle-name' in subject.metadata.annotations and
           'gpte.redhat.com/resource-handle-namespace' in subject.metadata.annotations
@@ -137,8 +137,8 @@ spec:
             spec:
               template:
                 spec:
-                  desiredState: idled
-      - name: Update desiredState idled in subject resource claim
+                  desiredState: stopped
+      - name: Update desiredState stopped in subject resource claim
         when: >-
           'gpte.redhat.com/resource-claim-name' in subject.metadata.annotations and
           'gpte.redhat.com/resource-claim-namespace' in subject.metadata.annotations
@@ -154,44 +154,44 @@ spec:
             spec:
               template:
                 spec:
-                  desiredState: idled
+                  desiredState: stopped
     - event: complete
       tasks:
-      - name: Set state deployed in subject status
+      - name: Set state stopped in subject status
         anarchy_subject_update:
           metadata:
             labels:
-              state: idled
+              state: stopped
           status:
-            state: idled
+            state: stopped
 
-  - name: resume
+  - name: start
     request:
       parameters:
-        ACTION: destroy
+        ACTION: start
     eventHandlers:
     - event: started
       tasks:
-      - name: Set state resuming in subject status
+      - name: Set state starting in subject status
         anarchy_subject_update:
           metadata:
             labels:
-              state: resuming
+              state: starting
           status:
-            state: resuming
+            state: starting
     - event: complete
       tasks:
-      - name: Set state deployed in subject status
+      - name: Set state started in subject status
         anarchy_subject_update:
           metadata:
             labels:
-              state: deployed
+              state: started
           status:
-            state: deployed
-      - name: Schedule idle
+            state: started
+      - name: Schedule stop
         anarchy_schedule_action:
-          action: idle
-          after: 2m
+          action: stop
+          after: 8h
 
   - name: destroy
     request:

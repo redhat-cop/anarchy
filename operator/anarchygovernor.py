@@ -339,7 +339,6 @@ class AnarchyGovernor(object):
     def set_subject_event_handlers(self, event_handlers):
         self.subject_event_handlers = []
         for event_handler_spec in event_handlers:
-            logger.debug(event_handler_spec)
             self.subject_event_handlers.append(
                 AnarchyGovernor.EventHandler(event_handler_spec)
             )
