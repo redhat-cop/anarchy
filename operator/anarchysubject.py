@@ -96,13 +96,6 @@ class AnarchySubject(object):
     def namespace_name(self):
         return self.metadata['namespace'] + '/' + self.metadata['name']
 
-    def delete_complete(self):
-        delete_finalizer_condition = self.governor().delete_finalizer_condition()
-        if delete_finalizer_condition:
-            return delete_finalizer_condition.check(self)
-        else:
-            return self.delete_started()
-
     def delete_started(self):
         return 'deleteHandlersStarted' in self.status
 
@@ -175,9 +168,6 @@ class AnarchySubject(object):
         for action in due_actions:
             self.governor().start_action(runtime, self, action)
 
-        if self.is_pending_delete() and self.delete_complete():
-            self.remove_finalizer(runtime)
-
     def process_subject_event_handlers(self, runtime, event_name):
         return self.governor().process_subject_event_handlers(runtime, self, event_name)
 
@@ -189,17 +179,6 @@ class AnarchySubject(object):
         self.patch(runtime, {
             'metadata': {
                 'finalizers': finalizers + [finalizer_id]
-            }
-        })
-
-    def remove_finalizer(self, runtime):
-        finalizer_id = runtime.crd_domain + '/anarchy'
-        finalizers = self.metadata.get('finalizers', [])
-        if finalizer_id not in finalizers:
-            return
-        self.patch(runtime, {
-            'metadata': {
-                'finalizers': [s for s in finalizers if s != finalizer_id]
             }
         })
 

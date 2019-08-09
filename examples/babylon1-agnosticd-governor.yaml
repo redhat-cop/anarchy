@@ -19,10 +19,6 @@ spec:
     babylon_scm_type: git
     babylon_scm_url: https://github.com/redhat-cop/agnosticd.git
 
-  deleteFinalizerCondition:
-    check: status.state
-    value: destroyed
-
   subjectEventHandlers:
   - event: add
     tasks:
@@ -200,10 +196,9 @@ spec:
     eventHandlers:
     - event: complete
       tasks:
-      - name: Set state destroyed in subject status
-        anarchy_subject_update:
-          status:
-            state: destroyed
+      - name: Delete anarchy subject
+        anarchy_subject_delete:
+          remove_finalizers: true
       - name: Delete resource handle
         when: >-
           'gpte.redhat.com/resource-handle-name' in subject.metadata.annotations and

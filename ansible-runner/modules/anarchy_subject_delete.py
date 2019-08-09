@@ -11,27 +11,19 @@ ANSIBLE_METADATA = {
 
 DOCUMENTATION = '''
 ---
-module: anarchy_subject_update
+module: anarchy_subject_delete
 
-short_description: Update AnarchySubject
+short_description: Delete AnarchySubject
 
 version_added: "2.8"
 
 description:
-- "Apply updates to current AnarchySubject"
+- "Delete current AnarchySubject"
 
 options:
-  metadata:
+  remove_finalizers:
     description:
-    - Updates to apply to metadata
-    required: false
-  spec:
-    description:
-    - Updates to apply to spec
-    required: false
-  status:
-    description:
-    - Updates to apply to status
+    - Boolean to indicate whether finalizers should be removed
     required: false
 
 author:
@@ -40,20 +32,18 @@ author:
 
 EXAMPLES = '''
 - name: Set state deployed in subject status
-  anarchy_subject_update:
-    status:
-      state: deployed
+  anarchy_subject_delete:
+    remove_finalizers: true
 '''
 
 RETURN = '''
 subject:
-  description: The updated AnarchySubject resource definition
+  description: The deleted AnarchySubject resource definition
   type: dict
   returned: always
 '''
 
 import kubernetes
-import jsonpatch
 import os
 import yaml
 
@@ -62,22 +52,6 @@ from ansible.module_utils.basic import AnsibleModule
 api_client = None
 custom_objects_api = None
 operator_domain = None
-
-def update_patch_filter(update, item):
-    path = item['path']
-    op = item['op']
-    if op == 'remove':
-        return False
-    field = path.split('/',2)[1]
-    return field in update and update[field]
-
-def update_to_patch(subject, update):
-    return [
-        item for item in jsonpatch.JsonPatch.from_diff(
-            subject,
-            update
-        ) if update_patch_filter(update, item)
-    ]
 
 def get_subject():
     '''Get subject from variables, then fetch latest state.'''
@@ -90,24 +64,31 @@ def get_subject():
         vars_subject['metadata']['name']
     )
 
-def patch_subject(subject, patch):
+def remove_finalizers(subject):
+    if 'finalizers' not in subject['metadata']:
+        return subject
+
     return custom_objects_api.patch_namespaced_custom_object(
         operator_domain,
         'v1',
         subject['metadata']['namespace'],
         'anarchysubjects',
         subject['metadata']['name'],
-        patch
+        [{"path": "/metadata/finalizers", "op": "replace", "value": []}]
     )
 
-def patch_subject_status(subject, patch):
-    return custom_objects_api.patch_namespaced_custom_object_status(
+def delete_subject(subject):
+    if 'deletionTimestamp' in subject['metadata']:
+        return subject
+
+    delete_options = kubernetes.client.V1DeleteOptions()
+    return custom_objects_api.delete_namespaced_custom_object(
         operator_domain,
         'v1',
         subject['metadata']['namespace'],
         'anarchysubjects',
         subject['metadata']['name'],
-        patch
+        delete_options
     )
 
 def init_kube_api():
@@ -120,53 +101,30 @@ def init_kube_api():
 def run_module():
     # define available arguments/parameters a user can pass to the module
     module_args = dict(
-        metadata=dict(type='dict', required=False),
-        spec=dict(type='dict', required=False),
-        status=dict(type='dict', required=False)
+        remove_finalizers=dict(type='bool', required=False, default=False)
     )
 
     init_kube_api()
     subject = get_subject()
 
     result = dict(
-        changed=False,
+        changed=True,
         subject=subject
     )
 
     module = AnsibleModule(
         argument_spec=module_args,
-        required_one_of=[
-            ['metadata', 'spec', 'status']
-        ],
         supports_check_mode=True
     )
 
-    resource_patch = update_to_patch(
-        subject=subject,
-        update={
-            "metadata": module.params['metadata'],
-            "spec": module.params['spec']
-        }
-    )
-
-    status_patch = update_to_patch(
-        subject=subject,
-        update={
-            "status": module.params['status']
-        }
-    )
-
-    if resource_patch or status_patch:
-        result['changed'] = True
+    if not module.params['remove_finalizers'] and 'deletionTimestamp' in subject['metadata']:
+        result['changed'] = False
 
     if module.check_mode:
         module.exit_json(**result)
 
-    if resource_patch:
-        subject = patch_subject(subject, resource_patch)
-
-    if status_patch:
-        subject = patch_subject_status(subject, status_patch)
+    result['subject'] = delete_subject(subject)
+    remove_finalizers(subject)
 
     module.exit_json(**result)
 

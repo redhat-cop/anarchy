@@ -150,8 +150,6 @@ def handle_subject_added(resource):
                 'deleteHandlersStarted': True
             })
             subject.process_subject_event_handlers(anarchy_runtime, 'delete')
-        elif subject.delete_complete():
-            subject.remove_finalizer(anarchy_runtime)
     elif subject.is_new:
         subject.add_finalizer(anarchy_runtime)
         subject.process_subject_event_handlers(anarchy_runtime, 'add')

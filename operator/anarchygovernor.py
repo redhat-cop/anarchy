@@ -60,22 +60,6 @@ def time_to_seconds(time):
 class AnarchyGovernor(object):
     """AnarchyGovernor class"""
 
-    class DeleteFinalizerCondition(object):
-        def __init__(self, spec):
-            assert 'check' in spec, 'deleteFinalizerCondition must define check'
-            self.check_jmespath = spec['check']
-            assert 'value' in spec, 'deleteFinalizerCondition must define check'
-            self.value = spec['value']
-
-        def check(self, subject):
-            return jmespath.search(
-                self.check_jmespath,
-                {
-                    'metadata': subject.metadata,
-                    'spec': subject.spec,
-                    'status': subject.status
-                }
-            ) == self.value
     class EventHandler(object):
         def __init__(self, spec):
             assert 'event' in spec, 'eventHandlers must define event'
@@ -350,9 +334,6 @@ class AnarchyGovernor(object):
                     assert 'secretName' in value, 'dictionary parameters must define secretName'
                     assert 'secretKey' in value, 'dictionary parameters must define secretKey'
 
-        # Check validity of delete finalizer condition
-        self.delete_finalizer_condition()
-
     @property
     def api(self):
         return AnarchyAPI.get(self.spec.get('api', None))
@@ -372,12 +353,6 @@ class AnarchyGovernor(object):
 
     def resource_version(self):
         return self.metadata['resourceVersion']
-
-    def delete_finalizer_condition(self):
-        if 'deleteFinalizerCondition' in self.spec:
-            return AnarchyGovernor.DeleteFinalizerCondition(self.spec['deleteFinalizerCondition'])
-        else:
-            return None
 
     def get_parameters(self, runtime, api, subject, action_config):
         parameters = {}
