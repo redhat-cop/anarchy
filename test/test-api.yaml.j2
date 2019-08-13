@@ -14,8 +14,6 @@ spec:
   callbackTokenParameter: babylon_callback_token
   callbackUrlParameter: babylon_callback_url
   data: '{{: { "extra_vars": parameters } | to_json :}}'
-  parameters:
-    babylon_deployer_action: '{{: parameters.ACTION :}}'
   path: /api/v2/job_templates/job-runner/launch/
   headers:
   - name: Content-type

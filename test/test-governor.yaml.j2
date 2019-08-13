@@ -48,7 +48,7 @@ spec:
         anarchy_schedule_action:
           action: start
     - when: >-
-        anarchy_subject.spec.desiredState|default('stopped') == 'stopped' and
+        anarchy_subject.spec.desiredState|default('') == 'stopped' and
         (anarchy_subject.status|default({})).state|default('') == 'started'
       block:
       - name: Set state stop-scheduled in subject status
@@ -73,6 +73,7 @@ spec:
     request:
       parameters:
         ACTION: provision
+        babylon_deployer_action: provision
     eventHandlers:
     - event: started
       tasks:
@@ -105,6 +106,7 @@ spec:
     request:
       parameters:
         ACTION: stop
+        babylon_deployer_action: stop
     eventHandlers:
     - event: started
       tasks:
@@ -165,6 +167,7 @@ spec:
     request:
       parameters:
         ACTION: start
+        babylon_deployer_action: start
     eventHandlers:
     - event: started
       tasks:
@@ -193,6 +196,7 @@ spec:
     request:
       parameters:
         ACTION: destroy
+        babylon_deployer_action: destroy
     eventHandlers:
     - event: complete
       tasks:

@@ -294,7 +294,7 @@
     vars:
       subject: "{{ test_1_subject.resources[0] }}"
 
-  - name: Idle test-1 subject
+  - name: Stop test-1 subject
     k8s:
       api_version: gpte.redhat.com/v1
       kind: AnarchySubject
@@ -327,7 +327,7 @@
     vars:
       subject: "{{ test_1_subject.resources[0] }}"
 
-  - name: Resume test-1 subject
+  - name: Start test-1 subject
     k8s:
       api_version: gpte.redhat.com/v1
       kind: AnarchySubject

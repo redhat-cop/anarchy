@@ -39,10 +39,10 @@ author:
 '''
 
 EXAMPLES = '''
-- name: Set state deployed in subject status
+- name: Set state started in subject status
   anarchy_subject_update:
     status:
-      state: deployed
+      state: started
 '''
 
 RETURN = '''

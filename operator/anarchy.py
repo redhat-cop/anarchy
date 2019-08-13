@@ -275,7 +275,7 @@ def watch_action_pods():
     stream = watch.stream(
         kube_api.list_namespaced_pod,
         namespace,
-        label_selector='gpte.redhat.com/anarchy-action-name'
+        label_selector='gpte.redhat.com/anarchy-event-name'
     )
     action_pod_keep_seconds = int(os.environ.get('ACTION_POD_KEEP_SECONDS', 600))
     watch_start = time.time()

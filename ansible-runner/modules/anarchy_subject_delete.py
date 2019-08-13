@@ -31,7 +31,7 @@ author:
 '''
 
 EXAMPLES = '''
-- name: Set state deployed in subject status
+- name: Delete subject, removing finalizers
   anarchy_subject_delete:
     remove_finalizers: true
 '''

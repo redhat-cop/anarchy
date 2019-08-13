@@ -42,7 +42,6 @@ class AnarchySubject(object):
                 subject.status = resource.get('status', None)
         else:
             subject = _class(resource)
-            subject.is_updated = True
             logger.info("Registered subject %s (%s)",
                 subject.namespace_name(),
                 subject.resource_version()
