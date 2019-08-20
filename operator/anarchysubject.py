@@ -108,6 +108,7 @@ class AnarchySubject(object):
     def governor_name(self):
         return self.spec['governor']
 
+    @property
     def parameters(self):
         return self.spec.get('parameters', {})
 

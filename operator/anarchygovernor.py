@@ -356,9 +356,9 @@ class AnarchyGovernor(object):
 
     def get_parameters(self, runtime, api, subject, action_config):
         parameters = {}
+        add_values(parameters, runtime, subject.parameters)
         add_values(parameters, runtime, api.parameters)
         add_values(parameters, runtime, self.spec.get('parameters', {}))
-        add_values(parameters, runtime, subject.parameters())
         add_values(parameters, runtime, action_config.request.parameters)
         return parameters
 
