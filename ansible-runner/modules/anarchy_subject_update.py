@@ -162,6 +162,9 @@ def run_module():
     if module.check_mode:
         module.exit_json(**result)
 
+    # Hack to allow json-patch
+    custom_objects_api.api_client.select_header_content_type = lambda _ : 'application/json-patch+json'
+
     if resource_patch:
         subject = patch_subject(subject, resource_patch)
 

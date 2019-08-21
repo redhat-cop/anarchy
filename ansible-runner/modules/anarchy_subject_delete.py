@@ -74,7 +74,7 @@ def remove_finalizers(subject):
         subject['metadata']['namespace'],
         'anarchysubjects',
         subject['metadata']['name'],
-        [{"path": "/metadata/finalizers", "op": "replace", "value": []}]
+        { "metadata": { "finalizers": None } }
     )
 
 def delete_subject(subject):
