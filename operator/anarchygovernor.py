@@ -314,7 +314,6 @@ class AnarchyGovernor(object):
         for action_spec in self.spec.get('actions', []):
             action = AnarchyGovernor.ActionConfig(action_spec, self)
             self.actions[action.name] = action
-        self.sanity_check()
 
     def __set_actions(self):
         actions = {}
@@ -328,11 +327,8 @@ class AnarchyGovernor(object):
             )
 
     def sanity_check(self):
-        if 'parameters' in self.spec:
-            for name, value in self.spec['parameters'].items():
-                if isinstance(value, dict):
-                    assert 'secretName' in value, 'dictionary parameters must define secretName'
-                    assert 'secretKey' in value, 'dictionary parameters must define secretKey'
+        # FIXME
+        pass
 
     @property
     def api(self):

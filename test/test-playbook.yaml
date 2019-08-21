@@ -76,33 +76,36 @@
     - debug: var=anarchy_operator_test_build
 
     - name: Scale down anarchy-operator-test-server
-      k8s_scale:
-        api_version: extensions/v1beta1
-        kind: Deployment
-        name: anarchy-operator-test-server
-        namespace: "{{ anarchy_operator_test_namespace }}"
-        replicas: 0
+      command: oc scale deployment -n {{ anarchy_operator_test_namespace | quote }} anarchy-operator-test-server --replicas=0
+      #k8s_scale:
+      #  api_version: extensions/v1beta1
+      #  kind: Deployment
+      #  name: anarchy-operator-test-server
+      #  namespace: "{{ anarchy_operator_test_namespace }}"
+      #  replicas: 0
 
     - name: Pause for scale-down
       pause:
         seconds: 5
 
     - name: Scale up anarchy-operator-test-server
-      k8s_scale:
-        api_version: extensions/v1beta1
-        kind: Deployment
-        name: anarchy-operator-test-server
-        namespace: "{{ anarchy_operator_test_namespace }}"
-        replicas: 1
-        wait_timeout: 60
+      command: oc scale deployment -n {{ anarchy_operator_test_namespace | quote }} anarchy-operator-test-server --replicas=1
+      #k8s_scale:
+      #  api_version: extensions/v1beta1
+      #  kind: Deployment
+      #  name: anarchy-operator-test-server
+      #  namespace: "{{ anarchy_operator_test_namespace }}"
+      #  replicas: 1
+      #  wait_timeout: 60
 
   - name: Scale down anarchy-operator
-    k8s_scale:
-      api_version: extensions/v1beta1
-      kind: Deployment
-      name: anarchy-operator
-      namespace: "{{ anarchy_operator_namespace }}"
-      replicas: 0
+    command: oc scale deployment -n {{ anarchy_operator_namespace | quote }} anarchy-operator --replicas=0
+    #k8s_scale:
+    #  api_version: extensions/v1beta1
+    #  kind: Deployment
+    #  name: anarchy-operator
+    #  namespace: "{{ anarchy_operator_namespace }}"
+    #  replicas: 0
 
   - name: Wait for anarchy-operator scale down
     k8s_facts:
@@ -182,13 +185,14 @@
       anarchy_governor_name: test
 
   - name: Scale up anarchy-operator
-    k8s_scale:
-      api_version: extensions/v1beta1
-      kind: Deployment
-      name: anarchy-operator
-      namespace: "{{ anarchy_operator_namespace }}"
-      replicas: 1
-      wait_timeout: 60
+    command: oc scale deployment -n {{ anarchy_operator_namespace | quote }} anarchy-operator --replicas=1
+    #k8s_scale:
+    #  api_version: extensions/v1beta1
+    #  kind: Deployment
+    #  name: anarchy-operator
+    #  namespace: "{{ anarchy_operator_namespace }}"
+    #  replicas: 1
+    #  wait_timeout: 60
 
   - name: Pause for anarchy-operator start-up
     pause:
@@ -307,7 +311,7 @@
 
   - name: Pause for stop completion
     pause:
-      seconds: 40
+      seconds: 45
 
   - name: Get test-1 subject
     k8s_facts:
