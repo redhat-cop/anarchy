@@ -250,7 +250,7 @@
 
   - name: Pause for provision completion
     pause:
-      seconds: 15
+      seconds: 20
 
   - name: Get test-1 provision action
     k8s_facts:
@@ -311,7 +311,7 @@
 
   - name: Pause for stop completion
     pause:
-      seconds: 45
+      seconds: 60
 
   - name: Get test-1 subject
     k8s_facts:
@@ -344,7 +344,7 @@
 
   - name: Pause for re-start completion
     pause:
-      seconds: 40
+      seconds: 60
 
   - name: Get test-1 subject
     k8s_facts:
@@ -374,7 +374,7 @@
 
   - name: Pause for delete completion
     pause:
-      seconds: 40
+      seconds: 60
 
   - name: Get test-1 subject
     k8s_facts:

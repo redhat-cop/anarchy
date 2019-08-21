@@ -178,16 +178,13 @@ def watch_subjects():
     )
     for event in stream:
         event_obj = event['object']
-        if event_obj['kind'] == 'Status' \
-        and event_obj['apiVersion'] == 'v1':
+        if event['type'] == 'ERROR':
             logger.info('Watch %s - reason %s, %s',
                 event_obj['status'],
                 event_obj['reason'],
                 event_obj['message']
             )
-            if event_obj['status'] == 'Failure' \
-            and event_obj['reason'] == 'Expired':
-                return
+            return
         else:
             logger.debug("Action %s/%s %s",
                 event_obj['metadata']['namespace'],
@@ -238,16 +235,13 @@ def watch_actions():
     for event in stream:
         logger.debug(event)
         event_obj = event['object']
-        if event_obj['kind'] == 'Status' \
-        and event_obj['apiVersion'] == 'v1':
+        if event['type'] == 'ERROR':
             logger.info('Watch %s - reason %s, %s',
                 event_obj['status'],
                 event_obj['reason'],
                 event_obj['message']
             )
-            if event_obj['status'] == 'Failure' \
-            and event_obj['reason'] == 'Expired':
-                return
+            return
         else:
             logger.debug("Action %s/%s %s",
                 event_obj['metadata']['namespace'],
@@ -284,17 +278,13 @@ def watch_action_pods():
         restart_watch_after = 60
     for event in stream:
         obj = event['object']
-        if event['type'] == 'ERROR' \
-        and obj['kind'] == 'Status' \
-        and obj['apiVersion'] == 'v1':
+        if event['type'] == 'ERROR':
             logger.info('Watch %s - reason %s, %s',
-                obj['status'],
-                obj['reason'],
-                obj['message']
+                event_obj['status'],
+                event_obj['reason'],
+                event_obj['message']
             )
-            if obj['status'] == 'Failure' \
-            and obj['reason'] == 'Expired':
-                return
+            return
         else:
             logger.debug("Pod %s/%s %s",
                 obj.metadata.namespace,

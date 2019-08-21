@@ -124,6 +124,10 @@ def run_module():
         module.exit_json(**result)
 
     result['subject'] = delete_subject(subject)
+
+    # Hack to force merge-patch
+    custom_objects_api.api_client.select_header_content_type = lambda _ : 'application/merge-patch+json'
+
     remove_finalizers(subject)
 
     module.exit_json(**result)
