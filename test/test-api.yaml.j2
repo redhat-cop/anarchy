@@ -13,7 +13,16 @@ spec:
   callbackEventNameParameter: event
   callbackTokenParameter: babylon_callback_token
   callbackUrlParameter: babylon_callback_url
-  data: '{{: { "extra_vars": parameters } | to_json :}}'
+  data: |
+    {
+      "extra_vars": {
+        "guid": {{: parameters.guid | to_json :}},
+    {%: for key, value in parameters.items() if key.startswith('babylon_') :%}
+        {{: key | to_json :}}: {{: value | to_json :}},
+    {%: endfor :%}
+        "environment_parameters": {{: parameters | to_json :}}
+      }
+    }
   path: /api/v2/job_templates/job-runner/launch/
   headers:
   - name: Content-type
