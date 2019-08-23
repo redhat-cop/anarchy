@@ -80,7 +80,7 @@ class AnarchyGovernor(object):
             self.event = spec['event']
             self.tasks = spec['tasks']
             self.runner_image = spec.get('runner_image', os.environ.get(
-                'ANSIBLE_RUNNER_IMAGE', 'quay.io/gpte-devops-automation/anarchy-ansible-runner:latest'
+                'ANSIBLE_RUNNER_IMAGE', 'docker-registry.default.svc:5000/anarchy-operator/anarchy-ansible-runner:latest'
             ))
             self.service_account = spec.get('service_account', os.environ.get(
                 'ANSIBLE_RUNNER_SERVICE_ACCOUNT', 'anarchy-operator'
@@ -98,7 +98,7 @@ class AnarchyGovernor(object):
                 'ANSIBLE_RUNNER_MEMORY_REQUEST', '250Mi'
             ))
 
-        def process(self, runtime, governor, subject, action, event_data, event_name):
+        def process(self, runtime, governor, subject, action, event_data, event_name, logger):
             ansible_vars = {
                 "anarchy_governor": {
                     "metadata": governor.metadata,
@@ -113,10 +113,10 @@ class AnarchyGovernor(object):
                 "event_data": event_data
             }
             labels = {
-                runtime.crd_domain + '/anarchy-subject-namespace': subject.namespace,
-                runtime.crd_domain + '/anarchy-subject-name': subject.name,
-                runtime.crd_domain + '/anarchy-subject-namespace': subject.namespace,
-                runtime.crd_domain + '/anarchy-event-name': event_name
+                runtime.operator_domain + '/anarchy-subject-namespace': subject.namespace,
+                runtime.operator_domain + '/anarchy-subject-name': subject.name,
+                runtime.operator_domain + '/anarchy-subject-namespace': subject.namespace,
+                runtime.operator_domain + '/anarchy-event-name': event_name
             }
 
             if action:
@@ -130,8 +130,8 @@ class AnarchyGovernor(object):
                     event_name
                 )
                 labels.update({
-                    runtime.crd_domain + '/anarchy-action-namespace': action.namespace,
-                    runtime.crd_domain + '/anarchy-action-name': action.name
+                    runtime.operator_domain + '/anarchy-action-namespace': action.namespace,
+                    runtime.operator_domain + '/anarchy-action-name': action.name
                 })
                 owner_ref = {
                     "apiVersion": "gpte.redhat.com/v1",
@@ -154,8 +154,8 @@ class AnarchyGovernor(object):
                     "uid": subject.uid
                 }
 
-            runtime.kube_api.create_namespaced_pod(
-                runtime.namespace,
+            runtime.core_v1_api.create_namespaced_pod(
+                runtime.operator_namespace,
                 {
                     "apiVersion": "v1",
                     "kind": "Pod",
@@ -176,7 +176,7 @@ class AnarchyGovernor(object):
                                 "value": json.dumps(self.tasks, separators=(',', ':'))
                             },{
                                 "name": "OPERATOR_DOMAIN",
-                                "value": runtime.crd_domain
+                                "value": runtime.operator_domain
                             },{
                                 "name": "POD_NAME",
                                 "valueFrom": {
@@ -453,12 +453,15 @@ class AnarchyGovernor(object):
 
         action.status_event_log(runtime, event_name, event_data)
 
-        self.process_event_handlers(runtime, action_config.event_handlers, subject, action, event_data, event_name)
+        self.process_event_handlers(runtime, action_config.event_handlers, subject, action, event_data, event_name, runtime.logger)
 
-    def process_subject_event_handlers(self, runtime, subject, event_name):
-        self.process_event_handlers(runtime, self.subject_event_handlers, subject, None, {}, event_name)
+    def process_subject_event_handlers(self, runtime, subject, event_name, logger):
+        return self.process_event_handlers(runtime, self.subject_event_handlers, subject, None, {}, event_name, logger)
 
-    def process_event_handlers(self, runtime, event_handlers, subject, action, event_data, event_name):
+    def process_event_handlers(self, runtime, event_handlers, subject, action, event_data, event_name, logger):
+        event_handled = False
         for event_handler in event_handlers:
             if event_handler.event == event_name:
-                event_handler.process(runtime, self, subject, action, event_data, event_name)
+                event_handled = True
+                event_handler.process(runtime, self, subject, action, event_data, event_name, logger)
+        return event_handled

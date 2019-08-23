@@ -1,8 +1,9 @@
 #!/usr/bin/env python
 
-import datetime
+from datetime import datetime, timedelta, timezone
 import flask
 import gevent.pywsgi
+import kopf
 import kubernetes
 import kubernetes.client.rest
 import logging
@@ -20,256 +21,141 @@ from anarchysubject import AnarchySubject
 from anarchyaction import AnarchyAction
 
 flask_api = flask.Flask('rest')
+runtime = AnarchyRuntime()
 
 # Variables initialized during init()
-anarchy_runtime = None
-namespace = None
-kube_api = None
-kube_custom_objects = None
-logger = None
-service_account_token = None
-anarchy_crd_domain = None
+api_load_complete = False
+governor_load_complete = False
 
-# Lock used by to trigger immediate subject action check
-action_release_lock = threading.Lock()
+# Action running globals
+action_cache_lock = threading.Lock()
+action_cache = {}
 
 def init():
     """Initialization function before management loops."""
-    init_logging()
-    init_namespace()
-    init_service_account_token()
-    init_kube_api()
-    init_runtime()
     init_apis()
     init_governors()
-    init_subjects()
-    logger.debug("Completed init")
-
-def init_logging():
-    """Define logger global and set default logging level.
-    Default logging level is INFO and may be overridden with the
-    LOGGING_LEVEL environment variable.
-    """
-    global logger
-    logging.basicConfig(
-        format='%(levelname)s %(threadName)s - %(message)s',
-    )
-    logger = logging.getLogger('anarchy')
-    logger.setLevel(os.environ.get('LOGGING_LEVEL', 'DEBUG'))
-
-def init_namespace():
-    """
-    Set the namespace global based on the namespace in which this pod is
-    running.
-    """
-    global namespace
-    with open('/run/secrets/kubernetes.io/serviceaccount/namespace') as f:
-        namespace = f.read()
-
-def init_service_account_token():
-    global service_account_token
-    with open('/run/secrets/kubernetes.io/serviceaccount/token') as f:
-        service_account_token = f.read()
-
-def override_select_header_content_type(content_types):
-    """
-    Returns `Content-Type` based on an array of content_types provided.
-
-    Override default behavior to select application/merge-patch+json
-
-    :param content_types: List of content-types.
-    :return: Content-Type (e.g. application/json).
-    """
-    if not content_types:
-        return 'application/json'
-
-    content_types = [x.lower() for x in content_types]
-
-    if 'application/json' in content_types or '*/*' in content_types:
-        return 'application/json'
-    if 'application/merge-patch+json' in content_types:
-        return 'application/merge-patch+json'
-    else:
-        return content_types[0]
-
-def init_kube_api():
-    """Set kube_api global to communicate with the local kubernetes cluster."""
-    global kube_api, kube_custom_objects, anarchy_crd_domain
-    kube_config = kubernetes.client.Configuration()
-    kube_config.api_key['authorization'] = service_account_token
-    kube_config.api_key_prefix['authorization'] = 'Bearer'
-    kube_config.host = os.environ['KUBERNETES_PORT'].replace('tcp://', 'https://', 1)
-    kube_config.ssl_ca_cert = '/run/secrets/kubernetes.io/serviceaccount/ca.crt'
-    kube_api = kubernetes.client.CoreV1Api(
-        kubernetes.client.ApiClient(kube_config)
-    )
-    kube_custom_objects = kubernetes.client.CustomObjectsApi(
-        kubernetes.client.ApiClient(kube_config)
-    )
-    kube_custom_objects.api_client.select_header_content_type = override_select_header_content_type
-
-    anarchy_crd_domain = os.environ.get('ANARCHY_CRD_DOMAIN','gpte.redhat.com')
-
-def init_runtime():
-    global anarchy_runtime
-    anarchy_runtime = AnarchyRuntime({
-        "crd_domain": anarchy_crd_domain,
-        "kube_api": kube_api,
-        "kube_custom_objects": kube_custom_objects,
-        "logger": logger,
-        "namespace": namespace,
-    })
+    runtime.logger.debug("Completed init")
 
 def init_apis():
     """Get initial list of anarchy apis"""
-    for resource in kube_custom_objects.list_namespaced_custom_object(
-        anarchy_crd_domain, 'v1', namespace, 'anarchyapis'
+    global api_load_complete
+    for resource in runtime.custom_objects_api.list_namespaced_custom_object(
+        runtime.operator_domain, 'v1', runtime.operator_namespace, 'anarchyapis'
     ).get('items', []):
         AnarchyAPI.register(resource)
+    api_load_complete = True
 
 def init_governors():
     """Get initial list of anarchy governors"""
-    for resource in kube_custom_objects.list_namespaced_custom_object(
-        anarchy_crd_domain, 'v1', namespace, 'anarchygovernors'
+    global governor_load_complete
+    for resource in runtime.custom_objects_api.list_namespaced_custom_object(
+        runtime.operator_domain, 'v1', runtime.operator_namespace, 'anarchygovernors'
     ).get('items', []):
         AnarchyGovernor.register(resource)
+    governor_load_complete = True
 
-def init_subjects():
-    """Get initial list of anarchy subjects"""
-    for resource in kube_custom_objects.list_namespaced_custom_object(
-        anarchy_crd_domain, 'v1', namespace, 'anarchysubjects'
-    ).get('items', []):
-        handle_subject_added(resource)
+def wait_for_init():
+    while not api_load_complete or not governor_load_complete:
+        if not api_load_complete:
+            runtime.logger.warn('Wating for api init')
+        if not governor_load_complete:
+            runtime.logger.warn('Wating for governor init')
+        time.sleep(1)
 
-def handle_subject_added(resource):
-    subject = AnarchySubject.register(resource)
-    if subject.is_pending_delete:
-        logger.debug("Subject %s is pending delete", subject.namespace_name)
-        if not subject.delete_started:
-            subject.patch_status(anarchy_runtime, {
-                'deleteHandlersStarted': True
-            })
-            subject.process_subject_event_handlers(anarchy_runtime, 'delete')
-    elif subject.is_new:
-        subject.add_finalizer(anarchy_runtime)
-        subject.process_subject_event_handlers(anarchy_runtime, 'add')
-    elif subject.is_updated:
-        subject.process_subject_event_handlers(anarchy_runtime, 'update')
+@kopf.on.event(runtime.operator_domain, 'v1', 'anarchyapis')
+def handle_api_event(event, logger, **_):
+    if event['type'] == 'DELETED':
+        AnarchyAPI.unregister(event['object']['metadata']['name'])
+    elif event['type'] in ['ADDED', 'MODIFIED', None]:
+        AnarchyAPI.register(event['object'])
 
-def handle_subject_modified(resource):
-    handle_subject_added(resource)
+@kopf.on.event(runtime.operator_domain, 'v1', 'anarchygovernors')
+def handle_governor_event(event, logger, **_):
+    if event['type'] == 'DELETED':
+        AnarchyGovernor.unregister(event['object']['metadata']['name'])
+    elif event['type'] in ['ADDED', 'MODIFIED', None]:
+        AnarchyGovernor.register(event['object'])
 
-def handle_subject_deleted(resource):
-    logger.info("AnarchySubject %s/%s deleted", resource['metadata']['namespace'], resource['metadata']['name'])
-    subject = AnarchySubject.get(
-        resource['metadata']['namespace'],
-        resource['metadata']['name'],
-    )
-    AnarchySubject.unregister(subject)
+@kopf.on.create(runtime.operator_domain, 'v1', 'anarchysubjects')
+def handle_subject_create(body, logger, **_):
+    wait_for_init()
+    subject = AnarchySubject(body)
+    subject.handle_create(runtime, logger)
 
-def watch_subjects():
-    logger.debug('Starting watch for anarchysubjects')
-    stream = kubernetes.watch.Watch().stream(
-        kube_custom_objects.list_namespaced_custom_object,
-        anarchy_crd_domain,
-        'v1',
-        namespace,
-        'anarchysubjects'
-    )
-    for event in stream:
-        event_obj = event['object']
-        if event['type'] == 'ERROR':
-            logger.info('Watch %s - reason %s, %s',
-                event_obj['status'],
-                event_obj['reason'],
-                event_obj['message']
-            )
-            return
-        else:
-            logger.debug("Action %s/%s %s",
-                event_obj['metadata']['namespace'],
-                event_obj['metadata']['name'],
-                event['type']
-            )
-            if event['type'] == 'ADDED':
-                handle_subject_added(event_obj)
-            elif event['type'] == 'MODIFIED':
-                handle_subject_modified(event_obj)
-            elif event['type'] == 'DELETED':
-                handle_subject_deleted(event_obj)
+@kopf.on.update(runtime.operator_domain, 'v1', 'anarchysubjects')
+def handle_subject_update(body, logger, **_):
+    wait_for_init()
+    subject = AnarchySubject(body)
+    subject.handle_update(runtime, logger)
 
-def watch_subjects_loop():
+@kopf.on.event(runtime.operator_domain, 'v1', 'anarchysubjects')
+def handle_subject_event(event, logger, **_):
+    wait_for_init()
+    if event['type'] in ['ADDED', 'MODIFIED', None]:
+        subject = AnarchySubject(event['object'])
+        if subject.is_pending_delete:
+            subject.handle_delete(runtime, logger)
+
+def cache_action(action):
+    if action.has_started \
+    or action.after_datetime > datetime.utcnow() + timedelta(minutes=20):
+        return
+    cache_key = (action.action, action.subject_name)
+    action_cache_lock.acquire()
+    action_cache[cache_key] = action
+    action_cache_lock.release()
+
+def cache_remove_action(action):
+    cache_key = (action.action, action.subject_name)
+    action_cache_lock.acquire()
+    if cache_key in action_cache:
+        del action_cache[cache_key]
+    action_cache_lock.release()
+
+def start_actions():
+    due_actions = {}
+    for key, action in action_cache.items():
+        if action.after_datetime > datetime.utcnow():
+            continue
+        due_actions[key] = action
+    for key, action in due_actions.items():
+        del action_cache[key]
+        try:
+            action.start(runtime)
+        except Exception as e:
+            runtime.logger.exception("Error running action %s", action.name)
+
+def start_actions_loop():
     while True:
         try:
-            watch_subjects()
+            action_cache_lock.acquire()
+            start_actions()
         except Exception as e:
-            logger.exception("Error in subjects loop " + str(e))
-            time.sleep(60)
+            runtime.logger.exception("Error in start_actions_loop!")
+        finally:
+            action_cache_lock.release()
+            time.sleep(1)
 
-def handle_action_added(action_resource):
-    action = AnarchyAction(action_resource)
-    logger.debug("Action add on %s", action.namespace_name)
-    action.subject.queue_action(action)
+@kopf.on.event(runtime.operator_domain, 'v1', 'anarchyactions')
+def handle_action_event(event, logger, **_):
+    wait_for_init()
+    action = AnarchyAction(event['object'])
+    if event['type'] == 'DELETED':
+        cache_remove_action(action)
+    elif event['type'] in ['ADDED', 'MODIFIED', None]:
+        cache_action(action)
+    else:
+        logger.warning(event)
 
-def handle_action_modified(action_resource):
-    action = AnarchyAction(action_resource)
-    logger.debug("Action update on %s", action.namespace_name)
-    action.subject.requeue_action(action)
-
-def handle_action_deleted(action_resource):
-    action = AnarchyAction(action_resource)
-    logger.debug("Action delete on %s", action.namespace_name)
-    subject = action.subject
-    if subject:
-        subject.dequeue_action(action)
-
-def watch_actions():
-    logger.debug('Starting watch for anarchyactions')
-    stream = kubernetes.watch.Watch().stream(
-        kube_custom_objects.list_namespaced_custom_object,
-        anarchy_crd_domain,
-        'v1',
-        namespace,
-        'anarchyactions'
-    )
-    for event in stream:
-        logger.debug(event)
-        event_obj = event['object']
-        if event['type'] == 'ERROR':
-            logger.info('Watch %s - reason %s, %s',
-                event_obj['status'],
-                event_obj['reason'],
-                event_obj['message']
-            )
-            return
-        else:
-            logger.debug("Action %s/%s %s",
-                event_obj['metadata']['namespace'],
-                event_obj['metadata']['name'],
-                event['type']
-            )
-            if event['type'] == 'ADDED':
-                handle_action_added(event_obj)
-            elif event['type'] == 'MODIFIED':
-                handle_action_modified(event_obj)
-            elif event['type'] == 'DELETED':
-                handle_action_deleted(event_obj)
-
-def watch_actions_loop():
-    while True:
-        try:
-            watch_actions()
-        except Exception as e:
-            logger.exception("Error in actions loop " + str(e))
-            time.sleep(60)
-
+# FIXME - kopf watch for action pods
 def watch_action_pods():
-    logger.debug('Starting watch for action pods')
+    runtime.logger.debug('Starting watch for action pods')
     watch = kubernetes.watch.Watch()
     stream = watch.stream(
-        kube_api.list_namespaced_pod,
-        namespace,
-        label_selector='gpte.redhat.com/anarchy-event-name'
+        runtime.core_v1_api.list_namespaced_pod,
+        runtime.operator_namespace,
+        label_selector=runtime.operator_domain + '/anarchy-event-name'
     )
     action_pod_keep_seconds = int(os.environ.get('ACTION_POD_KEEP_SECONDS', 600))
     watch_start = time.time()
@@ -279,22 +165,22 @@ def watch_action_pods():
     for event in stream:
         obj = event['object']
         if event['type'] == 'ERROR':
-            logger.info('Watch %s - reason %s, %s',
+            runtime.logger.info('Watch %s - reason %s, %s',
                 event_obj['status'],
                 event_obj['reason'],
                 event_obj['message']
             )
             return
-        else:
-            logger.debug("Pod %s/%s %s",
+        elif event['type'] != 'DELETED':
+            runtime.logger.debug("Pod %s/%s %s",
                 obj.metadata.namespace,
                 obj.metadata.name,
                 event['type']
             )
 
             delete_older_than = (
-                datetime.datetime.utcnow().replace(tzinfo=datetime.timezone.utc) -
-                datetime.timedelta(0, action_pod_keep_seconds)
+                datetime.utcnow().replace(tzinfo=timezone.utc) -
+                timedelta(0, action_pod_keep_seconds)
             )
 
             # Delete pods that have completed, are older than the threshold
@@ -302,56 +188,24 @@ def watch_action_pods():
             if obj.status.phase in ('Succeeded', 'Failed') \
             and obj.metadata.creation_timestamp < delete_older_than \
             and not obj.metadata.deletion_timestamp:
-                kube_api.delete_namespaced_pod(
-                    obj.metadata.name,
-                    obj.metadata.namespace
-                )
+                try:
+                    runtime.core_v1_api.delete_namespaced_pod(
+                        obj.metadata.name,
+                        obj.metadata.namespace
+                    )
+                except kubernetes.client.rest.ApiException as e:
+                    if e.status != 404:
+                        raise
 
         if restart_watch_after < time.time():
             watch.stop()
-
 
 def watch_action_pods_loop():
     while True:
         try:
             watch_action_pods()
         except Exception as e:
-            logger.exception("Error in action pods loop " + str(e))
-            time.sleep(60)
-
-def action_release():
-    """
-    Signal start actions loop that there may be work to be done.
-
-    This is done by releasing the action_release_lock. This
-    lock may be already released.
-    """
-    try:
-        logger.debug("Action release")
-        action_release_lock.release()
-    except threading.ThreadError:
-        pass
-
-def start_actions_loop():
-    while True:
-        try:
-            action_release_lock.acquire()
-            AnarchySubject.start_subject_actions(anarchy_runtime)
-        except Exception as e:
-            logger.exception("Error in start_actions_loop " + str(e))
-            time.sleep(60)
-
-def action_release_loop():
-    """
-    Periodically release the action_release_lock to trigger polling for actions
-    that are due.
-    """
-    while True:
-        try:
-            action_release()
-            time.sleep(5)
-        except Exception as e:
-            logger.exception("Error in action_release_loop " + str(e))
+            runtime.logger.exception("Error in action pods loop " + str(e))
             time.sleep(60)
 
 def __event_callback(action_namespace, action_name, event_name):
@@ -359,17 +213,17 @@ def __event_callback(action_namespace, action_name, event_name):
         flask.abort(400)
         return
 
-    action_resource = kube_custom_objects.get_namespaced_custom_object(
-        anarchy_crd_domain, 'v1', action_namespace, 'anarchyactions', action_name
+    action_resource = runtime.custom_objects_api.get_namespaced_custom_object(
+        runtime.operator_domain, 'v1', action_namespace, 'anarchyactions', action_name
     )
     action = AnarchyAction(action_resource)
 
     if not action.check_callback_token(flask.request.headers.get('Authorization')):
-        logger.warning("Invalid callback token for %s/%s", action_namespace, action_name)
+        runtime.logger.warning("Invalid callback token for %s/%s", action_namespace, action_name)
         flask.abort(403)
         return
 
-    action.process_event(anarchy_runtime, flask.request.json)
+    action.process_event(runtime, flask.request.json)
     return flask.jsonify({'status': 'ok'})
 
 @flask_api.route(
@@ -377,7 +231,7 @@ def __event_callback(action_namespace, action_name, event_name):
     methods=['POST']
 )
 def action_callback(action_namespace, action_name):
-    logger.info("Action callback for %s/%s", action_namespace, action_name)
+    runtime.logger.info("Action callback for %s/%s", action_namespace, action_name)
     return __event_callback(action_namespace, action_name, None)
 
 @flask_api.route(
@@ -385,34 +239,12 @@ def action_callback(action_namespace, action_name):
     methods=['POST']
 )
 def event_callback(action_namespace, action_name, event_name):
-    logger.info("Event %s called for %s/%s", event_name, action_namespace, action_name)
+    runtime.logger.info("Event %s called for %s/%s", event_name, action_namespace, action_name)
     return __event_callback(action_namespace, action_name, event_name)
 
 def main():
     """Main function."""
     init()
-
-    # FIXME - Watch for changes to apis
-    #threading.Thread(
-    #    name = 'watch-apis',
-    #    target = watch_apis_loop
-    #).start()
-
-    # FIXME - Watch for changes to governors
-    #threading.Thread(
-    #    name = 'watch-governors',
-    #    target = watch_governors_loop
-    #).start()
-
-    threading.Thread(
-        name = 'subjects',
-        target = watch_subjects_loop
-    ).start()
-
-    threading.Thread(
-        name = 'actions',
-        target = watch_actions_loop
-    ).start()
 
     threading.Thread(
         name = 'action-pods',
@@ -424,14 +256,11 @@ def main():
         target = start_actions_loop
     ).start()
 
-    threading.Thread(
-        name = 'action-release',
-        target = action_release_loop
-    ).start()
-
     prometheus_client.start_http_server(8000)
     http_server  = gevent.pywsgi.WSGIServer(('', 5000), flask_api)
     http_server.serve_forever()
 
 if __name__ == '__main__':
     main()
+else:
+    threading.Thread(name='main', target=main).start()

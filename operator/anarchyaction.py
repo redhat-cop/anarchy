@@ -1,4 +1,4 @@
-import datetime
+from datetime import datetime
 import logging
 import os
 
@@ -23,20 +23,14 @@ class AnarchyAction(object):
         return self.spec['action']
 
     @property
-    def name(self):
-        return self.metadata['name']
+    def after(self):
+        return self.spec.get('after', '')
 
     @property
-    def namespace(self):
-        return self.metadata['namespace']
-
-    @property
-    def namespace_name(self):
-        return self.metadata['namespace'] + '/' + self.metadata['name']
-
-    @property
-    def uid(self):
-        return self.metadata['uid']
+    def after_datetime(self):
+        return datetime.strptime(
+            self.spec['after'], '%Y-%m-%dT%H:%M:%SZ'
+        ) if 'after' in self.spec else datetime.utcnow()
 
     @property
     def callback_token(self):
@@ -65,19 +59,23 @@ class AnarchyAction(object):
 
     @property
     def has_started(self):
-        return len(self.status) > 0
+        return True if self.status else False
 
     @property
-    def is_due(self):
-        after_datetime = self.spec.get('after','')
-        return after_datetime < datetime.datetime.utcnow().strftime('%FT%TZ')
+    def name(self):
+        return self.metadata['name']
 
     @property
-    def subject(self):
-        return AnarchySubject.get(
-            self.spec['subjectRef']['namespace'],
-            self.spec['subjectRef']['name']
-        )
+    def namespace(self):
+        return self.metadata['namespace']
+
+    @property
+    def namespace_name(self):
+        return self.metadata['namespace'] + '/' + self.metadata['name']
+
+    @property
+    def uid(self):
+        return self.metadata['uid']
 
     @property
     def subject_name(self):
@@ -96,16 +94,12 @@ class AnarchyAction(object):
             return false
         return self.callback_token == authorization_header[7:]
 
-    def start(self):
-        logger.debug('Starting action %s', self.name)
-        self.subject.start_action(self)
-
     def create(self, runtime):
         logger.debug('Creating action...')
-        resource = runtime.kube_custom_objects.create_namespaced_custom_object(
-            runtime.crd_domain, 'v1', self.subject_namespace, 'anarchyactions',
+        resource = runtime.custom_objects_api.create_namespaced_custom_object(
+            runtime.operator_domain, 'v1', self.subject_namespace, 'anarchyactions',
             {
-                "apiVersion": runtime.crd_domain + "/v1",
+                "apiVersion": runtime.operator_domain + "/v1",
                 "kind": "AnarchyAction",
                 "metadata": self.metadata,
                 "spec": self.spec
@@ -115,9 +109,16 @@ class AnarchyAction(object):
         self.spec = resource['spec']
         logger.debug('Created action %s', self.namespace_name)
 
+    def get_subject(self, runtime):
+        resource = runtime.custom_objects_api.get_namespaced_custom_object(
+            runtime.operator_domain, 'v1', self.subject_namespace,
+            'anarchysubjects', self.subject_name
+        )
+        return AnarchySubject(resource) if resource else None
+
     def patch_status(self, runtime, patch):
-        resource = runtime.kube_custom_objects.patch_namespaced_custom_object_status(
-            runtime.crd_domain,
+        resource = runtime.custom_objects_api.patch_namespaced_custom_object_status(
+            runtime.operator_domain,
             'v1',
             self.namespace,
             'anarchyactions',
@@ -133,13 +134,22 @@ class AnarchyAction(object):
         events.append({
             "name": event_name,
             "data": event_data,
-            "timestamp": datetime.datetime.utcnow().strftime('%FT%TZ')
+            "timestamp": datetime.utcnow().strftime('%FT%TZ')
         })
         self.patch_status(runtime, {
             "events": events
         })
 
     def process_event(self, runtime, event_data, event_name=None):
-        subject = self.subject
-        governor = subject.governor
-        governor.process_action_event_handlers(runtime, subject, self, event_data, event_name)
+        subject = self.get_subject(runtime)
+        subject.process_action_event_handlers(runtime, self, event_data, event_name)
+
+    def start(self, runtime):
+        subject = self.get_subject(runtime)
+        if subject:
+            subject.start_action(runtime, self)
+        else:
+            runtime.logger.warning(
+                "Unable to find subject %s for action %s!",
+                self.subject_name, self.name
+            )

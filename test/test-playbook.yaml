@@ -8,6 +8,7 @@
     build: true
     build_anarchy_operator: "{{ build }}"
     build_anarchy_operator_test: "{{ build }}"
+    local_test: false
     openshift_app_domain: apps.babydev.babylon.open.redhat.com
   tasks:
   - name: Start anarchy-operator build
@@ -175,19 +176,16 @@
     vars:
       anarchy_governor_name: test
 
-  - name: Scale up anarchy-operator
-    command: oc scale deployment -n {{ anarchy_operator_namespace | quote }} anarchy-operator --replicas=1
-    #k8s_scale:
-    #  api_version: extensions/v1beta1
-    #  kind: Deployment
-    #  name: anarchy-operator
-    #  namespace: "{{ anarchy_operator_namespace }}"
-    #  replicas: 1
-    #  wait_timeout: 60
+  - when: not local_test | bool
+    block:
+    - name: Scale up anarchy-operator
+      command: >-
+        oc scale deployment -n {{ anarchy_operator_namespace | quote }}
+        anarchy-operator --replicas=1
 
-  - name: Pause for anarchy-operator start-up
-    pause:
-      seconds: 35
+    - name: Pause for anarchy-operator start-up
+      pause:
+        seconds: 35
 
   - name: Create AnarchySubject test-1
     k8s:

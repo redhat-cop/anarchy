@@ -1,22 +1,27 @@
-FROM registry.access.redhat.com/ubi8/python-36:latest
+#FROM registry.access.redhat.com/ubi8/python-37:latest
+FROM docker.io/library/python:3.7
 
 USER 0
 
-RUN pip install --ignore-installed \
+RUN apt-get update && \
+    apt-get install -y libnss-wrapper && \
+    pip install --ignore-installed \
       ansible \
       flask \
       gevent \
       jmespath \
+      kopf \
       kubernetes \
       ndg-httpsclient \
       prometheus_client \
       pyasn1 \
       pyOpenSSL \
     && \
-    mkdir /anarchy
+    mkdir -p /operator/tmp && \
+    chmod a+rwx /operator/tmp
 
-COPY *.py /anarchy/
+COPY run.sh *.py /operator/
 
 USER 1000
 
-CMD /anarchy/anarchy.py
+CMD /operator/run.sh
