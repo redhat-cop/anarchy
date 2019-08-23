@@ -18,74 +18,92 @@ class AnarchyAction(object):
         # FIXME
         pass
 
-    def name(self):
-        return self.metadata['name']
-
-    def namespace(self):
-        return self.metadata['namespace']
-
-    def namespace_name(self):
-        return self.metadata['namespace'] + '/' + self.metadata['name']
-
-    def uid(self):
-        return self.metadata['uid']
-
+    @property
     def action(self):
         return self.spec['action']
 
+    @property
+    def name(self):
+        return self.metadata['name']
+
+    @property
+    def namespace(self):
+        return self.metadata['namespace']
+
+    @property
+    def namespace_name(self):
+        return self.metadata['namespace'] + '/' + self.metadata['name']
+
+    @property
+    def uid(self):
+        return self.metadata['uid']
+
+    @property
     def callback_token(self):
         return self.spec.get('callbackToken', '')
 
+    @property
     def callback_url(self, event_name = None):
         # FIXME - ensure that callback base url is set
         callback_url = '{}/event/{}/{}'.format(
             os.environ['CALLBACK_BASE_URL'],
-            self.namespace(),
-            self.name()
+            self.namespace,
+            self.name
         )
         if event_name:
             return callback_url + '/' + event_name
         else:
             return callback_url
 
-    def check_callback_token(self, authorization_header):
-        if not authorization_header.startswith('Bearer '):
-            return false
-        return self.callback_token() == authorization_header[7:]
+    @property
+    def governor(self):
+        return AnarchyGovernor.get(self.spec['governorRef']['name'])
 
+    @property
+    def governor_name(self):
+        return self.spec['governorRef']['name']
+
+    @property
     def has_started(self):
         return len(self.status) > 0
 
+    @property
     def is_due(self):
         after_datetime = self.spec.get('after','')
         return after_datetime < datetime.datetime.utcnow().strftime('%FT%TZ')
 
-    def governor(self):
-        return AnarchyGovernor.get(self.spec['governorRef']['name'])
-
-    def governor_name(self):
-        return self.spec['governorRef']['name']
-
+    @property
     def subject(self):
         return AnarchySubject.get(
             self.spec['subjectRef']['namespace'],
             self.spec['subjectRef']['name']
         )
 
+    @property
     def subject_name(self):
         return self.spec['subjectRef']['name']
 
+    @property
     def subject_namespace(self):
         return self.spec['subjectRef']['namespace']
 
+    @property
+    def vars(self):
+        return self.spec.get('vars', {})
+
+    def check_callback_token(self, authorization_header):
+        if not authorization_header.startswith('Bearer '):
+            return false
+        return self.callback_token == authorization_header[7:]
+
     def start(self):
-        logger.debug('Starting action %s', self.name())
-        self.subject().start_action(self)
+        logger.debug('Starting action %s', self.name)
+        self.subject.start_action(self)
 
     def create(self, runtime):
         logger.debug('Creating action...')
         resource = runtime.kube_custom_objects.create_namespaced_custom_object(
-            runtime.crd_domain, 'v1', self.subject_namespace(), 'anarchyactions',
+            runtime.crd_domain, 'v1', self.subject_namespace, 'anarchyactions',
             {
                 "apiVersion": runtime.crd_domain + "/v1",
                 "kind": "AnarchyAction",
@@ -95,15 +113,15 @@ class AnarchyAction(object):
         )
         self.metadata = resource['metadata']
         self.spec = resource['spec']
-        logger.debug('Created action %s', self.namespace_name())
+        logger.debug('Created action %s', self.namespace_name)
 
     def patch_status(self, runtime, patch):
         resource = runtime.kube_custom_objects.patch_namespaced_custom_object_status(
             runtime.crd_domain,
             'v1',
-            self.namespace(),
+            self.namespace,
             'anarchyactions',
-            self.name(),
+            self.name,
             {"status": patch}
         )
         self.metadata = resource['metadata']
@@ -122,6 +140,6 @@ class AnarchyAction(object):
         })
 
     def process_event(self, runtime, event_data, event_name=None):
-        subject = self.subject()
-        governor = subject.governor()
+        subject = self.subject
+        governor = subject.governor
         governor.process_action_event_handlers(runtime, subject, self, event_data, event_name)

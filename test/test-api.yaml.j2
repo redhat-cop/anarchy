@@ -11,18 +11,27 @@ spec:
     secretName: test-api-creds
   caCertificate: ""
   callbackEventNameParameter: event
-  callbackTokenParameter: babylon_callback_token
-  callbackUrlParameter: babylon_callback_url
-  data: |
-    {
-      "extra_vars": {
-        "guid": {{: parameters.guid | to_json :}},
-    {%: for key, value in parameters.items() if key.startswith('babylon_') :%}
-        {{: key | to_json :}}: {{: value | to_json :}},
-    {%: endfor :%}
-        "environment_parameters": {{: parameters | to_json :}}
-      }
-    }
+  data: >-
+    {{:
+      {
+        'extra_vars': {
+          'job_vars': parameters | combine({
+            '__meta__': {
+              'callback': {
+                'token': action.callback_token,
+                'url': action.callback_url
+              },
+              'deployer': {
+                'entry_point': action_config.vars.deployer_entry_point
+              },
+              'tower': {
+                'action': action_config.name
+              }
+            }
+          })
+        }
+      } | to_json
+    :}}
   path: /api/v2/job_templates/job-runner/launch/
   headers:
   - name: Content-type

@@ -1,3 +1,4 @@
+import copy
 import jinja2
 import jmespath
 import json
@@ -17,6 +18,18 @@ jinja2env = jinja2.Environment(
     variable_start_string='{{:',
     variable_end_string=':}}'
 )
+
+def recursive_dict_update(a, b):
+    for k, v in b.items():
+        if k in a \
+        and isinstance(a[k], dict) \
+        and isinstance(v, dict):
+            recursive_dict_update(a[k], v)
+        else:
+            a[k] = v
+    return a
+
+jinja2env.filters['combine'] = lambda a, b: recursive_dict_update(copy.deepcopy(a), b)
 jinja2env.filters['to_json'] = lambda x: json.dumps(x, separators=(',', ':'))
 
 def add_values(parameters, runtime, add):
@@ -100,9 +113,9 @@ class AnarchyGovernor(object):
                 "event_data": event_data
             }
             labels = {
-                runtime.crd_domain + '/anarchy-subject-namespace': subject.namespace(),
-                runtime.crd_domain + '/anarchy-subject-name': subject.name(),
-                runtime.crd_domain + '/anarchy-subject-namespace': subject.namespace(),
+                runtime.crd_domain + '/anarchy-subject-namespace': subject.namespace,
+                runtime.crd_domain + '/anarchy-subject-name': subject.name,
+                runtime.crd_domain + '/anarchy-subject-namespace': subject.namespace,
                 runtime.crd_domain + '/anarchy-event-name': event_name
             }
 
@@ -112,33 +125,33 @@ class AnarchyGovernor(object):
                     "spec": action.spec
                 }
                 generate_name = "{}-{}-{}-".format(
-                    action.namespace(),
-                    action.name(),
+                    action.namespace,
+                    action.name,
                     event_name
                 )
                 labels.update({
-                    runtime.crd_domain + '/anarchy-action-namespace': action.namespace(),
-                    runtime.crd_domain + '/anarchy-action-name': action.name()
+                    runtime.crd_domain + '/anarchy-action-namespace': action.namespace,
+                    runtime.crd_domain + '/anarchy-action-name': action.name
                 })
                 owner_ref = {
                     "apiVersion": "gpte.redhat.com/v1",
                     "controller": True,
                     "kind": "AnarchyAction",
-                    "name": action.name(),
-                    "uid": action.uid()
+                    "name": action.name,
+                    "uid": action.uid
                 }
             else:
                 generate_name = "{}-{}-{}-".format(
-                    subject.namespace(),
-                    subject.name(),
+                    subject.namespace,
+                    subject.name,
                     event_name
                 )
                 owner_ref = {
                     "apiVersion": "gpte.redhat.com/v1",
                     "controller": True,
                     "kind": "AnarchySubject",
-                    "name": subject.name(),
-                    "uid": subject.uid()
+                    "name": subject.name,
+                    "uid": subject.uid
                 }
 
             runtime.kube_api.create_namespaced_pod(
@@ -149,7 +162,7 @@ class AnarchyGovernor(object):
                     "metadata": {
                         "generateName": generate_name,
                         "labels": labels,
-                        "namespace": subject.namespace(),
+                        "namespace": subject.namespace,
                         "ownerReferences": [owner_ref]
                     },
                     "spec": {
@@ -193,7 +206,7 @@ class AnarchyGovernor(object):
 
     class RequestConfig(object):
         def __init__(self, spec, action_config, governor):
-            self.governor_name = governor.name()
+            self.governor_name = governor.name
             self.spec = spec
             self.status_code_events = spec.get('statusCodeEvents', {})
 
@@ -259,7 +272,7 @@ class AnarchyGovernor(object):
     class ActionConfig(object):
         def __init__(self, spec, governor):
             assert 'name' in spec, 'actions must define a name'
-            self.governor_name = governor.name()
+            self.governor_name = governor.name
             self.spec = spec
 
             assert 'request' in spec, 'actions must define request'
@@ -286,19 +299,23 @@ class AnarchyGovernor(object):
         def name(self):
             return self.spec['name']
 
+        @property
+        def vars(self):
+            return self.spec.get('vars', {})
+
     governors = {}
 
     @classmethod
     def register(_class, resource):
         governor = _class(resource)
-        logger.info("Registered governor %s", governor.name())
-        AnarchyGovernor.governors[governor.name()] = governor
+        logger.info("Registered governor %s", governor.name)
+        AnarchyGovernor.governors[governor.name] = governor
         return governor
 
     @classmethod
     def unregister(_class, governor):
         if isinstance(governor, AnarchyGovernor):
-            del AnarchyGovernor.governors[governor.name()]
+            del AnarchyGovernor.governors[governor.name]
         else:
             del AnarchyGovernor.governors[governor]
 
@@ -341,14 +358,21 @@ class AnarchyGovernor(object):
             self.api.callback_event_name_parameter
         )
 
+    @property
     def name(self):
         return self.metadata['name']
 
-    def uid(self):
-        return self.metadata['uid']
+    @property
+    def namespace(self):
+        return self.metadata['namespace']
 
+    @property
     def resource_version(self):
         return self.metadata['resourceVersion']
+
+    @property
+    def uid(self):
+        return self.metadata['uid']
 
     def get_parameters(self, runtime, api, subject, action_config):
         parameters = {}
@@ -358,38 +382,29 @@ class AnarchyGovernor(object):
         add_values(parameters, runtime, action_config.request.parameters)
         return parameters
 
-    def get_vars(self, runtime, api, subject):
-        _vars = {}
-        add_values(_vars, runtime, api.vars)
-        add_values(_vars, runtime, self.spec.get('vars', {}))
-        add_values(_vars, runtime, subject._vars())
-        return _vars
-
     def action_config(self, name):
         assert name in self.actions, \
             'governor has no action named {}'.format(name)
         return self.actions[name]
 
     def start_action(self, runtime, subject, action):
-        action_name = action.action()
+        action_name = action.action
         action_config = self.action_config(action_name)
 
         api = action_config.request.api
 
         parameters = self.get_parameters(runtime, api, subject, action_config)
         if action_config.request.callback_url_parameter:
-            parameters[action_config.request.callback_url_parameter] = action.callback_url()
+            parameters[action_config.request.callback_url_parameter] = action.callback_url
         if action_config.request.callback_token_parameter:
-            parameters[action_config.request.callback_token_parameter] = action.callback_token()
-
-        _vars = self.get_vars(runtime, api, subject)
+            parameters[action_config.request.callback_token_parameter] = action.callback_token
 
         jinja2vars = {
-            'governor': self,
-            'subject': subject,
             'action': action,
+            'action_config': action_config,
+            'governor': self,
             'parameters': parameters,
-            'vars': _vars
+            'subject': subject
         }
 
         path = jinja2render(action_config.request.path, jinja2vars)
@@ -432,7 +447,7 @@ class AnarchyGovernor(object):
 
     def process_action_event_handlers(self, runtime, subject, action, event_data, event_name, action_config=None):
         if action_config == None:
-            action_config = self.action_config(action.action())
+            action_config = self.action_config(action.action)
         if event_name == None:
             event_name = event_data[action_config.callback_event_name_parameter]
 

@@ -73,8 +73,8 @@ spec:
     request:
       parameters:
         ACTION: provision
-        babylon_deployer_action: provision
-        babylon_deployer_entry_point: ansible/main.yml
+    vars:
+      deployer_entry_point: ansible/main.yml
     eventHandlers:
     - event: started
       tasks:
@@ -107,8 +107,8 @@ spec:
     request:
       parameters:
         ACTION: stop
-        babylon_deployer_action: stop
-        babylon_deployer_entry_point: ansible/lifecycle.yml
+    vars:
+      deployer_entry_point: ansible/lifecycle.yml
     eventHandlers:
     - event: started
       tasks:
@@ -169,8 +169,8 @@ spec:
     request:
       parameters:
         ACTION: start
-        babylon_deployer_action: start
-        babylon_deployer_entry_point: ansible/lifecycle.yml
+    vars:
+      deployer_entry_point: ansible/lifecycle.yml
     eventHandlers:
     - event: started
       tasks:
@@ -199,8 +199,8 @@ spec:
     request:
       parameters:
         ACTION: destroy
-        babylon_deployer_action: destroy
-        babylon_deployer_entry_point: ansible/destroy.yml
+    vars:
+      deployer_entry_point: ansible/destroy.yml
     eventHandlers:
     - event: complete
       tasks:

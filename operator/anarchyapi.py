@@ -37,7 +37,7 @@ class AnarchyAPI(object):
     def sanity_check(self):
         assert 'baseUrl' in self.spec, \
             'spec must include baseUrl'
-        if self.is_https():
+        if self.is_https:
             assert 'caCertificate' in self.spec, \
                 'spec must include caCertificate'
 
@@ -106,6 +106,10 @@ class AnarchyAPI(object):
         return self.spec.get('headers', [])
 
     @property
+    def is_https(self):
+        return self.spec['baseUrl'].startswith('https://')
+
+    @property
     def method(self):
         return self.spec.get('method', 'POST')
 
@@ -120,9 +124,6 @@ class AnarchyAPI(object):
     @property
     def vars(self):
         return self.spec.get('vars', {})
-
-    def is_https(self):
-        return self.spec['baseUrl'].startswith('https://')
 
     def auth(self, runtime):
         if self.basic_auth:

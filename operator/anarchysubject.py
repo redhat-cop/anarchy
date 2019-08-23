@@ -26,15 +26,15 @@ class AnarchySubject(object):
         if subject:
             # Subject must not be new, because it is already registered
             subject.is_new = False
-            if subject.resource_version() == resource['metadata']['resourceVersion']:
+            if subject.resource_version == resource['metadata']['resourceVersion']:
                 logger.debug("Subject at same resource version %s (%s)",
-                    subject.namespace_name(),
-                    subject.resource_version()
+                    subject.namespace_name,
+                    subject.resource_version
                 )
             else:
                 logger.debug("Updating subject %s (%s)",
-                    subject.namespace_name(),
-                    subject.resource_version()
+                    subject.namespace_name,
+                    subject.resource_version
                 )
                 subject.is_updated = subject.spec != resource['spec']
                 subject.metadata = resource['metadata']
@@ -43,10 +43,10 @@ class AnarchySubject(object):
         else:
             subject = _class(resource)
             logger.info("Registered subject %s (%s)",
-                subject.namespace_name(),
-                subject.resource_version()
+                subject.namespace_name,
+                subject.resource_version
             )
-            AnarchySubject.subjects[subject.namespace_name()] = subject
+            AnarchySubject.subjects[subject.namespace_name] = subject
 
         _class.subjects_lock.release()
         return subject
@@ -54,7 +54,7 @@ class AnarchySubject(object):
     @classmethod
     def unregister(_class, subject):
         _class.subjects_lock.acquire()
-        del AnarchySubject.subjects[subject.namespace_name()]
+        del AnarchySubject.subjects[subject.namespace_name]
         _class.subjects_lock.release()
 
     @classmethod
@@ -84,39 +84,49 @@ class AnarchySubject(object):
         assert 'governor' in self.spec, \
             'subjects must define governor'
 
-    def uid(self):
-        return self.metadata['uid']
-
+    @property
     def name(self):
         return self.metadata['name']
 
+    @property
     def namespace(self):
         return self.metadata['namespace']
 
+    @property
     def namespace_name(self):
         return self.metadata['namespace'] + '/' + self.metadata['name']
 
+    @property
     def delete_started(self):
         return 'deleteHandlersStarted' in self.status
 
-    def is_pending_delete(self):
-        return 'deletionTimestamp' in self.metadata
-
+    @property
     def governor(self):
         return AnarchyGovernor.get(self.spec['governor'])
 
+    @property
     def governor_name(self):
         return self.spec['governor']
+
+    @property
+    def is_pending_delete(self):
+        return 'deletionTimestamp' in self.metadata
 
     @property
     def parameters(self):
         return self.spec.get('parameters', {})
 
-    def _vars(self):
-        return self.spec.get('vars', {})
-
+    @property
     def resource_version(self):
         return self.metadata['resourceVersion']
+
+    @property
+    def uid(self):
+        return self.metadata['uid']
+
+    @property
+    def vars(self):
+        return self.spec.get('vars', {})
 
     def lock_action_queue(self):
         self.action_queue_lock.acquire()
@@ -126,21 +136,21 @@ class AnarchySubject(object):
 
     def queue_action(self, action):
         self.lock_action_queue()
-        if not action.has_started():
-            logger.info("Queue action %s on %s", action.name(), self.namespace_name())
+        if not action.has_started:
+            logger.info("Queue action %s on %s", action.name, self.namespace_name)
             self.action_queue.append(action)
         self.unlock_action_queue()
 
     def requeue_action(self, action):
         self.lock_action_queue()
-        if not action.has_started():
+        if not action.has_started:
             for i in range(len(self.action_queue)):
                 if action.uid == self.action_queue[i].uid:
-                    logger.warn("Requeuing action %s", action.namespace_name())
+                    logger.warning("Requeuing action %s", action.namespace_name)
                     self.action_queue[i] = action
                     self.unlock_action_queue()
                     return
-            logger.warn("Requeuing action %s, but was not found in queue?", action.namespace_name())
+            logger.warning("Requeuing action %s, but was not found in queue?", action.namespace_name)
             self.action_queue.append(action)
         self.unlock_action_queue()
 
@@ -148,29 +158,29 @@ class AnarchySubject(object):
         self.lock_action_queue()
         for i in range(len(self.action_queue)):
             if action.uid == self.action_queue[i].uid:
-                logger.warn("Dequeuing action %s", action.namespace_name())
+                logger.warning("Dequeuing action %s", action.namespace_name)
                 del self.action_queue[i]
         self.unlock_action_queue()
 
     def start_actions(self, runtime):
-        logger.debug("Starting actions that are due on %s", self.namespace_name())
+        logger.debug("Starting actions that are due on %s", self.namespace_name)
         due_actions = []
 
         self.lock_action_queue()
         for action in self.action_queue[:]:
             logger.debug(action)
-            logger.debug(action.is_due())
-            if action.is_due():
+            logger.debug(action.is_due)
+            if action.is_due:
                 due_actions.append(action)
                 self.action_queue.remove(action)
         self.unlock_action_queue()
         logger.debug(due_actions)
 
         for action in due_actions:
-            self.governor().start_action(runtime, self, action)
+            self.governor.start_action(runtime, self, action)
 
     def process_subject_event_handlers(self, runtime, event_name):
-        return self.governor().process_subject_event_handlers(runtime, self, event_name)
+        return self.governor.process_subject_event_handlers(runtime, self, event_name)
 
     def add_finalizer(self, runtime):
         finalizer_id = runtime.crd_domain + '/anarchy'
@@ -187,9 +197,9 @@ class AnarchySubject(object):
         resource = runtime.kube_custom_objects.patch_namespaced_custom_object(
             runtime.crd_domain,
             'v1',
-            self.namespace(),
+            self.namespace,
             'anarchysubjects',
-            self.name(),
+            self.name,
             patch
         )
         self.metadata = resource['metadata']
@@ -200,9 +210,9 @@ class AnarchySubject(object):
         resource = runtime.kube_custom_objects.patch_namespaced_custom_object_status(
             runtime.crd_domain,
             'v1',
-            self.namespace(),
+            self.namespace,
             'anarchysubjects',
-            self.name(),
+            self.name,
             {"status": patch}
         )
         self.metadata = resource['metadata']

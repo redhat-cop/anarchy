@@ -70,36 +70,48 @@ def launch():
     try:
         assert flask.request.json, \
             'no json data provided'
-        assert 'extra_vars' in flask.request.json, \
-            'extra_vars not provided'
-        assert 'babylon_callback_url' in flask.request.json['extra_vars'], \
-            'babylon_callback_url not provided in extra_vars'
-        assert 'babylon_callback_token' in flask.request.json['extra_vars'], \
-            'babylon_callback_token not provided in extra_vars'
-        assert 'babylon_deployer_action' in flask.request.json['extra_vars'], \
-            'babylon_deployer_action not provided in extra_vars'
+        extra_vars = flask.request.json.get('extra_vars', None)
+        assert extra_vars, 'extra_vars not provided'
+        job_vars = extra_vars.get('job_vars', None)
+        assert job_vars, 'job_vars not provided in extra_vars'
+        job_meta = job_vars.get('__meta__', None)
+        assert job_meta, '__meta__ not provided in extra_vars.job_vars'
+        callback = job_meta.get('callback', None)
+        assert callback, 'callback not provided in extra_vars.job_vars.__meta__'
+        callback_token = callback.get('token', None)
+        callback_url = callback.get('url', None)
+        assert callback_token, 'callback_token not provided in extra_vars.job_vars.__meta__.callback'
+        assert callback_url, 'callback_url not provided in extra_vars.job_vars.__meta__.callback'
+        deployer = job_meta.get('deployer', None)
+        assert deployer, 'deployer not provided in extra_vars.job_vars.__meta__'
+        deployer_entry_point = deployer.get('entry_point', None)
+        assert deployer_entry_point, 'entry_point not provided in extra_vars.job_vars.__meta__.deployer'
+        tower = job_meta.get('tower', None)
+        assert tower, 'tower not provided in extra_vars.job_vars.__meta__'
+        tower_action = tower.get('action', None)
+        assert tower_action, 'action not provided in extra_vars.job_vars.__meta__.tower'
     except Exception as e:
         logger.exception("Invalid parameters passed to job-runner launch: " + str(e))
         flask.abort(400)
 
-    logger.info("Callback URL %s", flask.request.json['extra_vars']['babylon_callback_url'])
+    logger.info("Callback URL %s", callback_url)
 
     job_id = random.randint(1,10000000)
     schedule_callback(
         after=time.time() + 1,
         event='started',
         job_id=job_id,
-        msg='started ' + flask.request.json['extra_vars']['babylon_deployer_action'],
-        token=flask.request.json['extra_vars']['babylon_callback_token'],
-        url=flask.request.json['extra_vars']['babylon_callback_url']
+        msg='started ' + tower_action,
+        token=callback_token,
+        url=callback_url
     )
     schedule_callback(
         after=time.time() + 15,
         event='complete',
         job_id=job_id,
-        msg='completed ' + flask.request.json['extra_vars']['babylon_deployer_action'],
-        token=flask.request.json['extra_vars']['babylon_callback_token'],
-        url=flask.request.json['extra_vars']['babylon_callback_url']
+        msg='completed ' + tower_action,
+        token=callback_token,
+        url=callback_url
     )
     return flask.jsonify({
         "id": job_id,

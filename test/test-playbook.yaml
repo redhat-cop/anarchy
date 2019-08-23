@@ -34,8 +34,6 @@
         namespace: "{{ anarchy_operator_namespace }}"
       register: anarchy_operator_buildconfig
 
-    - debug: var=anarchy_operator_buildconfig
-
     - name: Wait for anarchy-operator build
       k8s_facts:
         api_version: build.openshift.io/v1
@@ -47,8 +45,6 @@
       retries: 30
       delay: 10
 
-    - debug: var=anarchy_operator_build
-
   - when: build_anarchy_operator_test | bool
     block:
     - name: Wait for anachry-operator-test-server build
@@ -59,10 +55,7 @@
         namespace: "{{ anarchy_operator_test_namespace }}"
       register: anarchy_operator_test_buildconfig
 
-    - debug: var=anarchy_operator_test_buildconfig
-
     - name: Wait for anarchy-operator-test-server build
-
       k8s_facts:
         api_version: build.openshift.io/v1
         kind: Build
@@ -72,8 +65,6 @@
       until: anarchy_operator_test_build.resources[0].status.phase in ['Complete', 'Failed']
       retries: 30
       delay: 10
-
-    - debug: var=anarchy_operator_test_build
 
     - name: Scale down anarchy-operator-test-server
       command: oc scale deployment -n {{ anarchy_operator_test_namespace | quote }} anarchy-operator-test-server --replicas=0
@@ -227,8 +218,6 @@
       - gpte.redhat.com/action=provision
       - gpte.redhat.com/anarchy-subject=test-1
     register: test_1_provision
-
-  - debug: var=test_1_provision
 
   - name: Assert that exactly one provision action for test-1 was found
     assert:

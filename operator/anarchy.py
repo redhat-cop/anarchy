@@ -143,9 +143,9 @@ def init_subjects():
 
 def handle_subject_added(resource):
     subject = AnarchySubject.register(resource)
-    if subject.is_pending_delete():
-        logger.debug("Subject %s is pending delete", subject.namespace_name())
-        if not subject.delete_started():
+    if subject.is_pending_delete:
+        logger.debug("Subject %s is pending delete", subject.namespace_name)
+        if not subject.delete_started:
             subject.patch_status(anarchy_runtime, {
                 'deleteHandlersStarted': True
             })
@@ -208,18 +208,18 @@ def watch_subjects_loop():
 
 def handle_action_added(action_resource):
     action = AnarchyAction(action_resource)
-    logger.debug("Action add on %s", action.namespace_name())
-    action.subject().queue_action(action)
+    logger.debug("Action add on %s", action.namespace_name)
+    action.subject.queue_action(action)
 
 def handle_action_modified(action_resource):
     action = AnarchyAction(action_resource)
-    logger.debug("Action update on %s", action.namespace_name())
-    action.subject().requeue_action(action)
+    logger.debug("Action update on %s", action.namespace_name)
+    action.subject.requeue_action(action)
 
 def handle_action_deleted(action_resource):
     action = AnarchyAction(action_resource)
-    logger.debug("Action delete on %s", action.namespace_name())
-    subject = action.subject()
+    logger.debug("Action delete on %s", action.namespace_name)
+    subject = action.subject
     if subject:
         subject.dequeue_action(action)
 
@@ -365,7 +365,7 @@ def __event_callback(action_namespace, action_name, event_name):
     action = AnarchyAction(action_resource)
 
     if not action.check_callback_token(flask.request.headers.get('Authorization')):
-        logger.warn("Invalid callback token for %s/%s", action_namespace, action_name)
+        logger.warning("Invalid callback token for %s/%s", action_namespace, action_name)
         flask.abort(403)
         return
 
