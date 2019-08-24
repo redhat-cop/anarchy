@@ -8,6 +8,10 @@ Anarchy is configured through the definition of governors.
 Anarchy governors define the strategy for controlling an anarchy subject by defining actions to execute on the subject.
 Actions are tracked as custom resources, allowing for complete visibility of current state of the subject.
 
+== Architecture
+
+image::docs/AnarchyDiagram.png[Anarchy Diagram]
+
 == Installation
 
 . Clone this repo to your local workstation:
