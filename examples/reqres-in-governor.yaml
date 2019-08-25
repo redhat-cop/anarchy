@@ -1,5 +1,5 @@
 ---
-apiVersion: gpte.redhat.com/v1
+apiVersion: anarchy.gpte.redhat.com/v1
 kind: AnarchyGovernor
 metadata:
   name: reqres-in-example

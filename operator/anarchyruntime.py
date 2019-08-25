@@ -41,9 +41,7 @@ class AnarchyRuntime(object):
         if operator_domain:
             self.operator_domain = operator_domain
         else:
-            # FIXME
-            #self.operator_domain = os.environ.get('OPERATOR_DOMAIN', 'anarchy.gpte.redhat.com')
-            self.operator_domain = os.environ.get('OPERATOR_DOMAIN', 'gpte.redhat.com')
+            self.operator_domain = os.environ.get('OPERATOR_DOMAIN', 'anarchy.gpte.redhat.com')
 
     def __init_kube_apis(self):
         if os.path.exists('/run/secrets/kubernetes.io/serviceaccount/token'):

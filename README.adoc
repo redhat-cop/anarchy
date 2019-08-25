@@ -70,20 +70,20 @@ route.route.openshift.io/anarchy-operator created
 deployment.extensions/anarchy-operator created
 clusterrole.authorization.openshift.io/anarchy-operator created
 clusterrolebinding.authorization.openshift.io/anarchy-operator:anarchy-operator:anarchy-operator created
-customresourcedefinition.apiextensions.k8s.io/anarchyapis.gpte.redhat.com created
-customresourcedefinition.apiextensions.k8s.io/anarchygovernors.gpte.redhat.com created
-customresourcedefinition.apiextensions.k8s.io/anarchysubjects.gpte.redhat.com created
-customresourcedefinition.apiextensions.k8s.io/anarchyactions.gpte.redhat.com created
+customresourcedefinition.apiextensions.k8s.io/anarchyapis.anarchy.gpte.redhat.com created
+customresourcedefinition.apiextensions.k8s.io/anarchygovernors.anarchy.gpte.redhat.com created
+customresourcedefinition.apiextensions.k8s.io/anarchysubjects.anarchy.gpte.redhat.com created
+customresourcedefinition.apiextensions.k8s.io/anarchyactions.anarchy.gpte.redhat.com created
 ----
 
 . Check your work: make sure these 4 CRDs have been created:
 +
 ----
-$ oc get crd | grep gpte.redhat.com
-anarchyactions.gpte.redhat.com                              2019-07-03T17:11:22Z
-anarchyapis.gpte.redhat.com                                 2019-07-03T17:11:22Z
-anarchygovernors.gpte.redhat.com                            2019-07-03T17:11:22Z
-anarchysubjects.gpte.redhat.com                             2019-07-03T17:11:22Z
+$ oc get crd | grep anarchy.gpte.redhat.com
+anarchyactions.anarchy.gpte.redhat.com                              2019-07-03T17:11:22Z
+anarchyapis.anarchy.gpte.redhat.com                                 2019-07-03T17:11:22Z
+anarchygovernors.anarchy.gpte.redhat.com                            2019-07-03T17:11:22Z
+anarchysubjects.anarchy.gpte.redhat.com                             2019-07-03T17:11:22Z
 ----
 
 . Check your work: make sure the operator's pod is running:
@@ -113,7 +113,7 @@ The conceptual overview of the test design is described here.
 Let's start with the AnarchySubject definition:
 
 ----
-apiVersion: gpte.redhat.com/v1
+apiVersion: anarchy.gpte.redhat.com/v1
 kind: AnarchySubject
 metadata:
   generateName: test-
@@ -135,7 +135,7 @@ spec:
 The test AnarchyGovernor definition is shown here:
 
 ----
-apiVersion: gpte.redhat.com/v1
+apiVersion: anarchy.gpte.redhat.com/v1
 kind: AnarchyGovernor
 metadata:
   name: test

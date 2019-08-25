@@ -113,10 +113,10 @@ class AnarchyGovernor(object):
                 "event_data": event_data
             }
             labels = {
-                runtime.operator_domain + '/anarchy-subject-namespace': subject.namespace,
-                runtime.operator_domain + '/anarchy-subject-name': subject.name,
-                runtime.operator_domain + '/anarchy-subject-namespace': subject.namespace,
-                runtime.operator_domain + '/anarchy-event-name': event_name
+                runtime.operator_domain + '/subject-namespace': subject.namespace,
+                runtime.operator_domain + '/subject-name': subject.name,
+                runtime.operator_domain + '/subject-namespace': subject.namespace,
+                runtime.operator_domain + '/event-name': event_name
             }
 
             if action:
@@ -130,11 +130,11 @@ class AnarchyGovernor(object):
                     event_name
                 )
                 labels.update({
-                    runtime.operator_domain + '/anarchy-action-namespace': action.namespace,
-                    runtime.operator_domain + '/anarchy-action-name': action.name
+                    runtime.operator_domain + '/action-namespace': action.namespace,
+                    runtime.operator_domain + '/action-name': action.name
                 })
                 owner_ref = {
-                    "apiVersion": "gpte.redhat.com/v1",
+                    "apiVersion": "anarchy.gpte.redhat.com/v1",
                     "controller": True,
                     "kind": "AnarchyAction",
                     "name": action.name,
@@ -147,7 +147,7 @@ class AnarchyGovernor(object):
                     event_name
                 )
                 owner_ref = {
-                    "apiVersion": "gpte.redhat.com/v1",
+                    "apiVersion": "anarchy.gpte.redhat.com/v1",
                     "controller": True,
                     "kind": "AnarchySubject",
                     "name": subject.name,

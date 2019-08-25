@@ -96,7 +96,7 @@ def init_kube_api():
     kubernetes.config.load_kube_config()
     api_client = kubernetes.client.ApiClient()
     custom_objects_api = kubernetes.client.CustomObjectsApi(api_client)
-    operator_domain = os.environ.get('OPERATOR_DOMAIN', 'gpte.redhat.com')
+    operator_domain = os.environ.get('OPERATOR_DOMAIN', 'anarchy.gpte.redhat.com')
 
 def run_module():
     # define available arguments/parameters a user can pass to the module

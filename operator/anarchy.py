@@ -20,6 +20,7 @@ from anarchygovernor import AnarchyGovernor
 from anarchysubject import AnarchySubject
 from anarchyaction import AnarchyAction
 
+action_pod_keep_seconds = int(os.environ.get('ACTION_POD_KEEP_SECONDS', 600))
 flask_api = flask.Flask('rest')
 runtime = AnarchyRuntime()
 
@@ -148,65 +149,32 @@ def handle_action_event(event, logger, **_):
     else:
         logger.warning(event)
 
-# FIXME - kopf watch for action pods
-def watch_action_pods():
-    runtime.logger.debug('Starting watch for action pods')
-    watch = kubernetes.watch.Watch()
-    stream = watch.stream(
-        runtime.core_v1_api.list_namespaced_pod,
-        runtime.operator_namespace,
-        label_selector=runtime.operator_domain + '/anarchy-event-name'
-    )
-    action_pod_keep_seconds = int(os.environ.get('ACTION_POD_KEEP_SECONDS', 600))
-    watch_start = time.time()
-    restart_watch_after = watch_start + action_pod_keep_seconds / 2
-    if restart_watch_after < 60:
-        restart_watch_after = 60
-    for event in stream:
-        obj = event['object']
-        if event['type'] == 'ERROR':
-            runtime.logger.info('Watch %s - reason %s, %s',
-                event_obj['status'],
-                event_obj['reason'],
-                event_obj['message']
-            )
-            return
-        elif event['type'] != 'DELETED':
-            runtime.logger.debug("Pod %s/%s %s",
-                obj.metadata.namespace,
-                obj.metadata.name,
-                event['type']
-            )
+@kopf.on.event('', 'v1', 'pods', labels={runtime.operator_domain + '/event-name': None})
+def handle_pod_event(event, logger, **_):
+    if event['type'] in ['ADDED', 'MODIFIED', None]:
+        pod = event['object']
+        pod_meta = pod['metadata']
+        pod_creation_timestamp = pod_meta['creationTimestamp']
+        pod_name = pod_meta['name']
+        pod_phase = pod['status']['phase']
 
-            delete_older_than = (
-                datetime.utcnow().replace(tzinfo=timezone.utc) -
-                timedelta(0, action_pod_keep_seconds)
-            )
+        delete_older_than = (
+            datetime.utcnow() - timedelta(0, action_pod_keep_seconds)
+        ).strftime('%FT%TZ')
 
-            # Delete pods that have completed, are older than the threshold
-            # and are not already marked for deletion.
-            if obj.status.phase in ('Succeeded', 'Failed') \
-            and obj.metadata.creation_timestamp < delete_older_than \
-            and not obj.metadata.deletion_timestamp:
-                try:
-                    runtime.core_v1_api.delete_namespaced_pod(
-                        obj.metadata.name,
-                        obj.metadata.namespace
-                    )
-                except kubernetes.client.rest.ApiException as e:
-                    if e.status != 404:
-                        raise
-
-        if restart_watch_after < time.time():
-            watch.stop()
-
-def watch_action_pods_loop():
-    while True:
-        try:
-            watch_action_pods()
-        except Exception as e:
-            runtime.logger.exception("Error in action pods loop " + str(e))
-            time.sleep(60)
+        # Delete pods that have completed, are older than the threshold
+        # and are not already marked for deletion.
+        if pod_phase in ('Succeeded', 'Failed') \
+        and pod_creation_timestamp < delete_older_than \
+        and not 'deletetionTimestamp' in pod_meta:
+            try:
+                runtime.core_v1_api.delete_namespaced_pod(
+                    obj.metadata.name,
+                    obj.metadata.namespace
+                )
+            except kubernetes.client.rest.ApiException as e:
+                if e.status != 404:
+                    raise
 
 def __event_callback(action_namespace, action_name, event_name):
     if not flask.request.json:
@@ -247,17 +215,12 @@ def main():
     init()
 
     threading.Thread(
-        name = 'action-pods',
-        target = watch_action_pods_loop
-    ).start()
-
-    threading.Thread(
         name = 'start-actions',
         target = start_actions_loop
     ).start()
 
     prometheus_client.start_http_server(8000)
-    http_server  = gevent.pywsgi.WSGIServer(('', 5000), flask_api)
+    http_server = gevent.pywsgi.WSGIServer(('', 5000), flask_api)
     http_server.serve_forever()
 
 if __name__ == '__main__':

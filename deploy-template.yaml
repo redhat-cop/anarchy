@@ -10,11 +10,11 @@ parameters:
 - name: ANARCHY_NAMESPACE
   value: anarchy-operator
 - name: ANARCHY_IMAGE
-  value: quay.io/gpte-devops-automation/anarchy-operator:0.1.5
+  value: quay.io/gpte-devops-automation/anarchy-operator:0.1.6
   #value: docker-registry.default.svc:5000/anarchy-operator/anarchy-operator:latest
   #value: image-registry.openshift-image-registry.svc:5000/anarchy-operator/anarchy-operator:latest
 - name: ANSIBLE_RUNNER_IMAGE
-  value: quay.io/gpte-devops-automation/anarchy-ansible-runner:0.1.5
+  value: quay.io/gpte-devops-automation/anarchy-ansible-runner:0.1.6
   #value: docker-registry.default.svc:5000/anarchy-operator/anarchy-ansible-runner:latest
   #value: image-registry.openshift-image-registry.svc:5000/anarchy-operator/anarchy-operator:latest
 - name: ANARCHY_SERVICE_NAME
@@ -132,7 +132,7 @@ objects:
     name: anarchy-operator
   rules:
   - apiGroups:
-    - gpte.redhat.com
+    - anarchy.gpte.redhat.com
     resources:
     - anarchyapis
     - anarchygovernors
@@ -141,7 +141,7 @@ objects:
     - list
     - watch
   - apiGroups:
-    - gpte.redhat.com
+    - anarchy.gpte.redhat.com
     resources:
     - anarchysubjects
     verbs:
@@ -152,7 +152,7 @@ objects:
     - patch
     - delete
   - apiGroups:
-    - gpte.redhat.com
+    - anarchy.gpte.redhat.com
     resources:
     - anarchyactions
     - anarchyactions/status
@@ -180,7 +180,7 @@ objects:
     name: admin-anarchy-subjects
   rules:
   - apiGroups:
-    - gpte.redhat.com
+    - anarchy.gpte.redhat.com
     resources:
     - anarchysubjects
     verbs:
@@ -191,7 +191,7 @@ objects:
     - list
     - watch
   - apiGroups:
-    - gpte.redhat.com
+    - anarchy.gpte.redhat.com
     resources:
     - anarchyactions
     - anarchyactions/status
@@ -215,9 +215,9 @@ objects:
 - apiVersion: apiextensions.k8s.io/v1beta1
   kind: CustomResourceDefinition
   metadata:
-    name: anarchyapis.gpte.redhat.com
+    name: anarchyapis.anarchy.gpte.redhat.com
   spec:
-    group: gpte.redhat.com
+    group: anarchy.gpte.redhat.com
     version: v1
     scope: Namespaced
     names:
@@ -231,9 +231,9 @@ objects:
 - apiVersion: apiextensions.k8s.io/v1beta1
   kind: CustomResourceDefinition
   metadata:
-    name: anarchygovernors.gpte.redhat.com
+    name: anarchygovernors.anarchy.gpte.redhat.com
   spec:
-    group: gpte.redhat.com
+    group: anarchy.gpte.redhat.com
     version: v1
     scope: Namespaced
     names:
@@ -247,9 +247,9 @@ objects:
 - apiVersion: apiextensions.k8s.io/v1beta1
   kind: CustomResourceDefinition
   metadata:
-    name: anarchysubjects.gpte.redhat.com
+    name: anarchysubjects.anarchy.gpte.redhat.com
   spec:
-    group: gpte.redhat.com
+    group: anarchy.gpte.redhat.com
     version: v1
     scope: Namespaced
     names:
@@ -263,9 +263,9 @@ objects:
 - apiVersion: apiextensions.k8s.io/v1beta1
   kind: CustomResourceDefinition
   metadata:
-    name: anarchyactions.gpte.redhat.com
+    name: anarchyactions.anarchy.gpte.redhat.com
   spec:
-    group: gpte.redhat.com
+    group: anarchy.gpte.redhat.com
     version: v1
     scope: Namespaced
     names:

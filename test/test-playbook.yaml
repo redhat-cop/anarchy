@@ -6,11 +6,19 @@
     anarchy_operator_namespace: anarchy-operator
     anarchy_operator_test_namespace: anarchy-operator-test
     build: true
+    build_anarchy_ansible_runner: "{{ build }}"
     build_anarchy_operator: "{{ build }}"
     build_anarchy_operator_test: "{{ build }}"
     local_test: false
     openshift_app_domain: apps.babydev.babylon.open.redhat.com
   tasks:
+  - name: Start anarchy-ansible-runner build
+    command: >-
+      {{ oc_cmd }} start-build anarchy-ansible-runner
+      -n {{ anarchy_operator_namespace | quote }}
+      --from-dir {{ playbook_dir }}/..
+    when: build_anarchy_ansible_runner | bool
+
   - name: Start anarchy-operator build
     command: >-
       {{ oc_cmd }} start-build anarchy-operator
@@ -42,7 +50,28 @@
         name: anarchy-operator-{{ anarchy_operator_buildconfig.resources[0].status.lastVersion }}
         namespace: "{{ anarchy_operator_namespace }}"
       register: anarchy_operator_build
-      until: anarchy_operator_build.resources[0].status.phase in ['Complete', 'Failed']
+      until: anarchy_operator_build.resources[0].status.phase == 'Complete'
+      retries: 30
+      delay: 10
+
+  - when: build_anarchy_operator | bool
+    block:
+    - name: Get anachry-ansible-runner BuildConfig
+      k8s_facts:
+        api_version: build.openshift.io/v1
+        kind: BuildConfig
+        name: anarchy-ansible-runner
+        namespace: "{{ anarchy_operator_namespace }}"
+      register: anarchy_ansible_runner_buildconfig
+
+    - name: Wait for anarchy-ansible-runner build
+      k8s_facts:
+        api_version: build.openshift.io/v1
+        kind: Build
+        name: anarchy-ansible-runner-{{ anarchy_ansible_runner_buildconfig.resources[0].status.lastVersion }}
+        namespace: "{{ anarchy_operator_namespace }}"
+      register: anarchy_ansible_runner_build
+      until: anarchy_ansible_runner_build.resources[0].status.phase == 'Complete'
       retries: 30
       delay: 10
 
@@ -63,7 +92,7 @@
         name: anarchy-operator-test-server-{{ anarchy_operator_test_buildconfig.resources[0].status.lastVersion }}
         namespace: "{{ anarchy_operator_test_namespace }}"
       register: anarchy_operator_test_build
-      until: anarchy_operator_test_build.resources[0].status.phase in ['Complete', 'Failed']
+      until: anarchy_operator_test_build.resources[0].status.phase == 'Complete'
       retries: 30
       delay: 10
 
@@ -113,7 +142,7 @@
 
   - name: Get test subjects
     k8s_facts:
-      api_version: gpte.redhat.com/v1
+      api_version: anarchy.gpte.redhat.com/v1
       kind: AnarchySubject
       namespace: "{{ anarchy_operator_namespace }}"
       label_selectors:
@@ -122,7 +151,7 @@
 
   - name: Remove finalizer from test anarchy subjects
     k8s:
-      api_version: gpte.redhat.com/v1
+      api_version: anarchy.gpte.redhat.com/v1
       kind: AnarchySubject
       name: "{{ anarchy_subject.metadata.name }}"
       namespace: "{{ anarchy_subject.metadata.namespace }}"
@@ -143,7 +172,7 @@
   - name: Remove test AnarchyGovernor
     k8s:
       state: absent
-      api_version: gpte.redhat.com/v1
+      api_version: anarchy.gpte.redhat.com/v1
       kind: AnarchyGovernor
       name: test
       namespace: "{{ anarchy_operator_namespace }}"
@@ -151,7 +180,7 @@
   - name: Remove test-new AnarchyGovernor
     k8s:
       state: absent
-      api_version: gpte.redhat.com/v1
+      api_version: anarchy.gpte.redhat.com/v1
       kind: AnarchyGovernor
       name: test-new
       namespace: "{{ anarchy_operator_namespace }}"
@@ -159,7 +188,7 @@
   - name: Remove test AnarchyAPI
     k8s:
       state: absent
-      api_version: gpte.redhat.com/v1
+      api_version: anarchy.gpte.redhat.com/v1
       kind: AnarchyAPI
       name: test
       namespace: "{{ anarchy_operator_namespace }}"
@@ -191,7 +220,7 @@
     k8s:
       state: present
       definition:
-        apiVersion: gpte.redhat.com/v1
+        apiVersion: anarchy.gpte.redhat.com/v1
         kind: AnarchySubject
         metadata:
           name: test-1
@@ -210,11 +239,11 @@
 
   - name: Get test-1 provision action
     k8s_facts:
-      api_version: gpte.redhat.com/v1
+      api_version: anarchy.gpte.redhat.com/v1
       kind: AnarchyAction
       label_selectors:
-      - gpte.redhat.com/action=provision
-      - gpte.redhat.com/anarchy-subject=test-1
+      - anarchy.gpte.redhat.com/action=provision
+      - anarchy.gpte.redhat.com/subject=test-1
     register: test_1_provision
 
   - name: Assert that exactly one provision action for test-1 was found
@@ -241,12 +270,12 @@
 
   - name: Get test-1 provision action
     k8s_facts:
-      api_version: gpte.redhat.com/v1
+      api_version: anarchy.gpte.redhat.com/v1
       kind: AnarchyAction
       namespace: "{{ anarchy_operator_namespace }}"
       label_selectors:
-      - gpte.redhat.com/action=provision
-      - gpte.redhat.com/anarchy-subject=test-1
+      - anarchy.gpte.redhat.com/action=provision
+      - anarchy.gpte.redhat.com/subject=test-1
     register: test_1_provision
 
   - name: Assert that exactly one provision action for test-1 was found
@@ -269,7 +298,7 @@
 
   - name: Get test-1 subject
     k8s_facts:
-      api_version: gpte.redhat.com/v1
+      api_version: anarchy.gpte.redhat.com/v1
       kind: AnarchySubject
       name: test-1
       namespace: "{{ anarchy_operator_namespace }}"
@@ -287,7 +316,7 @@
 
   - name: Stop test-1 subject
     k8s:
-      api_version: gpte.redhat.com/v1
+      api_version: anarchy.gpte.redhat.com/v1
       kind: AnarchySubject
       name: test-1
       namespace: "{{ anarchy_operator_namespace }}"
@@ -302,7 +331,7 @@
 
   - name: Get test-1 subject
     k8s_facts:
-      api_version: gpte.redhat.com/v1
+      api_version: anarchy.gpte.redhat.com/v1
       kind: AnarchySubject
       name: test-1
       namespace: "{{ anarchy_operator_namespace }}"
@@ -320,7 +349,7 @@
 
   - name: Start test-1 subject
     k8s:
-      api_version: gpte.redhat.com/v1
+      api_version: anarchy.gpte.redhat.com/v1
       kind: AnarchySubject
       name: test-1
       namespace: "{{ anarchy_operator_namespace }}"
@@ -335,7 +364,7 @@
 
   - name: Get test-1 subject
     k8s_facts:
-      api_version: gpte.redhat.com/v1
+      api_version: anarchy.gpte.redhat.com/v1
       kind: AnarchySubject
       name: test-1
       namespace: "{{ anarchy_operator_namespace }}"
@@ -354,7 +383,7 @@
   - name: Delete test-1 subject
     k8s:
       state: absent
-      api_version: gpte.redhat.com/v1
+      api_version: anarchy.gpte.redhat.com/v1
       kind: AnarchySubject
       name: test-1
       namespace: "{{ anarchy_operator_namespace }}"
@@ -365,7 +394,7 @@
 
   - name: Get test-1 subject
     k8s_facts:
-      api_version: gpte.redhat.com/v1
+      api_version: anarchy.gpte.redhat.com/v1
       kind: AnarchySubject
       namespace: "{{ anarchy_operator_namespace }}"
       name: test-1

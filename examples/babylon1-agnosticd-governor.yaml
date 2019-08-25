@@ -1,5 +1,5 @@
 ---
-apiVersion: gpte.redhat.com/v1
+apiVersion: anarchy.gpte.redhat.com/v1
 kind: AnarchyGovernor
 metadata:
   name: babylon1-agnosticd
@@ -122,15 +122,15 @@ spec:
             state: stopping
       - name: Update desiredState stopped in subject resource handle
         when: >-
-          'gpte.redhat.com/resource-handle-name' in subject.metadata.annotations and
-          'gpte.redhat.com/resource-handle-namespace' in subject.metadata.annotations
+          'poolboy.gpte.redhat.com/resource-handle-name' in subject.metadata.annotations and
+          'poolboy.gpte.redhat.com/resource-handle-namespace' in subject.metadata.annotations
         k8s:
-          api_version: gpte.redhat.com/v1
+          api_version: poolboy.gpte.redhat.com/v1
           kind: ResourceHandle
           name: >-
-            {{ subject.metadata.annotations['gpte.redhat.com/resource-handle-name'] }}
+            {{ subject.metadata.annotations['poolboy.gpte.redhat.com/resource-handle-name'] }}
           namespace: >-
-            {{ subject.metadata.annotations['gpte.redhat.com/resource-handle-namespace'] }}
+            {{ subject.metadata.annotations['poolboy.gpte.redhat.com/resource-handle-namespace'] }}
           merge_type: merge
           definition:
             spec:
@@ -139,15 +139,15 @@ spec:
                   desiredState: stopped
       - name: Update desiredState stopped in subject resource claim
         when: >-
-          'gpte.redhat.com/resource-claim-name' in subject.metadata.annotations and
-          'gpte.redhat.com/resource-claim-namespace' in subject.metadata.annotations
+          'poolboy.gpte.redhat.com/resource-claim-name' in subject.metadata.annotations and
+          'poolboy.gpte.redhat.com/resource-claim-namespace' in subject.metadata.annotations
         k8s:
-          api_version: gpte.redhat.com/v1
+          api_version: poolboy.gpte.redhat.com/v1
           kind: ResourceClaim
           name: >-
-            {{ subject.metadata.annotations['gpte.redhat.com/resource-claim-name'] }}
+            {{ subject.metadata.annotations['poolboy.gpte.redhat.com/resource-claim-name'] }}
           namespace: >-
-            {{ subject.metadata.annotations['gpte.redhat.com/resource-claim-namespace'] }}
+            {{ subject.metadata.annotations['poolboy.gpte.redhat.com/resource-claim-namespace'] }}
           merge_type: merge
           definition:
             spec:
@@ -208,25 +208,25 @@ spec:
           remove_finalizers: true
       - name: Delete resource handle
         when: >-
-          'gpte.redhat.com/resource-handle-name' in subject.metadata.annotations and
-          'gpte.redhat.com/resource-handle-namespace' in subject.metadata.annotations
+          'poolboy.gpte.redhat.com/resource-handle-name' in subject.metadata.annotations and
+          'poolboy.gpte.redhat.com/resource-handle-namespace' in subject.metadata.annotations
         k8s:
-          api_version: gpte.redhat.com/v1
+          api_version: poolboy.gpte.redhat.com/v1
           kind: ResourceHandle
           name: >-
-            {{ subject.metadata.annotations['gpte.redhat.com/resource-handle-name'] }}
+            {{ subject.metadata.annotations['poolboy.gpte.redhat.com/resource-handle-name'] }}
           namespace: >-
-            {{ subject.metadata.annotations['gpte.redhat.com/resource-handle-namespace'] }}
+            {{ subject.metadata.annotations['poolboy.gpte.redhat.com/resource-handle-namespace'] }}
           state: absent
       - name: Delete resource claim
         when: >-
-          'gpte.redhat.com/resource-claim-name' in subject.metadata.annotations and
-          'gpte.redhat.com/resource-claim-namespace' in subject.metadata.annotations
+          'poolboy.gpte.redhat.com/resource-claim-name' in subject.metadata.annotations and
+          'poolboy.gpte.redhat.com/resource-claim-namespace' in subject.metadata.annotations
         k8s:
-          api_version: gpte.redhat.com/v1
+          api_version: poolboy.gpte.redhat.com/v1
           kind: ResourceClaim
           name: >-
-            {{ subject.metadata.annotations['gpte.redhat.com/resource-claim-name'] }}
+            {{ subject.metadata.annotations['poolboy.gpte.redhat.com/resource-claim-name'] }}
           namespace: >-
-            {{ subject.metadata.annotations['gpte.redhat.com/resource-claim-namespace'] }}
+            {{ subject.metadata.annotations['poolboy.gpte.redhat.com/resource-claim-namespace'] }}
           state: absent

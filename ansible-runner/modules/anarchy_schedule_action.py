@@ -128,8 +128,8 @@ def create_action(governor, subject, action, after=None):
                 "generateName": "%s-%s-" % (subject['metadata']['name'], action),
                 "labels": {
                     operator_domain + '/action': action,
-                    operator_domain + "/anarchy-subject": subject['metadata']['name'],
-                    operator_domain + "/anarchy-governor": governor['metadata']['name'],
+                    operator_domain + "/subject": subject['metadata']['name'],
+                    operator_domain + "/governor": governor['metadata']['name'],
                 },
                 "ownerReferences": [{
                     "apiVersion": operator_domain + "/v1",
@@ -177,7 +177,7 @@ def find_actions(subject, actions):
             'v1',
             subject['metadata']['namespace'],
             'anarchyactions',
-            label_selector='%s/anarchy-subject=%s' % (operator_domain, subject['metadata']['name'])
+            label_selector='%s/subject=%s' % (operator_domain, subject['metadata']['name'])
         ).get('items', []) if resource['spec']['action'] in actions
     ]
 
@@ -207,7 +207,7 @@ def init_kube_api():
     kubernetes.config.load_kube_config()
     api_client = kubernetes.client.ApiClient()
     custom_objects_api = kubernetes.client.CustomObjectsApi(api_client)
-    operator_domain = os.environ.get('OPERATOR_DOMAIN', 'gpte.redhat.com')
+    operator_domain = os.environ.get('OPERATOR_DOMAIN', 'anarchy.gpte.redhat.com')
     operator_namespace = open('/run/secrets/kubernetes.io/serviceaccount/namespace').read()
 
 def run_module():
