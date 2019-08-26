@@ -17,6 +17,9 @@ spec:
       secretName: test-aws-creds
       secretKey: aws_secret_access_key
 
+  vars:
+    tower_organization: test
+
   subjectEventHandlers:
   - event: create
     tasks:

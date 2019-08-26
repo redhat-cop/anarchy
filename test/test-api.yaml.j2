@@ -25,7 +25,8 @@ spec:
                 'entry_point': action_config.vars.deployer_entry_point
               },
               'tower': {
-                'action': action_config.name
+                'action': action_config.name,
+                'organization': governor.vars.tower_organization
               }
             }
           })

@@ -374,6 +374,10 @@ class AnarchyGovernor(object):
     def uid(self):
         return self.metadata['uid']
 
+    @property
+    def vars(self):
+        return self.spec.get('vars', {})
+
     def get_parameters(self, runtime, api, subject, action_config):
         parameters = {}
         add_values(parameters, runtime, subject.parameters)

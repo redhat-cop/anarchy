@@ -19,7 +19,6 @@ parameters:
   description: >-
     TLS certificate authority to validate tower server identity. Set to empty
     string to disable TLS certificate checking
-  required: true
 - name: TOWER_USER
   description: User name for tower authentication
   required: true
@@ -52,7 +51,8 @@ objects:
                 'entry_point': action_config.vars.deployer_entry_point
               },
               'tower': {
-                'action': action_config.name
+                'action': action_config.name,
+                'organization': governor.vars.tower_organization
               }
             }
           })
