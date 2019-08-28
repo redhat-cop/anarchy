@@ -168,10 +168,7 @@ def handle_pod_event(event, logger, **_):
         and pod_creation_timestamp < delete_older_than \
         and not 'deletetionTimestamp' in pod_meta:
             try:
-                runtime.core_v1_api.delete_namespaced_pod(
-                    obj.metadata.name,
-                    obj.metadata.namespace
-                )
+                runtime.core_v1_api.delete_namespaced_pod(pod_name, pod_namespace)
             except kubernetes.client.rest.ApiException as e:
                 if e.status != 404:
                     raise
