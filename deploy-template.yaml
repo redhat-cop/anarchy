@@ -10,11 +10,11 @@ parameters:
 - name: ANARCHY_NAMESPACE
   value: anarchy-operator
 - name: ANARCHY_IMAGE
-  value: quay.io/gpte-devops-automation/anarchy-operator:0.1.7
+  value: quay.io/gpte-devops-automation/anarchy-operator:0.1.8
   #value: docker-registry.default.svc:5000/anarchy-operator/anarchy-operator:latest
   #value: image-registry.openshift-image-registry.svc:5000/anarchy-operator/anarchy-operator:latest
 - name: ANSIBLE_RUNNER_IMAGE
-  value: quay.io/gpte-devops-automation/anarchy-ansible-runner:0.1.7
+  value: quay.io/gpte-devops-automation/anarchy-ansible-runner:0.1.8
   #value: docker-registry.default.svc:5000/anarchy-operator/anarchy-ansible-runner:latest
   #value: image-registry.openshift-image-registry.svc:5000/anarchy-operator/anarchy-operator:latest
 - name: ANARCHY_SERVICE_NAME
