@@ -156,6 +156,7 @@ def handle_pod_event(event, logger, **_):
         pod_meta = pod['metadata']
         pod_creation_timestamp = pod_meta['creationTimestamp']
         pod_name = pod_meta['name']
+        pod_namespace = pod_meta['namespace']
         pod_phase = pod['status']['phase']
 
         delete_older_than = (
