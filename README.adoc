@@ -40,7 +40,7 @@ $ oc start-build anarchy-operator --from-dir=.
 
 . Start the ansible-runner build:
 ----
-$ oc start-build anarchy-ansible-runner --from-dir=.
+$ oc start-build anarchy-runner --from-dir=.
 ----
 
 . Watch the build process:

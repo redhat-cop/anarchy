@@ -32,6 +32,7 @@ class AnarchyRuntime(object):
         operator_domain=None,
         operator_namespace=None
     ):
+        self.anarchy_runners = set()
         self.__init_logger(logging_format, logging_level)
         self.__init_domain(operator_domain)
         self.__init_namespace(operator_namespace)

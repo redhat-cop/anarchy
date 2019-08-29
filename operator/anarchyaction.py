@@ -150,6 +150,6 @@ class AnarchyAction(object):
             subject.start_action(runtime, self)
         else:
             runtime.logger.warning(
-                "Unable to find subject %s for action %s!",
+                "Unable to find AnarchySubject %s for action %s!",
                 self.subject_name, self.name
             )

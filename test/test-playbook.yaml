@@ -5,19 +5,20 @@
     oc_cmd: oc
     anarchy_operator_namespace: anarchy-operator
     anarchy_operator_test_namespace: anarchy-operator-test
+    anarchy_runner_replicas: 3
     build: true
-    build_anarchy_ansible_runner: "{{ build }}"
+    build_anarchy_runner: "{{ build }}"
     build_anarchy_operator: "{{ build }}"
     build_anarchy_operator_test: "{{ build }}"
     local_test: false
     openshift_app_domain: apps.babydev.babylon.open.redhat.com
   tasks:
-  - name: Start anarchy-ansible-runner build
+  - name: Start anarchy-runner build
     command: >-
-      {{ oc_cmd }} start-build anarchy-ansible-runner
+      {{ oc_cmd }} start-build anarchy-runner
       -n {{ anarchy_operator_namespace | quote }}
       --from-dir {{ playbook_dir }}/..
-    when: build_anarchy_ansible_runner | bool
+    when: build_anarchy_runner | bool
 
   - name: Start anarchy-operator build
     command: >-
@@ -56,22 +57,22 @@
 
   - when: build_anarchy_operator | bool
     block:
-    - name: Get anachry-ansible-runner BuildConfig
+    - name: Get anachry-runner BuildConfig
       k8s_facts:
         api_version: build.openshift.io/v1
         kind: BuildConfig
-        name: anarchy-ansible-runner
+        name: anarchy-runner
         namespace: "{{ anarchy_operator_namespace }}"
-      register: anarchy_ansible_runner_buildconfig
+      register: anarchy_runner_buildconfig
 
-    - name: Wait for anarchy-ansible-runner build
+    - name: Wait for anarchy-runner build
       k8s_facts:
         api_version: build.openshift.io/v1
         kind: Build
-        name: anarchy-ansible-runner-{{ anarchy_ansible_runner_buildconfig.resources[0].status.lastVersion }}
+        name: anarchy-runner-{{ anarchy_runner_buildconfig.resources[0].status.lastVersion }}
         namespace: "{{ anarchy_operator_namespace }}"
-      register: anarchy_ansible_runner_build
-      until: anarchy_ansible_runner_build.resources[0].status.phase == 'Complete'
+      register: anarchy_runner_build
+      until: anarchy_runner_build.resources[0].status.phase == 'Complete'
       retries: 30
       delay: 10
 
@@ -128,6 +129,15 @@
     #  namespace: "{{ anarchy_operator_namespace }}"
     #  replicas: 0
 
+  - name: Scale down anarchy-runner
+    command: oc scale deployment -n {{ anarchy_operator_namespace | quote }} anarchy-runner --replicas=0
+    #k8s_scale:
+    #  api_version: extensions/v1beta1
+    #  kind: Deployment
+    #  name: anarchy-runner
+    #  namespace: "{{ anarchy_operator_namespace }}"
+    #  replicas: 0
+
   - name: Wait for anarchy-operator scale down
     k8s_facts:
       api_version: v1
@@ -137,6 +147,18 @@
       - name=anarchy-operator
     register: get_anarchy_operator_pod
     until: get_anarchy_operator_pod.resources | length == 0
+    retries: 30
+    delay: 5
+
+  - name: Wait for anarchy-runner scale down
+    k8s_facts:
+      api_version: v1
+      kind: Pod
+      namespace: "{{ anarchy_operator_namespace }}"
+      label_selectors:
+      - name=anarchy-runner
+    register: get_anarchy_runner_pod
+    until: get_anarchy_runner_pod.resources | length == 0
     retries: 30
     delay: 5
 
@@ -211,6 +233,11 @@
       command: >-
         oc scale deployment -n {{ anarchy_operator_namespace | quote }}
         anarchy-operator --replicas=1
+
+    - name: Scale up anarchy-runner
+      command: >-
+        oc scale deployment -n {{ anarchy_operator_namespace | quote }}
+        anarchy-runner --replicas={{ anarchy_runner_replicas }}
 
     - name: Pause for anarchy-operator start-up
       pause:
@@ -327,7 +354,7 @@
 
   - name: Pause for stop completion
     pause:
-      seconds: 60
+      seconds: 30
 
   - name: Get test-1 subject
     k8s_facts:
@@ -360,7 +387,7 @@
 
   - name: Pause for re-start completion
     pause:
-      seconds: 60
+      seconds: 30
 
   - name: Get test-1 subject
     k8s_facts:
@@ -390,7 +417,7 @@
 
   - name: Pause for delete completion
     pause:
-      seconds: 60
+      seconds: 30
 
   - name: Get test-1 subject
     k8s_facts:

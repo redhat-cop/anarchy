@@ -4,6 +4,7 @@ import jmespath
 import json
 import logging
 import os
+import random
 import six
 
 logger = logging.getLogger('anarchy')
@@ -79,52 +80,47 @@ class AnarchyGovernor(object):
             assert 'tasks' in spec, 'eventHandlers must define tasks'
             self.event = spec['event']
             self.tasks = spec['tasks']
-            self.runner_image = spec.get('runner_image', os.environ.get(
-                'ANSIBLE_RUNNER_IMAGE', 'docker-registry.default.svc:5000/anarchy-operator/anarchy-ansible-runner:latest'
-            ))
-            self.service_account = spec.get('service_account', os.environ.get(
-                'ANSIBLE_RUNNER_SERVICE_ACCOUNT', 'anarchy-operator'
-            ))
-            self.cpu_limit = spec.get('cpu_limit', os.environ.get(
-                'ANSIBLE_RUNNER_CPU_LIMIT', '1'
-            ))
-            self.cpu_request = spec.get('cpu_request', os.environ.get(
-                'ANSIBLE_RUNNER_CPU_REQUEST', '200m'
-            ))
-            self.memory_limit = spec.get('memory_limit', os.environ.get(
-                'ANSIBLE_RUNNER_MEMORY_LIMIT', '1Gi'
-            ))
-            self.memory_request = spec.get('memory_request', os.environ.get(
-                'ANSIBLE_RUNNER_MEMORY_REQUEST', '250Mi'
-            ))
 
         def process(self, runtime, governor, subject, action, event_data, event_name, logger):
-            ansible_vars = {
-                "anarchy_governor": {
-                    "metadata": governor.metadata,
-                    "spec": governor.spec
+            event_spec = {
+                'event': {
+                    'name': event_name,
+                    'data': event_data,
+                    'tasks': self.tasks
                 },
-                "anarchy_subject": {
-                    "metadata": subject.metadata,
-                    "spec": subject.spec,
-                    "status": subject.status
+                'governor': {
+                    'metadata': governor.metadata,
+                    'spec': {
+                        'parameters': governor.spec.get('parameters', {}),
+                        'vars': governor.spec.get('vars', {})
+                    }
                 },
-                "event_name": event_name,
-                "event_data": event_data
+                'subject': {
+                    'metadata': subject.metadata,
+                    'spec': subject.spec,
+                    'status': subject.status
+                }
             }
             labels = {
+                runtime.operator_domain + '/anarchy-runner': '',
                 runtime.operator_domain + '/subject-namespace': subject.namespace,
                 runtime.operator_domain + '/subject-name': subject.name,
                 runtime.operator_domain + '/subject-namespace': subject.namespace,
                 runtime.operator_domain + '/event-name': event_name
             }
 
+            try:
+                labels[runtime.operator_domain + '/anarchy-runner'] = \
+                    random.choice(tuple(runtime.anarchy_runners))
+            except IndexError:
+                pass
+
             if action:
-                ansible_vars['anarchy_action'] = {
-                    "metadata": action.metadata,
-                    "spec": action.spec
+                event_spec['action'] = {
+                    'metadata': action.metadata,
+                    'spec': action.spec
                 }
-                generate_name = "{}-{}-{}-".format(
+                generate_name = '{}-{}-{}-'.format(
                     action.namespace,
                     action.name,
                     event_name
@@ -134,73 +130,38 @@ class AnarchyGovernor(object):
                     runtime.operator_domain + '/action-name': action.name
                 })
                 owner_ref = {
-                    "apiVersion": "anarchy.gpte.redhat.com/v1",
-                    "controller": True,
-                    "kind": "AnarchyAction",
-                    "name": action.name,
-                    "uid": action.uid
+                    'apiVersion': runtime.operator_domain + '/v1',
+                    'controller': True,
+                    'kind': 'AnarchyAction',
+                    'name': action.name,
+                    'uid': action.uid
                 }
             else:
-                generate_name = "{}-{}-{}-".format(
+                generate_name = '{}-{}-{}-'.format(
                     subject.namespace,
                     subject.name,
                     event_name
                 )
                 owner_ref = {
-                    "apiVersion": "anarchy.gpte.redhat.com/v1",
-                    "controller": True,
-                    "kind": "AnarchySubject",
-                    "name": subject.name,
-                    "uid": subject.uid
+                    'apiVersion': runtime.operator_domain + '/v1',
+                    'controller': True,
+                    'kind': 'AnarchySubject',
+                    'name': subject.name,
+                    'uid': subject.uid
                 }
 
-            runtime.core_v1_api.create_namespaced_pod(
-                runtime.operator_namespace,
+            runtime.custom_objects_api.create_namespaced_custom_object(
+                runtime.operator_domain, 'v1', runtime.operator_namespace, 'anarchyevents',
                 {
-                    "apiVersion": "v1",
-                    "kind": "Pod",
-                    "metadata": {
-                        "generateName": generate_name,
-                        "labels": labels,
-                        "namespace": subject.namespace,
-                        "ownerReferences": [owner_ref]
+                    'apiVersion': runtime.operator_domain + '/v1',
+                    'kind': 'AnarchyEvent',
+                    'metadata': {
+                        'generateName': generate_name,
+                        'labels': labels,
+                        'namespace': subject.namespace,
+                        'ownerReferences': [owner_ref]
                     },
-                    "spec": {
-                        "containers": [{
-                            "name": "ansible",
-                            "env": [{
-                                "name": "VARS",
-                                "value": json.dumps(ansible_vars, separators=(',', ':'))
-                            },{
-                                "name": "TASKS",
-                                "value": json.dumps(self.tasks, separators=(',', ':'))
-                            },{
-                                "name": "OPERATOR_DOMAIN",
-                                "value": runtime.operator_domain
-                            },{
-                                "name": "POD_NAME",
-                                "valueFrom": {
-                                    "fieldRef": {
-                                        "fieldPath": "metadata.name"
-                                    }
-                                }
-                            }],
-                            "image": self.runner_image,
-                            "imagePullPolicy": "Always",
-                            "resources": {
-                                "limits": {
-                                    "cpu": self.cpu_limit,
-                                    "memory": self.memory_limit
-                                },
-                                "requests": {
-                                    "cpu": self.cpu_request,
-                                    "memory": self.memory_request
-                                }
-                            }
-                        }],
-                        "restartPolicy": "Never",
-                        "serviceAccountName": self.service_account
-                    }
+                    'spec': event_spec
                 }
             )
 

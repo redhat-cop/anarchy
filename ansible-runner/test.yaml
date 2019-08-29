@@ -1,7 +1,0 @@
-- hosts: localhost
-  gather_facts: false
-  connection: local
-  tasks:
-  - anarchy_subject_update:
-      status:
-        state: bar

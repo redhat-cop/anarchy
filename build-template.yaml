@@ -27,7 +27,7 @@ objects:
 - apiVersion: image.openshift.io/v1
   kind: ImageStream
   metadata:
-    name: anarchy-ansible-runner
+    name: anarchy-runner
     namespace: ${NAMESPACE}
   spec:
     lookupPolicy:
@@ -56,25 +56,25 @@ objects:
       dockerStrategy:
         from:
           kind: DockerImage
-          #name: registry.access.redhat.com/ubi8/python-36:latest
+          #name: registry.access.redhat.com/ubi8/python-37:latest
           name: docker.io/library/python:3.7
     triggers: []
 
 - apiVersion: v1
   kind: BuildConfig
   metadata:
-    name: anarchy-ansible-runner
+    name: anarchy-runner
     namespace: ${NAMESPACE}
   spec:
     output:
       to:
         kind: ImageStreamTag
-        name: anarchy-ansible-runner:latest
+        name: anarchy-runner:latest
     postCommit: {}
     resources: {}
     runPolicy: Serial
     source:
-      contextDir: ansible-runner
+      contextDir: anarchy-runner
       git:
         uri: ${GIT_REPO}
         ref: master
@@ -83,5 +83,6 @@ objects:
       dockerStrategy:
         from:
           kind: DockerImage
-          name: registry.access.redhat.com/ubi8/python-36:latest
+          #name: registry.access.redhat.com/ubi8/python-37:latest
+          name: docker.io/library/python:3.7
     triggers: []

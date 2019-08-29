@@ -3,9 +3,9 @@ FROM docker.io/library/python:3.7
 
 USER 0
 
-RUN apt-get update && \
-    apt-get install -y libnss-wrapper && \
-    pip install --ignore-installed \
+RUN apt-get update \
+ && apt-get install -y libnss-wrapper \
+ && pip install --ignore-installed \
       ansible \
       flask \
       gevent \
@@ -16,9 +16,8 @@ RUN apt-get update && \
       prometheus_client \
       pyasn1 \
       pyOpenSSL \
-    && \
-    mkdir -p /operator/tmp && \
-    chmod a+rwx /operator/tmp
+ && mkdir -p /operator/tmp \
+ && chmod a+rwx /operator/tmp
 
 COPY run.sh *.py /operator/
 

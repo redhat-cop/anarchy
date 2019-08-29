@@ -19,8 +19,8 @@ from anarchyapi import AnarchyAPI
 from anarchygovernor import AnarchyGovernor
 from anarchysubject import AnarchySubject
 from anarchyaction import AnarchyAction
+from anarchyevent import AnarchyEvent
 
-action_pod_keep_seconds = int(os.environ.get('ACTION_POD_KEEP_SECONDS', 600))
 flask_api = flask.Flask('rest')
 runtime = AnarchyRuntime()
 
@@ -149,30 +149,39 @@ def handle_action_event(event, logger, **_):
     else:
         logger.warning(event)
 
-@kopf.on.event('', 'v1', 'pods', labels={runtime.operator_domain + '/event-name': None})
-def handle_pod_event(event, logger, **_):
-    if event['type'] in ['ADDED', 'MODIFIED', None]:
-        pod = event['object']
-        pod_meta = pod['metadata']
-        pod_creation_timestamp = pod_meta['creationTimestamp']
-        pod_name = pod_meta['name']
-        pod_namespace = pod_meta['namespace']
-        pod_phase = pod['status']['phase']
+@kopf.on.event(runtime.operator_domain, 'v1', 'anarchyevents')
+def handle_event_event(event, logger, **_):
+    wait_for_init()
+    anarchy_event = AnarchyEvent(event['object'])
+    if event['type'] == 'DELETED':
+        AnarchyEvent.unregister(anarchy_event)
+    elif event['type'] in ['ADDED', 'MODIFIED', None]:
+        AnarchyEvent.register(anarchy_event)
 
-        delete_older_than = (
-            datetime.utcnow() - timedelta(0, action_pod_keep_seconds)
-        ).strftime('%FT%TZ')
-
-        # Delete pods that have completed, are older than the threshold
-        # and are not already marked for deletion.
-        if pod_phase in ('Succeeded', 'Failed') \
-        and pod_creation_timestamp < delete_older_than \
-        and not 'deletetionTimestamp' in pod_meta:
-            try:
-                runtime.core_v1_api.delete_namespaced_pod(pod_name, pod_namespace)
-            except kubernetes.client.rest.ApiException as e:
-                if e.status != 404:
-                    raise
+@kopf.on.event('', 'v1', 'pods')
+def handle_ansible_runner_event(event, logger, **_):
+    pod = event['object']
+    pod_meta = pod['metadata']
+    pod_name = pod_meta['name']
+    if pod_meta.get('labels', {}).get('name', '') != 'anarchy-runner':
+        logger.debug('not an anarchy-runner pod')
+        return
+    runner_count = len(runtime.anarchy_runners)
+    if event['type'] == 'DELETED':
+        if pod_name in runtime.anarchy_runners:
+            runtime.anarchy_runners.remove(pod_name)
+            AnarchyEvent.redistribute(runtime)
+    elif event['type'] in ['ADDED', 'MODIFIED', None]:
+        pod_status = pod['status']
+        if pod['status']['phase'] == 'Running':
+            runtime.anarchy_runners.add(pod_name)
+            # Redistribute events to new runner if none were running
+            if runner_count == 0:
+                AnarchyEvent.redistribute(runtime)
+        else:
+            if pod_name in runtime.anarchy_runners:
+                runtime.anarchy_runners.remove(pod_name)
+                AnarchyEvent.redistribute(runtime)
 
 def __event_callback(action_namespace, action_name, event_name):
     if not flask.request.json:

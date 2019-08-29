@@ -1,0 +1,24 @@
+---
+- block:
+  - name: Load AnarchyEvent vars for {{ anarchy_event_name }}
+    include_vars: "{{ playbook_dir }}/vars/{{ anarchy_event_name }}.yml"
+
+  - name: Run AnarchyEvent tasks for {{ anarchy_event_name }}
+    include_tasks: "{{ playbook_dir }}/tasks/{{ anarchy_event_name }}.yml"
+
+  - name: Update AnarchyEvent status to complete
+    anarchy_event_update:
+      name: "{{ anarchy_event_name }}"
+      status:
+        state: complete
+
+  rescue:
+  - name: Update AnarchyEvent status on error
+    anarchy_event_update:
+      name: "{{ anarchy_event_name }}"
+      status:
+        retries: "{{ retries }}"
+        state: "{{ state }}"
+    vars:
+      retries: "{{ (anarchy_event.status|default({})).retries|default(10)|int - 1 }}"
+      state: "{{ 'retry' if retries|int > 0 else 'failed' }}"
