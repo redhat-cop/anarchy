@@ -10,11 +10,11 @@ parameters:
 - name: ANARCHY_NAMESPACE
   value: anarchy-operator
 - name: ANARCHY_IMAGE
-  value: quay.io/gpte-devops-automation/anarchy-operator:0.1.8
+  value: quay.io/gpte-devops-automation/anarchy-operator:0.1.9
   #value: docker-registry.default.svc:5000/anarchy-operator/anarchy-operator:latest
   #value: image-registry.openshift-image-registry.svc:5000/anarchy-operator/anarchy-operator:latest
 - name: ANARCHY_RUNNER_IMAGE
-  value: quay.io/gpte-devops-automation/anarchy-runner:0.1.8
+  value: quay.io/gpte-devops-automation/anarchy-runner:0.1.9
   #value: docker-registry.default.svc:5000/anarchy-operator/anarchy-runner:latest
   #value: image-registry.openshift-image-registry.svc:5000/anarchy-operator/anarchy-runner:latest
 - name: ANARCHY_SERVICE_NAME
@@ -177,13 +177,35 @@ objects:
           # FIXME - Add probes
           #livenessProbe:
           #readinessProbe:
-          resources: {}
+          resources:
+            limits:
+              cpu: "1"
+              memory: 256Mi
+            requests:
+              cpu: 500m
+              memory: 256Mi
           terminationMessagePath: /dev/termination-log
           terminationMessagePolicy: File
         restartPolicy: Always
         securityContext: {}
         serviceAccountName: ${ANARCHY_SERVICE_NAME}
         terminationGracePeriodSeconds: 30
+
+- apiVersion: autoscaling/v1
+  kind: HorizontalPodAutoscaler
+  metadata:
+    name: ${ANARCHY_RUNNER_SERVICE_NAME}
+    namespace: ${ANARCHY_NAMESPACE}
+  spec:
+    scaleTargetRef:
+      apiVersion: extensions/v1beta1
+      kind: Deployment
+      name: ${ANARCHY_RUNNER_SERVICE_NAME}
+      subresource: scale
+    minReplicas: 2
+    maxReplicas: 20
+    cpuUtilization:
+      targetPercentage: 30
 
 - kind: ClusterRole
   apiVersion: v1
