@@ -57,11 +57,11 @@ class AnarchyEvent(object):
                 anarchy_subject.remove_pending_event(anarchy_event, runtime)
             runtime.runner_finished(runner[8:])
         elif runner == 'failed':
-            if self.failures < 10:
-                retry_delay = timedelta(seconds=5 * 2**self.failures)
+            if anarchy_event.failures < 10:
+                retry_delay = timedelta(seconds=5 * 2**anarchy_event.failures)
             else:
                 retry_delay = timedelta(hours = 1)
-            if self.last_run < datetime.utcnow() - retry_delay:
+            if anarchy_event.last_run < datetime.utcnow() - retry_delay:
                 runtime.logger.warning('Retrying AnarchyEvent %s', anarchy_event.name)
                 anarchy_event.set_runner('pending', runtime)
         elif runner == 'pending':

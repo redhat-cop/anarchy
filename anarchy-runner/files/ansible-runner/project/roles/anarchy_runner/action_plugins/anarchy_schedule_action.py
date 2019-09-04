@@ -113,8 +113,8 @@ class ActionModule(ActionBase):
     def run(self, tmp=None, task_vars=None, **_):
         result = super(ActionModule, self).run(tmp, task_vars)
         module_args = self._task.args.copy()
-        anarchy_governor = self._templar.template(task_vars['anarchy_governor'], fail_on_undefined=True)
-        anarchy_subject = self._templar.template(task_vars['anarchy_subject'], fail_on_undefined=True)
+        anarchy_governor = task_vars['anarchy_governor']
+        anarchy_subject = task_vars['anarchy_subject']
 
         action = module_args.get('action', None)
         after = module_args.get('after', None)

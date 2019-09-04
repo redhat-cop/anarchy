@@ -6,9 +6,5 @@
   roles:
   - role: anarchy_runner
   tasks:
-  - name: Process AnarchyEvents
-    include_role:
-      name: anarchy_runner_event
-    loop: "{{ anarchy_events }}"
-    loop_control:
-      loop_var: anarchy_event_name
+  - name: Run AnarchyEvent tasks
+    include_tasks: "{{ playbook_dir }}/tasks/event.yml"

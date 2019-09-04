@@ -21,7 +21,7 @@ class ActionModule(ActionBase):
     def run(self, tmp=None, task_vars=None, **_):
         result = super(ActionModule, self).run(tmp, task_vars)
         module_args = self._task.args.copy()
-        anarchy_subject = self._templar.template(task_vars['anarchy_subject'], fail_on_undefined=True)
+        anarchy_subject = task_vars['anarchy_subject']
         anarchy_subject_meta = anarchy_subject['metadata']
         anarchy_subject_name = anarchy_subject_meta['name']
 

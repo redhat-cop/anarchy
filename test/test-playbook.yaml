@@ -354,7 +354,7 @@
 
   - name: Pause for stop completion
     pause:
-      seconds: 30
+      seconds: 35
 
   - name: Get test-1 subject
     k8s_facts:
@@ -387,7 +387,7 @@
 
   - name: Pause for re-start completion
     pause:
-      seconds: 30
+      seconds: 35
 
   - name: Get test-1 subject
     k8s_facts:

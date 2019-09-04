@@ -11,16 +11,14 @@ import logging
 import os
 import shutil
 import threading
+import queue
 
 class AnarchyEventRunner(object):
 
     def __init__(self):
-        self.ansible_runner_lock = threading.Lock()
-        self.ansible_runner = None
-        self.ansible_thread = None
         self.domain = os.environ.get('OPERATOR_DOMAIN', 'anarchy.gpte.redhat.com')
-        self.event_queue = {}
-        self.event_queue_batch = {}
+        self.event_cache = {}
+        self.event_queue = queue.Queue()
         self.event_queue_lock = threading.Lock()
         self.kubeconfig = os.environ.get('KUBECONFIG', None)
         self.name = os.environ.get('RUNNER_NAME', None)
@@ -90,104 +88,96 @@ class AnarchyEventRunner(object):
             except OSError as e:
                 logging.warn('Failed to clean arifacts dir %s/%s: %s', artifacts_dir, subdir, str(e))
         tasks_dir = os.path.join(self.runner_dir, 'project', 'tasks')
-        for subdir in os.listdir(tasks_dir):
-            os.unlink(os.path.join(tasks_dir, subdir))
-        vars_dir = os.path.join(self.runner_dir, 'project', 'vars')
-        for subdir in os.listdir(vars_dir):
-            os.unlink(os.path.join(vars_dir, subdir))
-
-    def handle_event(self, anarchy_event, logger):
-        anarchy_event_meta = anarchy_event['metadata']
-        anarchy_event_name = anarchy_event_meta['name']
-        anarchy_event_status = anarchy_event.get('status', None)
-        if not anarchy_event_status \
-        or anarchy_event_status['state'] == 'retry':
-            self.queue_event_run(anarchy_event, logger)
+        for tasks_file in os.listdir(tasks_dir):
+            os.unlink(os.path.join(tasks_dir, tasks_file))
 
     def queue_event_run(self, anarchy_event, logger):
         anarchy_event_meta = anarchy_event['metadata']
         anarchy_event_name = anarchy_event_meta['name']
-        if anarchy_event_name in self.event_queue_batch:
-            logger.info('already in current batch')
+        
+        if anarchy_event_name in self.event_cache:
+            self.event_cache[anarchy_event_name] = anarchy_event
         else:
-            logger.info('queueing')
-            self.event_queue_lock.acquire()
-            self.event_queue[anarchy_event_name] = anarchy_event
-            self.event_queue_lock.release()
-            self.start_runner()
+            self.event_cache[anarchy_event_name] = anarchy_event
+            logger.info('queueing %s', anarchy_event_name)
+            self.event_queue.put(anarchy_event_name)
 
-    def runner_status_handler(self, status, runner_config):
-        status_str = status['status']
-        logging.info('ansible runner ' + status_str)
-        if status_str == 'starting':
-            pass
-        elif status_str == 'running':
-            pass
-        elif status_str in ['successful', 'failed', 'canceled', 'timeout']:
-            self.event_queue_batch = {}
-            self.ansible_runner_lock.release()
+    def run(self):
+        anarchy_event_name = self.event_queue.get()
+        anarchy_event = self.event_cache[anarchy_event_name]
+        self.run_event(anarchy_event_name, anarchy_event)
+        del self.event_cache[anarchy_event_name]
 
-    def start_runner(self):
-        self.event_queue_lock.acquire()
-        if self.event_queue \
-        and self.ansible_runner_lock.acquire(False):
-            self._start_runner()
-        else:
-            self.event_queue_lock.release()
-
-    def _start_runner(self):
-        self.event_queue_batch = self.event_queue
-        self.event_queue = {}
-        self.event_queue_lock.release()
+    def run_event(self, anarchy_event_name, anarchy_event):
         self.clean_runner_dir()
-        self.write_runner_vars()
-        self.write_runner_tasks()
-
+        self.write_runner_vars(anarchy_event)
+        self.write_runner_tasks(anarchy_event)
         logging.info('starting ansible runner')
-        ansible_runner.interface.run_async(
+        ansible_run = ansible_runner.interface.run(
             playbook = 'main.yml',
-            private_data_dir = self.runner_dir,
-            status_handler = self.runner_status_handler
+            private_data_dir = self.runner_dir
+        )
+        stdout = ansible_run.stdout.read()
+        status_str = ansible_run.status
+        if status_str == 'successful':
+            logging.info('Ansible run for %s successful', anarchy_event_name)
+            self.update_anarchy_event(anarchy_event_name, anarchy_event, 'success', status_str, stdout)
+        else:
+            logging.warning('Ansible run for %s %s', anarchy_event_name, ansible_run.status)
+            self.update_anarchy_event(anarchy_event_name, anarchy_event, 'failed', status_str, stdout)
+
+    def update_anarchy_event(self, anarchy_event_name, anarchy_event, status, status_str, stdout):
+        timestamp = datetime.utcnow().strftime('%FT%TZ')
+        patch = {
+            'metadata': {
+                'labels': {
+                    self.domain + '/runner': status + '-' + self.name
+                }
+            },
+            'spec': {
+                'lastRun': timestamp,
+                'log': anarchy_event['spec'].get('log', []) + [{
+                    'runner': self.name,
+                    'result': status_str,
+                    'stdout': stdout,
+                    'timestamp': timestamp
+                }]
+            }
+        }
+        if status != 'success':
+            patch['spec']['failures'] = anarchy_event['spec'].get('failures', 0) + 1
+        self.custom_objects_api.patch_namespaced_custom_object(
+            self.domain, 'v1', self.namespace, 'anarchyevents', anarchy_event_name, patch
         )
 
-    def write_runner_vars(self):
-        open(os.path.join(self.runner_dir, 'env', 'extravars'), mode='w').write(
-            json.dumps({
-                # Write event names to extra vars
-                'anarchy_events': list(self.event_queue_batch.keys()),
-                'anarchy_runner_name': self.name,
-                'anarchy_runner_timestamp': datetime.utcnow().strftime('%FT%TZ')
-            })
-        )
-        # Write event vars to project vars files
-        vars_dir = os.path.join(self.runner_dir, 'project', 'vars')
-        for anarchy_event_name, anarchy_event in self.event_queue_batch.items():
-            # Remove circular references
-            pruned_event = copy.deepcopy(anarchy_event)
-            del pruned_event['spec']['event']['tasks']
-            del pruned_event['spec']['governor']
-            del pruned_event['spec']['subject']
-            if 'action' in pruned_event['spec']:
-                del pruned_event['spec']['action']
-            open(os.path.join(vars_dir, anarchy_event_name + '.yml'), mode='w').write(
-                json.dumps({
-                    'anarchy_event': pruned_event,
-                    'anarchy_action': anarchy_event['spec'].get('action', None),
-                    'anarchy_governor': anarchy_event['spec']['governor'],
-                    'anarchy_subject': anarchy_event['spec']['subject']
-                })
-            )
+    def write_runner_vars(self, anarchy_event):
+        extravars = {
+            'anarchy_event': anarchy_event,
+            'anarchy_governor': anarchy_event['spec']['governor'],
+            'anarchy_governor_name': anarchy_event['spec']['governor']['metadata']['name'],
+            'anarchy_operator_domain': self.domain,
+            'anarchy_operator_namespace': self.namespace,
+            'anarchy_subject': anarchy_event['spec']['subject'],
+            'anarchy_subject_name': anarchy_event['spec']['subject']['metadata']['name'],
+            'anarchy_runner_name': self.name,
+            'anarchy_runner_timestamp': datetime.utcnow().strftime('%FT%TZ'),
+            'event_data': anarchy_event['spec']['event']['data'],
+            'event_name': anarchy_event['spec']['event']['name']
+        }
 
-    def write_runner_tasks(self):
-        tasks_dir = os.path.join(self.runner_dir, 'project', 'tasks')
-        for anarchy_event_name, anarchy_event in self.event_queue_batch.items():
-            open(os.path.join(tasks_dir, anarchy_event_name + '.yml'), mode='w').write(
-                json.dumps(anarchy_event['spec']['event']['tasks'])
-            )
+        if 'action' in anarchy_event['spec']:
+            extravars['anarchy_action'] = anarchy_event['spec']['action']
+            extravars['anarchy_action_name'] = anarchy_event['spec']['action']['metadata']['name']
+
+        open(self.runner_dir + '/env/extravars', mode='w').write(json.dumps(extravars))
+
+    def write_runner_tasks(self, anarchy_event):
+        tasks_file = self.runner_dir + '/project/tasks/event.yml'
+        open(tasks_file, mode='w').write(
+            json.dumps(anarchy_event['spec']['event']['tasks'])
+        )
 
 anarchy_runner = AnarchyEventRunner()
-
-logging.warning(anarchy_runner.name)
 
 @kopf.on.event(
     anarchy_runner.domain, 'v1', 'anarchyevents',
@@ -200,4 +190,16 @@ def handle_event_event(event, logger, **_):
     if event_type == 'DELETED':
         logger.info('AnarchyEvent %s deleted', anarchy_event['metadata']['name'])
     elif event_type in ['ADDED', 'MODIFIED', None]:
-        anarchy_runner.handle_event(anarchy_event, logger)
+        anarchy_runner.queue_event_run(anarchy_event, logger)
+
+def runner_loop():
+    while True:
+        try:
+            anarchy_runner.run()
+        except Exception:
+            logging.exception('Error in runner loop')
+
+threading.Thread(
+    name = 'start-actions',
+    target = runner_loop
+).start()

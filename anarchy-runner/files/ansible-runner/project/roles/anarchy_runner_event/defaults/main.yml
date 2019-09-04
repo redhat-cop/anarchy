@@ -1,8 +1,0 @@
----
-operator_domain: >-
-  {{ lookup('env', 'OPERATOR_DOMAIN') | default('anarchy.gpte.redhat.com', True) }}
-anarchy_runner_label: "{{ operator_domain }}/runner"
-anarchy_event_name: "{{ anarchy_event.metadata.name }}"
-anarchy_action_name: "{{ anarchy_action.metadata.name if anarchy_action else '' }}"
-anarchy_governor_name: "{{ anarchy_governor.metadata.name }}"
-anarchy_subject_name: "{{ anarchy_subject.metadata.name }}"

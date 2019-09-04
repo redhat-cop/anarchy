@@ -30,13 +30,11 @@ RUN apt-get update \
       /anarchy-runner/ansible-runner/artifacts \
       /anarchy-runner/ansible-runner/env \
       /anarchy-runner/ansible-runner/project/tasks \
-      /anarchy-runner/ansible-runner/project/vars \
  && chmod ug=rwx,o= \
       /anarchy-runner/.ansible \
       /anarchy-runner/ansible-runner/artifacts \
       /anarchy-runner/ansible-runner/env \
       /anarchy-runner/ansible-runner/project/tasks \
-      /anarchy-runner/ansible-runner/project/vars \
  && curl -s https://mirror.openshift.com/pub/openshift-v4/clients/ocp/${OCP_VERSION}/openshift-client-linux-${OCP_VERSION}.tar.gz \
   | tar zxvf - -C /bin
 

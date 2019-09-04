@@ -16,6 +16,7 @@ spec:
     aws_secret_access_key:
       secretName: test-aws-creds
       secretKey: aws_secret_access_key
+    check_late_variable_binding: "{{ this_variable_not_defined }}"
 
   vars:
     tower_organization: test
