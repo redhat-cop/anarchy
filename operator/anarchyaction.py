@@ -39,10 +39,8 @@ class AnarchyAction(object):
     @property
     def callback_url(self, event_name = None):
         # FIXME - ensure that callback base url is set
-        callback_url = '{}/event/{}/{}'.format(
-            os.environ['CALLBACK_BASE_URL'],
-            self.namespace,
-            self.name
+        callback_url = '{}/event/{}'.format(
+            os.environ['CALLBACK_BASE_URL'], self.name
         )
         if event_name:
             return callback_url + '/' + event_name
@@ -66,24 +64,12 @@ class AnarchyAction(object):
         return self.metadata['name']
 
     @property
-    def namespace(self):
-        return self.metadata['namespace']
-
-    @property
-    def namespace_name(self):
-        return self.metadata['namespace'] + '/' + self.metadata['name']
-
-    @property
     def uid(self):
         return self.metadata['uid']
 
     @property
     def subject_name(self):
         return self.spec['subjectRef']['name']
-
-    @property
-    def subject_namespace(self):
-        return self.spec['subjectRef']['namespace']
 
     @property
     def vars(self):
@@ -97,7 +83,7 @@ class AnarchyAction(object):
     def create(self, runtime):
         logger.debug('Creating action...')
         resource = runtime.custom_objects_api.create_namespaced_custom_object(
-            runtime.operator_domain, 'v1', self.subject_namespace, 'anarchyactions',
+            runtime.operator_domain, 'v1', runtime.operator_namespace, 'anarchyactions',
             {
                 "apiVersion": runtime.operator_domain + "/v1",
                 "kind": "AnarchyAction",
@@ -107,23 +93,15 @@ class AnarchyAction(object):
         )
         self.metadata = resource['metadata']
         self.spec = resource['spec']
-        logger.debug('Created action %s', self.namespace_name)
+        logger.debug('Created action %s', self.name)
 
     def get_subject(self, runtime):
-        resource = runtime.custom_objects_api.get_namespaced_custom_object(
-            runtime.operator_domain, 'v1', self.subject_namespace,
-            'anarchysubjects', self.subject_name
-        )
-        return AnarchySubject(resource) if resource else None
+        return AnarchySubject.get(self.subject_name, runtime)
 
     def patch_status(self, runtime, patch):
         resource = runtime.custom_objects_api.patch_namespaced_custom_object_status(
-            runtime.operator_domain,
-            'v1',
-            self.namespace,
-            'anarchyactions',
-            self.name,
-            {"status": patch}
+            runtime.operator_domain, 'v1', runtime.operator_namespace, 'anarchyactions',
+            self.name, {"status": patch}
         )
         self.metadata = resource['metadata']
         self.spec = resource['spec']
@@ -141,15 +119,16 @@ class AnarchyAction(object):
         })
 
     def process_event(self, runtime, event_data, event_name=None):
-        subject = self.get_subject(runtime)
-        subject.process_action_event_handlers(runtime, self, event_data, event_name)
+        anarchy_subject = self.get_subject(runtime)
+        anarchy_subject.process_action_event_handlers(runtime, self, event_data, event_name)
 
     def start(self, runtime):
-        subject = self.get_subject(runtime)
-        if subject:
-            subject.start_action(runtime, self)
+        anarchy_subject = self.get_subject(runtime)
+        if anarchy_subject:
+            return anarchy_subject.start_action(runtime, self)
         else:
             runtime.logger.warning(
-                "Unable to find AnarchySubject %s for action %s!",
+                "Unable to find AnarchySubject %s for AnarchyAction %s!",
                 self.subject_name, self.name
             )
+            return False

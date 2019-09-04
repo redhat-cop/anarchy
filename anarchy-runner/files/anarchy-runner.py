@@ -152,8 +152,14 @@ class AnarchyEventRunner(object):
 
     def write_runner_vars(self):
         open(os.path.join(self.runner_dir, 'env', 'extravars'), mode='w').write(
-            json.dumps({'anarchy_events': list(self.event_queue_batch.keys())})
+            json.dumps({
+                # Write event names to extra vars
+                'anarchy_events': list(self.event_queue_batch.keys()),
+                'anarchy_runner_name': self.name,
+                'anarchy_runner_timestamp': datetime.utcnow().strftime('%FT%TZ')
+            })
         )
+        # Write event vars to project vars files
         vars_dir = os.path.join(self.runner_dir, 'project', 'vars')
         for anarchy_event_name, anarchy_event in self.event_queue_batch.items():
             # Remove circular references
@@ -185,7 +191,7 @@ logging.warning(anarchy_runner.name)
 
 @kopf.on.event(
     anarchy_runner.domain, 'v1', 'anarchyevents',
-    labels={'anarchy.gpte.redhat.com/anarchy-runner': anarchy_runner.name}
+    labels={anarchy_runner.domain + '/runner': anarchy_runner.name}
 )
 def handle_event_event(event, logger, **_):
     event_type = event['type']

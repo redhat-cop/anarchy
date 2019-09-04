@@ -9,16 +9,32 @@
   - name: Update AnarchyEvent status to complete
     anarchy_event_update:
       name: "{{ anarchy_event_name }}"
-      status:
-        state: complete
+      metadata:
+        labels: >-
+          {{ { anarchy_runner_label: 'success-' + anarchy_runner_name } }}
+      spec:
+        lastRun: "{{ anarchy_runner_timestamp }}"
+        log: >-
+          {{ anarchy_event.spec.log | default([]) + [{
+            'runner': anarchy_runner_name,
+            'result': 'success',
+            'timestamp': anarchy_runner_timestamp
+          }] }}
 
   rescue:
   - name: Update AnarchyEvent status on error
     anarchy_event_update:
       name: "{{ anarchy_event_name }}"
-      status:
-        retries: "{{ retries }}"
-        state: "{{ state }}"
-    vars:
-      retries: "{{ (anarchy_event.status|default({})).retries|default(10)|int - 1 }}"
-      state: "{{ 'retry' if retries|int > 0 else 'failed' }}"
+      metadata:
+        labels: >-
+          {{ { anarchy_runner_label: 'failed-' + anarchy_runner_name } }}
+      spec:
+        failures: >-
+          {{ anarchy_event_status.failures|default(0)|int + 1 }}
+        lastRun: "{{ anarchy_runner_timestamp }}"
+        log: >-
+          {{ anarchy_event.spec.log | default([]) + [{
+            'runner': anarchy_runner_name,
+            'result': 'failed',
+            'timestamp': anarchy_runner_timestamp
+          }] }}

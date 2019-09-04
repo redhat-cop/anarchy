@@ -6,7 +6,7 @@
     anarchy_operator_namespace: anarchy-operator
     anarchy_operator_test_namespace: anarchy-operator-test
     anarchy_runner_replicas: 3
-    build: true
+    build: false
     build_anarchy_runner: "{{ build }}"
     build_anarchy_operator: "{{ build }}"
     build_anarchy_operator_test: "{{ build }}"

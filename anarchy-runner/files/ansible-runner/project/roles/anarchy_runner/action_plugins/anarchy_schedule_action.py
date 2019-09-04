@@ -95,22 +95,17 @@ def create_action(anarchy_governor, anarchy_subject, action, after=None):
     )
 
 def delete_action(action):
-    return custom_objects_api.get_namespaced_custom_object(
-        operator_domain,
-        'v1',
-        action['metadata']['namespace'],
-        'anarchyactions',
-        action['metadata']['name']
+    return custom_objects_api.delete_namespaced_custom_object(
+        operator_domain, 'v1', action['metadata']['namespace'],
+        'anarchyactions', action['metadata']['name'],
+        kubernetes.client.V1DeleteOptions()
     )
 
 def find_actions(anarchy_subject, actions):
     return [
         resource for resource in custom_objects_api.list_namespaced_custom_object(
-            operator_domain,
-            'v1',
-            anarchy_subject['metadata']['namespace'],
-            'anarchyactions',
-            label_selector='%s/subject=%s' % (operator_domain, anarchy_subject['metadata']['name'])
+            operator_domain, 'v1', anarchy_subject['metadata']['namespace'], 'anarchyactions',
+            label_selector='{}/subject={}'.format(operator_domain, anarchy_subject['metadata']['name'])
         ).get('items', []) if resource['spec']['action'] in actions
     ]
 
@@ -124,7 +119,9 @@ class ActionModule(ActionBase):
         action = module_args.get('action', None)
         after = module_args.get('after', None)
 
-        if after \
+        if isinstance(after, datetime.datetime):
+            after = after.strftime('%FT%TZ')
+        elif after \
         and not datetime_re.match(after) \
         and not time_interval_re.match(after):
             result['failed'] = True

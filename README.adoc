@@ -341,3 +341,8 @@ spec:
 === Examples
 
 Examples are found in the examples folder.
+
+== Configuration
+
+Environment valiable to specify how long subjects should remain cached when active:
+`ANARCHY_SUBJECT_CACHE_AGE_LIMIT` default 600

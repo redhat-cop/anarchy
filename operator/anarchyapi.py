@@ -46,10 +46,6 @@ class AnarchyAPI(object):
         return self.metadata['name']
 
     @property
-    def namespace(self):
-        return self.metadata['namespace']
-
-    @property
     def resource_version(self):
         return self.metadata['resourceVersion']
 

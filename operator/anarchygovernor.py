@@ -81,7 +81,7 @@ class AnarchyGovernor(object):
             self.event = spec['event']
             self.tasks = spec['tasks']
 
-        def process(self, runtime, governor, subject, action, event_data, event_name, logger):
+        def process(self, runtime, governor, anarchy_subject, anarchy_action, event_data, event_name, logger):
             event_spec = {
                 'event': {
                     'name': event_name,
@@ -96,58 +96,39 @@ class AnarchyGovernor(object):
                     }
                 },
                 'subject': {
-                    'metadata': subject.metadata,
-                    'spec': subject.spec,
-                    'status': subject.status
+                    'metadata': anarchy_subject.metadata,
+                    'spec': anarchy_subject.spec,
+                    'status': anarchy_subject.status
                 }
             }
             labels = {
-                runtime.operator_domain + '/anarchy-runner': '',
-                runtime.operator_domain + '/subject-namespace': subject.namespace,
-                runtime.operator_domain + '/subject-name': subject.name,
-                runtime.operator_domain + '/subject-namespace': subject.namespace,
-                runtime.operator_domain + '/event-name': event_name
+                runtime.operator_domain + '/event-name': event_name,
+                runtime.operator_domain + '/runner': 'pending',
+                runtime.operator_domain + '/subject-name': anarchy_subject.name
             }
 
-            try:
-                labels[runtime.operator_domain + '/anarchy-runner'] = \
-                    random.choice(tuple(runtime.anarchy_runners))
-            except IndexError:
-                pass
-
-            if action:
+            if anarchy_action:
                 event_spec['action'] = {
-                    'metadata': action.metadata,
-                    'spec': action.spec
+                    'metadata': anarchy_action.metadata,
+                    'spec': anarchy_action.spec
                 }
-                generate_name = '{}-{}-{}-'.format(
-                    action.namespace,
-                    action.name,
-                    event_name
-                )
-                labels.update({
-                    runtime.operator_domain + '/action-namespace': action.namespace,
-                    runtime.operator_domain + '/action-name': action.name
-                })
+                generate_name = '{}-{}-'.format(anarchy_action.name, event_name)
+                labels[runtime.operator_domain + '/action-name'] = anarchy_action.name
                 owner_ref = {
                     'apiVersion': runtime.operator_domain + '/v1',
                     'controller': True,
                     'kind': 'AnarchyAction',
-                    'name': action.name,
-                    'uid': action.uid
+                    'name': anarchy_action.name,
+                    'uid': anarchy_action.uid
                 }
             else:
-                generate_name = '{}-{}-{}-'.format(
-                    subject.namespace,
-                    subject.name,
-                    event_name
-                )
+                generate_name = '{}-{}-'.format(anarchy_subject.name, event_name)
                 owner_ref = {
                     'apiVersion': runtime.operator_domain + '/v1',
                     'controller': True,
                     'kind': 'AnarchySubject',
-                    'name': subject.name,
-                    'uid': subject.uid
+                    'name': anarchy_subject.name,
+                    'uid': anarchy_subject.uid
                 }
 
             runtime.custom_objects_api.create_namespaced_custom_object(
@@ -158,7 +139,7 @@ class AnarchyGovernor(object):
                     'metadata': {
                         'generateName': generate_name,
                         'labels': labels,
-                        'namespace': subject.namespace,
+                        'namespace': runtime.operator_namespace,
                         'ownerReferences': [owner_ref]
                     },
                     'spec': event_spec
@@ -188,7 +169,7 @@ class AnarchyGovernor(object):
                 return self.governor.api
         @property
         def governor(self):
-            return AnarchyGovernor.governors[self.governor_name]
+            return AnarchyGovernor.cache[self.governor_name]
 
         @property
         def callback_token_parameter(self):
@@ -264,25 +245,26 @@ class AnarchyGovernor(object):
         def vars(self):
             return self.spec.get('vars', {})
 
-    governors = {}
+    cache = {}
 
     @classmethod
     def register(_class, resource):
         governor = _class(resource)
         logger.info("Registered governor %s", governor.name)
-        AnarchyGovernor.governors[governor.name] = governor
+        AnarchyGovernor.cache[governor.name] = governor
         return governor
 
     @classmethod
     def unregister(_class, governor):
-        if isinstance(governor, AnarchyGovernor):
-            del AnarchyGovernor.governors[governor.name]
-        else:
-            del AnarchyGovernor.governors[governor]
+        governor_name = governor.name if isinstance(governor, AnarchyGovernor) else governor
+        try:
+            del AnarchyGovernor.cache[governor_name]
+        except KeyError:
+            pass
 
     @classmethod
     def get(_class, name):
-        return AnarchyGovernor.governors.get(name, None)
+        return AnarchyGovernor.cache.get(name, None)
 
     def __init__(self, resource):
         self.metadata = resource['metadata']
@@ -290,8 +272,8 @@ class AnarchyGovernor(object):
         self.set_subject_event_handlers(self.spec.get('subjectEventHandlers',{}))
         self.actions = {}
         for action_spec in self.spec.get('actions', []):
-            action = AnarchyGovernor.ActionConfig(action_spec, self)
-            self.actions[action.name] = action
+            action_config = AnarchyGovernor.ActionConfig(action_spec, self)
+            self.actions[action_config.name] = action_config
 
     def __set_actions(self):
         actions = {}
@@ -324,10 +306,6 @@ class AnarchyGovernor(object):
         return self.metadata['name']
 
     @property
-    def namespace(self):
-        return self.metadata['namespace']
-
-    @property
     def resource_version(self):
         return self.metadata['resourceVersion']
 
@@ -339,9 +317,9 @@ class AnarchyGovernor(object):
     def vars(self):
         return self.spec.get('vars', {})
 
-    def get_parameters(self, runtime, api, subject, action_config):
+    def get_parameters(self, runtime, api, anarchy_subject, action_config):
         parameters = {}
-        add_values(parameters, runtime, subject.parameters)
+        add_values(parameters, runtime, anarchy_subject.parameters)
         add_values(parameters, runtime, api.parameters)
         add_values(parameters, runtime, self.spec.get('parameters', {}))
         add_values(parameters, runtime, action_config.request.parameters)
@@ -352,24 +330,24 @@ class AnarchyGovernor(object):
             'governor has no action named {}'.format(name)
         return self.actions[name]
 
-    def start_action(self, runtime, subject, action):
-        action_name = action.action
+    def start_action(self, runtime, anarchy_subject, anarchy_action):
+        action_name = anarchy_action.action
         action_config = self.action_config(action_name)
 
         api = action_config.request.api
 
-        parameters = self.get_parameters(runtime, api, subject, action_config)
+        parameters = self.get_parameters(runtime, api, anarchy_subject, action_config)
         if action_config.request.callback_url_parameter:
-            parameters[action_config.request.callback_url_parameter] = action.callback_url
+            parameters[action_config.request.callback_url_parameter] = anarchy_action.callback_url
         if action_config.request.callback_token_parameter:
-            parameters[action_config.request.callback_token_parameter] = action.callback_token
+            parameters[action_config.request.callback_token_parameter] = anarchy_action.callback_token
 
         jinja2vars = {
-            'action': action,
+            'action': anarchy_action,
             'action_config': action_config,
             'governor': self,
             'parameters': parameters,
-            'subject': subject
+            'subject': anarchy_subject
         }
 
         path = jinja2render(action_config.request.path, jinja2vars)
@@ -388,7 +366,7 @@ class AnarchyGovernor(object):
         except ValueError as e:
             pass
 
-        action.patch_status(runtime, {
+        anarchy_action.patch_status(runtime, {
             "apiUrl": url,
             "apiMethod": action_config.request.method,
             "apiResponse": {
@@ -403,30 +381,30 @@ class AnarchyGovernor(object):
         if event_name:
             self.process_action_event_handlers(
                 runtime,
-                subject,
-                action,
+                anarchy_subject,
+                anarchy_action,
                 resp_data,
                 event_name,
                 action_config
             )
 
-    def process_action_event_handlers(self, runtime, subject, action, event_data, event_name, action_config=None):
+    def process_action_event_handlers(self, runtime, anarchy_subject, anarchy_action, event_data, event_name, action_config=None):
         if action_config == None:
-            action_config = self.action_config(action.action)
+            action_config = self.action_config(anarchy_action.action)
         if event_name == None:
             event_name = event_data[action_config.callback_event_name_parameter]
 
-        action.status_event_log(runtime, event_name, event_data)
+        anarchy_action.status_event_log(runtime, event_name, event_data)
 
-        self.process_event_handlers(runtime, action_config.event_handlers, subject, action, event_data, event_name, runtime.logger)
+        self.process_event_handlers(runtime, action_config.event_handlers, anarchy_subject, anarchy_action, event_data, event_name, runtime.logger)
 
-    def process_subject_event_handlers(self, runtime, subject, event_name, logger):
-        return self.process_event_handlers(runtime, self.subject_event_handlers, subject, None, {}, event_name, logger)
+    def process_subject_event_handlers(self, runtime, anarchy_subject, event_name, logger):
+        return self.process_event_handlers(runtime, self.subject_event_handlers, anarchy_subject, None, {}, event_name, logger)
 
-    def process_event_handlers(self, runtime, event_handlers, subject, action, event_data, event_name, logger):
+    def process_event_handlers(self, runtime, event_handlers, anarchy_subject, anarchy_action, event_data, event_name, logger):
         event_handled = False
         for event_handler in event_handlers:
             if event_handler.event == event_name:
                 event_handled = True
-                event_handler.process(runtime, self, subject, action, event_data, event_name, logger)
+                event_handler.process(runtime, self, anarchy_subject, anarchy_action, event_data, event_name, logger)
         return event_handled

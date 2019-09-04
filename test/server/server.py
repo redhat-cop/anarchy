@@ -106,7 +106,7 @@ def launch():
         url=callback_url
     )
     schedule_callback(
-        after=time.time() + 30,
+        after=time.time() + 10,
         event='complete',
         job_id=job_id,
         msg='completed ' + tower_action,

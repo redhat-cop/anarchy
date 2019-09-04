@@ -1,60 +1,94 @@
+from datetime import datetime, timedelta
 import logging
 import random
 import threading
 
 logger = logging.getLogger('anarchy')
 
-from anarchygovernor import AnarchyGovernor
+from anarchysubject import AnarchySubject
 
 class AnarchyEvent(object):
 
-    active_cache = {}
-    active_cache_lock = threading.Lock()
+    @staticmethod
+    def handle_lost_runner(runner_name, runtime):
+        """Notified that a runner has been lost, reset AnarchyEvents to pending"""
+        for resource in runtime.custom_objects_api.list_namespaced_custom_object(
+            runtime.operator_domain, 'v1', runtime.operator_namespace, 'anarchyevents',
+            label_selector = runtime.runner_label + '=' + runner_name
+        ).get('items', []):
+            anarchy_event_name = resource['metadata']['name']
+            anarchy_subject_name = resource['spec']['subject']['metadata']['name']
+            anarchy_subject = AnarchySubject.get(anarchy_subject_name, runtime)
+            if anarchy_subject:
+                anarchy_subject.has_job_queued_or_running = False
+            runtime.logger.warning(
+                'Resetting AnarchyEvent %s to pending after lost runner',
+                anarchy_event_name
+            )
+            runtime.custom_objects_api.patch_namespaced_custom_object(
+                runtime.operator_domain, 'v1', runtime.operator_namespace,
+                'anarchyevents', anarchy_event_name,
+                { 'metadata': { 'labels': { runtime.runner_label: 'pending' } } }
+            )
 
     @staticmethod
-    def redistribute(runtime):
-        runner_label = runtime.operator_domain + '/anarchy-runner'
-
-        if not AnarchyEvent.active_cache:
-            pass
-        elif not runtime.anarchy_runners:
-            logger.warning('Unable to redistribute events, no runners')
+    def register(anarchy_event, runtime):
+        runner = anarchy_event.metadata['labels'].get(runtime.runner_label, None)
+        if not runner:
             return
-        AnarchyEvent.active_cache_lock.acquire()
-        try:
-            for anarchy_event in AnarchyEvent.active_cache.values():
-                runner_name = anarchy_event.metadata.get('labels', {}).get(runner_label, None)
-                if runner_name not in runtime.anarchy_runners:
-                    anarchy_runner = random.choice(tuple(runtime.anarchy_runners))
-                    runtime.custom_objects_api.patch_namespaced_custom_object(
-                        runtime.operator_domain, 'v1', anarchy_event.namespace,
-                        'anarchyevents', anarchy_event.name,
-                        {
-                            'metadata': {
-                                'labels': { runner_label: anarchy_runner }
-                            }
-                        }
-                    )
-        finally:
-            AnarchyEvent.active_cache_lock.release()
+
+        anarchy_subject_name = anarchy_event.subject_name
+        dequeue_event_from_subject = True
+        enqueue_event_to_subject = False
+        event_is_running = False
+        if runner.startswith('failed-'):
+            runtime.logger.warning('Failure on AnarchyEvent %s', anarchy_event.name)
+            anarchy_event.set_runner('failed', runtime)
+            anarchy_subject = AnarchySubject.get(anarchy_subject_name, runtime)
+            if anarchy_subject:
+                anarchy_subject.has_job_queued_or_running = False
+            runtime.runner_finished(runner[7:])
+        elif runner.startswith('success-'):
+            runtime.logger.info('Success on AnarchyEvent %s', anarchy_event.name)
+            anarchy_event.set_runner(None, runtime)
+            anarchy_subject = AnarchySubject.get(anarchy_subject_name, runtime)
+            if anarchy_subject:
+                anarchy_subject.has_job_queued_or_running = False
+                anarchy_subject.remove_pending_event(anarchy_event, runtime)
+            runtime.runner_finished(runner[8:])
+        elif runner == 'failed':
+            if self.failures < 10:
+                retry_delay = timedelta(seconds=5 * 2**self.failures)
+            else:
+                retry_delay = timedelta(hours = 1)
+            if self.last_run < datetime.utcnow() - retry_delay:
+                runtime.logger.warning('Retrying AnarchyEvent %s', anarchy_event.name)
+                anarchy_event.set_runner('pending', runtime)
+        elif runner == 'pending':
+            enqueue_event_to_subject = True
+        elif runner:
+            event_is_running = True
+            enqueue_event_to_subject = True
+
+        if enqueue_event_to_subject:
+            anarchy_subject = AnarchySubject.get(anarchy_subject_name, runtime)
+            if anarchy_subject:
+                anarchy_subject.enqueue_event(anarchy_event, event_is_running, runtime)
+            else:
+                runtime.logger.warning(
+                    'Unable to get AnarchySubject %s for pending AnarchyEvent %s',
+                    anarchy_subject_name, anarchy_event.name
+                )
 
     @staticmethod
-    def register(anarchy_event):
-        if anarchy_event.is_active:
-            AnarchyEvent.active_cache_lock.acquire()
-            AnarchyEvent.active_cache[anarchy_event.name] = anarchy_event
-            AnarchyEvent.active_cache_lock.release()
-        elif anarchy_event.name in AnarchyEvent.active_cache:
-            AnarchyEvent.active_cache_lock.acquire()
-            del AnarchyEvent.active_cache[anarchy_event.name]
-            AnarchyEvent.active_cache_lock.release()
-
-    @staticmethod
-    def unregister(anarchy_event):
-        if anarchy_event.name in AnarchyEvent.active_cache:
-            AnarchyEvent.active_cache_lock.acquire()
-            del AnarchyEvent.active_cache[anarchy_event.name]
-            AnarchyEvent.active_cache_lock.release()
+    def unregister(anarchy_event, runtime):
+        anarchy_subject_name = anarchy_event.spec['subject']['metadata']['name']
+        anarchy_subject = AnarchySubject.cache.get(anarchy_subject_name, None)
+        if anarchy_subject:
+            anarchy_subject.remove_pending_event(anarchy_event, runtime)
+        runner = anarchy_event.metadata['labels'].get(runtime.runner_label, None)
+        if runner:
+            runtime.runner_finished(runner)
 
     def __init__(self, resource):
         self.metadata = resource['metadata']
@@ -67,28 +101,44 @@ class AnarchyEvent(object):
         pass
 
     @property
-    def is_active(self):
-        return self.state in ['new', 'retry']
+    def creation_timestamp(self):
+        return self.metadata.get('creationTimestamp')
+
+    @property
+    def failures(self):
+        return self.spec.get('failures', 0)
+
+    @property
+    def last_run(self):
+        if 'lastRun' in self.spec:
+            datetime.strptime(self.spec['lastRun'], '%Y-%m-%dT%H:%M:%SZ')
+        else:
+            return None
+
+    @property
+    def governor_name(self):
+        return self.spec['governor']['metadata']['name']
 
     @property
     def name(self):
         return self.metadata['name']
 
     @property
-    def namespace(self):
-        return self.metadata['namespace']
-
-    @property
-    def namespace_name(self):
-        return self.metadata['namespace'] + '/' + self.metadata['name']
-
-    @property
-    def state(self):
-        if self.status:
-            return self.status['state']
-        else:
-            return 'new'
+    def subject_name(self):
+        return self.spec['subject']['metadata']['name']
 
     @property
     def uid(self):
         return self.metadata['uid']
+
+    def set_runner(self, runner_value, runtime):
+        runtime.logger.debug('Set runner for AnarchyEvent %s to %s', self.name, runner_value)
+        runtime.custom_objects_api.patch_namespaced_custom_object(
+            runtime.operator_domain, 'v1', runtime.operator_namespace,
+            'anarchyevents', self.name,
+            {
+                'metadata': {
+                    'labels': { runtime.runner_label: runner_value }
+                }
+            }
+        )

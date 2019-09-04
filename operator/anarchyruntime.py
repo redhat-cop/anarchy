@@ -2,6 +2,8 @@ import base64
 import kubernetes
 import logging
 import os
+import queue
+import time
 
 #def override_select_header_content_type(content_types):
 #    """
@@ -32,11 +34,15 @@ class AnarchyRuntime(object):
         operator_domain=None,
         operator_namespace=None
     ):
-        self.anarchy_runners = set()
         self.__init_logger(logging_format, logging_level)
         self.__init_domain(operator_domain)
         self.__init_namespace(operator_namespace)
         self.__init_kube_apis()
+        # Runners are registered and checked periodically to make sure they are still running
+        self.anarchy_available_runner_queue = queue.Queue()
+        self.anarchy_runners = {}
+        self.last_lost_runner_check = time.time()
+        self.runner_label = self.operator_domain + '/runner'
 
     def __init_domain(self, operator_domain):
         if operator_domain:
@@ -63,13 +69,7 @@ class AnarchyRuntime(object):
         self.custom_objects_api = kubernetes.client.CustomObjectsApi(api_client)
 
     def __init_logger(self, logging_format, logging_level):
-        handler = logging.StreamHandler()
-        handler.setLevel(logging_level)
-        handler.setFormatter(
-            logging.Formatter(logging_format)
-        )
         self.logger = logging.getLogger('operator')
-        self.logger.addHandler(handler)
 
     def __init_namespace(self, operator_namespace):
         if operator_namespace:
@@ -87,3 +87,28 @@ class AnarchyRuntime(object):
             secret_name, self.operator_namespace
         )
         return { k: base64.b64decode(v).decode('utf-8') for (k, v) in secret.data.items() }
+
+    def get_available_runner(self):
+        while True:
+            runner = self.anarchy_available_runner_queue.get()
+            if runner in self.anarchy_runners:
+                return runner
+
+    def put_available_runner(self, runner):
+        self.logger.info('Runner %s is available', runner)
+        self.anarchy_available_runner_queue.put(runner)
+
+    def register_runner(self, runner):
+        if runner not in self.anarchy_runners:
+            self.put_available_runner(runner)
+        self.anarchy_runners[runner] = time.time()
+
+    def remove_runner(self, runner):
+        try:
+            del self.anarchy_runners[runner]
+        except KeyError:
+            pass
+
+    def runner_finished(self, runner):
+        if runner in self.anarchy_runners:
+            self.put_available_runner(runner)
