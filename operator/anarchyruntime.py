@@ -99,9 +99,10 @@ class AnarchyRuntime(object):
         self.anarchy_available_runner_queue.put(runner)
 
     def register_runner(self, runner):
-        if runner not in self.anarchy_runners:
-            self.put_available_runner(runner)
+        runner_is_new = runner not in self.anarchy_runners
         self.anarchy_runners[runner] = time.time()
+        if runner_is_new:
+            self.put_available_runner(runner)
 
     def remove_runner(self, runner):
         try:

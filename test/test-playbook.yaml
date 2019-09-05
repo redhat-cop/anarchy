@@ -241,7 +241,7 @@
 
     - name: Pause for anarchy-operator start-up
       pause:
-        seconds: 35
+        seconds: 40
 
   - name: Create AnarchySubject test-1
     k8s:
@@ -262,7 +262,7 @@
 
   - name: Pause for provision start
     pause:
-      seconds: 30
+      seconds: 40
 
   - name: Get test-1 provision action
     k8s_facts:
@@ -354,7 +354,7 @@
 
   - name: Pause for stop completion
     pause:
-      seconds: 35
+      seconds: 40
 
   - name: Get test-1 subject
     k8s_facts:
@@ -387,7 +387,7 @@
 
   - name: Pause for re-start completion
     pause:
-      seconds: 35
+      seconds: 40
 
   - name: Get test-1 subject
     k8s_facts:
@@ -417,7 +417,7 @@
 
   - name: Pause for delete completion
     pause:
-      seconds: 30
+      seconds: 40
 
   - name: Get test-1 subject
     k8s_facts:
