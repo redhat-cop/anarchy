@@ -1,5 +1,7 @@
 = Anarchy Operator
 
+image::docs/Anarchy.png[Anarchy Diagram,236,300]
+
 The Anarchy operator provides a method of managing state for otherwise stateless API operations.
 The name "anarchy" is both ironic and to the point.
 While the anarchy operator governs interactions with RESTful APIs, it leaves the nature of the requests open for configuration.
@@ -10,7 +12,7 @@ Actions are tracked as custom resources, allowing for complete visibility of cur
 
 == Architecture
 
-image::docs/AnarchyDiagram.png[Anarchy Diagram]
+image::docs/AnarchyDiagram.png[Anarchy Diagram,482,500]
 
 == Installation
 
