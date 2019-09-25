@@ -146,9 +146,15 @@ class AnarchyEventRunner(object):
         }
         if status != 'success':
             patch['spec']['failures'] = anarchy_event['spec'].get('failures', 0) + 1
-        self.custom_objects_api.patch_namespaced_custom_object(
-            self.domain, 'v1', self.namespace, 'anarchyevents', anarchy_event_name, patch
-        )
+        try:
+            self.custom_objects_api.patch_namespaced_custom_object(
+                self.domain, 'v1', self.namespace, 'anarchyevents', anarchy_event_name, patch
+            )
+        except kubernetes.client.rest.ApiException as e:
+            if e.status == 404:
+                logging.warning('Unable to updated deleted AnarchyEvent %s', anarchy_event_name)
+            else:
+                raise
 
     def write_runner_vars(self, anarchy_event):
         extravars = {
