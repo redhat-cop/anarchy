@@ -136,12 +136,14 @@ spec:
             {{ anarchy_subject.metadata.annotations['poolboy.gpte.redhat.com/resource-handle-name'] }}
           namespace: >-
             {{ anarchy_subject.metadata.annotations['poolboy.gpte.redhat.com/resource-handle-namespace'] }}
-          merge_type: merge
+          merge_type: json
           definition:
-            spec:
-              template:
-                spec:
-                  desiredState: stopped
+          - op: replace
+            path: /spec/resources/{{ resource_index }}/template/spec/desiredState
+            value: stopped
+          vars:
+            resource_index: >-
+              {{ anarchy_subject.metadata.annotations['poolboy.gpte.redhat.com/resource-index'] | default(0) }}
       - name: Update desiredState stopped in subject resource claim
         when: >-
           'poolboy.gpte.redhat.com/resource-claim-name' in anarchy_subject.metadata.annotations and
@@ -153,12 +155,14 @@ spec:
             {{ anarchy_subject.metadata.annotations['poolboy.gpte.redhat.com/resource-claim-name'] }}
           namespace: >-
             {{ anarchy_subject.metadata.annotations['poolboy.gpte.redhat.com/resource-claim-namespace'] }}
-          merge_type: merge
+          merge_type: json
           definition:
-            spec:
-              template:
-                spec:
-                  desiredState: stopped
+          - op: replace
+            path: /spec/resources/{{ resource_index }}/template/spec/desiredState
+            value: stopped
+          vars:
+            resource_index: >-
+              {{ anarchy_subject.metadata.annotations['poolboy.gpte.redhat.com/resource-index'] | default(0) }}
     - event: complete
       tasks:
       - name: Set state stopped in subject status
