@@ -82,9 +82,11 @@ class AnarchyRuntime(object):
         else:
             self.operator_namespace = 'anarchy-operator'
 
-    def get_secret_data(self, secret_name):
+    def get_secret_data(self, secret_name, secret_namespace=None):
+        if not secret_namespace:
+            secret_namespace = self.operator_namespace
         secret = self.core_v1_api.read_namespaced_secret(
-            secret_name, self.operator_namespace
+            secret_name, secret_namespace
         )
         return { k: base64.b64decode(v).decode('utf-8') for (k, v) in secret.data.items() }
 

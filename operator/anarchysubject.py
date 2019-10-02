@@ -133,6 +133,10 @@ class AnarchySubject(object):
         return self.spec.get('parameters', {})
 
     @property
+    def parameter_secrets(self):
+        return self.spec.get('parameterSecrets', [])
+
+    @property
     def resource_version(self):
         return self.metadata['resourceVersion']
 

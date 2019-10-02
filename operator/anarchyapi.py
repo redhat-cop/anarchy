@@ -114,6 +114,10 @@ class AnarchyAPI(object):
         return self.spec.get('parameters', {})
 
     @property
+    def parameter_secrets(self):
+        return self.spec.get('parameterSecrets', [])
+
+    @property
     def path(self):
         return self.spec.get('path', '/')
 

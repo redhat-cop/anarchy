@@ -33,6 +33,16 @@ def recursive_dict_update(a, b):
 jinja2env.filters['combine'] = lambda a, b: recursive_dict_update(copy.deepcopy(a), b)
 jinja2env.filters['to_json'] = lambda x: json.dumps(x, separators=(',', ':'))
 
+def add_secret_values(parameters, runtime, secret_refs):
+    for secret in secret_refs:
+        if isinstance(secret, dict):
+            name = secret['name']
+            namespace = secret.get('namespace', None)
+        else:
+            name = secret
+            namespace = None
+        parameters.update(runtime.get_secret_data(name, namespace))
+
 def add_values(parameters, runtime, add):
     secrets = {}
     for name, value in add.items():
@@ -188,6 +198,10 @@ class AnarchyGovernor(object):
             return self.spec.get('parameters', {})
 
         @property
+        def parameter_secrets(self):
+            return self.spec.get('parameterSecrets', [])
+
+        @property
         def path(self):
             return self.spec.get('path', self.api.path)
 
@@ -306,6 +320,14 @@ class AnarchyGovernor(object):
         return self.metadata['name']
 
     @property
+    def parameters(self):
+        return self.spec.get('parameters', {})
+
+    @property
+    def parameter_secrets(self):
+        return self.spec.get('parameterSecrets', [])
+
+    @property
     def resource_version(self):
         return self.metadata['resourceVersion']
 
@@ -320,9 +342,13 @@ class AnarchyGovernor(object):
     def get_parameters(self, runtime, api, anarchy_subject, action_config):
         parameters = {}
         add_values(parameters, runtime, anarchy_subject.parameters)
+        add_secret_values(parameters, runtime, anarchy_subject.parameter_secrets)
         add_values(parameters, runtime, api.parameters)
-        add_values(parameters, runtime, self.spec.get('parameters', {}))
+        add_secret_values(parameters, runtime, api.parameter_secrets)
+        add_values(parameters, runtime, self.parameters)
+        add_secret_values(parameters, runtime, self.parameter_secrets)
         add_values(parameters, runtime, action_config.request.parameters)
+        add_secret_values(parameters, runtime, action_config.request.parameter_secrets)
         return parameters
 
     def action_config(self, name):

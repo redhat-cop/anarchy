@@ -10,13 +10,19 @@ parameters:
 - name: ANARCHY_NAMESPACE
   value: anarchy-operator
 - name: ANARCHY_IMAGE
-  value: quay.io/gpte-devops-automation/anarchy-operator:0.2.2
+  value: quay.io/gpte-devops-automation/anarchy-operator:0.2.3
   #value: docker-registry.default.svc:5000/anarchy-operator/anarchy-operator:latest
   #value: image-registry.openshift-image-registry.svc:5000/anarchy-operator/anarchy-operator:latest
+- name: ANARCHY_IMAGE_PULL_POLICY
+  value: IfNotPresent
+  #value: Always
 - name: ANARCHY_RUNNER_IMAGE
-  value: quay.io/gpte-devops-automation/anarchy-runner:0.2.2
+  value: quay.io/gpte-devops-automation/anarchy-runner:0.2.3
   #value: docker-registry.default.svc:5000/anarchy-operator/anarchy-runner:latest
   #value: image-registry.openshift-image-registry.svc:5000/anarchy-operator/anarchy-runner:latest
+- name: ANARCHY_RUNNER_IMAGE_PULL_POLICY
+  value: IfNotPresent
+  #value: Always
 - name: ANARCHY_SERVICE_NAME
   value: anarchy-operator
 - name: ANARCHY_RUNNER_SERVICE_NAME
@@ -134,7 +140,7 @@ objects:
           - name: CALLBACK_BASE_URL
             value: https://${ANARCHY_NAMESPACE}.${APP_DOMAIN}
           image: ${ANARCHY_IMAGE}
-          imagePullPolicy: IfNotPresent
+          imagePullPolicy: ${ANARCHY_IMAGE_PULL_POLICY}
           # FIXME - Add probes
           #livenessProbe:
           #readinessProbe:
@@ -173,7 +179,7 @@ objects:
               fieldRef:
                 fieldPath: metadata.name
           image: ${ANARCHY_RUNNER_IMAGE}
-          imagePullPolicy: IfNotPresent
+          imagePullPolicy: ${ANARCHY_RUNNER_IMAGE_PULL_POLICY}
           # FIXME - Add probes
           #livenessProbe:
           #readinessProbe:

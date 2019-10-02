@@ -5,7 +5,7 @@ metadata:
   name: test
   namespace: {{ anarchy_operator_namespace | to_json }}
 spec:
-  baseUrl: https://anarchy-operator-test-server-{{ anarchy_operator_test_namespace }}.{{ openshift_app_domain }}
+  baseUrl: https://{{ test_api_server_hostname }}
 {% raw %}
   basicAuth:
     secretName: test-api-creds

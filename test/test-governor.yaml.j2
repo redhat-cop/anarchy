@@ -10,13 +10,10 @@ spec:
 
   parameters:
     cloud_provider: ec2
-    aws_access_key_id:
-      secretName: test-aws-creds
-      secretKey: aws_access_key_id
-    aws_secret_access_key:
-      secretName: test-aws-creds
-      secretKey: aws_secret_access_key
     check_late_variable_binding: "{{ this_variable_not_defined }}"
+
+  parameterSecrets:
+  - name: test-aws-creds
 
   vars:
     tower_organization: test

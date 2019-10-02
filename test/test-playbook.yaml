@@ -11,8 +11,21 @@
     build_anarchy_operator: "{{ build }}"
     build_anarchy_operator_test: "{{ build }}"
     local_test: false
-    openshift_app_domain: apps.babydev.babylon.open.redhat.com
   tasks:
+  - name: Get route for test api server
+    k8s_facts:
+      api_version: route.openshift.io/v1
+      kind: Route
+      name: anarchy-operator-test-server
+      namespace: "{{ anarchy_operator_test_namespace }}"
+    register: r_get_test_api_server_route
+    failed_when: not r_get_test_api_server_route.resources
+
+  - name: Set fact test_api_server_hostname
+    set_fact:
+      test_api_server_hostname: >-
+        {{ r_get_test_api_server_route.resources[0].spec.host }}
+
   - name: Start anarchy-runner build
     command: >-
       {{ oc_cmd }} start-build anarchy-runner

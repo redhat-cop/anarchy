@@ -90,6 +90,12 @@ def launch():
         assert tower, 'tower not provided in extra_vars.job_vars.__meta__'
         tower_action = tower.get('action', None)
         assert tower_action, 'action not provided in extra_vars.job_vars.__meta__.tower'
+        aws_access_key_id = job_vars.get('aws_access_key_id', None)
+        assert aws_access_key_id, 'aws_access_key_id not provided in extra_vars.job_vars'
+        assert aws_access_key_id == 'th3k3y', 'aws_access_key_id not correct'
+        aws_secret_access_key = job_vars.get('aws_secret_access_key', None)
+        assert aws_secret_access_key, 'aws_secret_access_key not provided in extra_vars.job_vars'
+        assert aws_secret_access_key == 'th34cc355', 'aws_secret_access_key not correct'
     except Exception as e:
         logger.exception("Invalid parameters passed to job-runner launch: " + str(e))
         flask.abort(400)
