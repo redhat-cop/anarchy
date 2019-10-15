@@ -126,6 +126,9 @@ spec:
         when: >-
           'poolboy.gpte.redhat.com/resource-handle-name' in anarchy_subject.metadata.annotations and
           'poolboy.gpte.redhat.com/resource-handle-namespace' in anarchy_subject.metadata.annotations
+        vars:
+          resource_index: >-
+            {{ anarchy_subject.metadata.annotations['poolboy.gpte.redhat.com/resource-index'] | default(0) }}
         k8s:
           api_version: poolboy.gpte.redhat.com/v1
           kind: ResourceHandle
@@ -138,13 +141,13 @@ spec:
           - op: replace
             path: /spec/resources/{{ resource_index }}/template/spec/desiredState
             value: stopped
-          vars:
-            resource_index: >-
-              {{ anarchy_subject.metadata.annotations['poolboy.gpte.redhat.com/resource-index'] | default(0) }}
       - name: Update desiredState stopped in subject resource claim
         when: >-
           'poolboy.gpte.redhat.com/resource-claim-name' in anarchy_subject.metadata.annotations and
           'poolboy.gpte.redhat.com/resource-claim-namespace' in anarchy_subject.metadata.annotations
+        vars:
+          resource_index: >-
+            {{ anarchy_subject.metadata.annotations['poolboy.gpte.redhat.com/resource-index'] | default(0) }}
         k8s:
           api_version: poolboy.gpte.redhat.com/v1
           kind: ResourceClaim
@@ -157,9 +160,6 @@ spec:
           - op: replace
             path: /spec/resources/{{ resource_index }}/template/spec/desiredState
             value: stopped
-          vars:
-            resource_index: >-
-              {{ anarchy_subject.metadata.annotations['poolboy.gpte.redhat.com/resource-index'] | default(0) }}
     - event: complete
       tasks:
       - name: Set state stopped in subject status
