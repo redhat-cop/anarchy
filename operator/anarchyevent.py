@@ -61,7 +61,10 @@ class AnarchyEvent(object):
                 retry_delay = timedelta(seconds=5 * 2**anarchy_event.failures)
             else:
                 retry_delay = timedelta(hours = 1)
-            if anarchy_event.last_run < datetime.utcnow() - retry_delay:
+            if not anarchy_event.last_run:
+                runtime.logger.warning('Retrying AnarchyEvent %s (spec.lastRun not set)', anarchy_event.name)
+                anarchy_event.set_runner('pending', runtime)
+            elif anarchy_event.last_run < datetime.utcnow() - retry_delay:
                 runtime.logger.warning('Retrying AnarchyEvent %s', anarchy_event.name)
                 anarchy_event.set_runner('pending', runtime)
         elif runner == 'pending':
