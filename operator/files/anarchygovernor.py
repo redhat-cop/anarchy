@@ -1,15 +1,14 @@
 import copy
 import jinja2
-import jmespath
 import json
 import logging
 import os
 import random
 import six
 
-logger = logging.getLogger('anarchy')
-
 from anarchyapi import AnarchyAPI
+
+operator_logger = logging.getLogger('operator')
 
 jinja2env = jinja2.Environment(
     block_start_string='{%:',
@@ -91,7 +90,7 @@ class AnarchyGovernor(object):
             self.event = spec['event']
             self.tasks = spec['tasks']
 
-        def process(self, runtime, governor, anarchy_subject, anarchy_action, event_data, event_name, logger):
+        def process(self, runtime, governor, anarchy_subject, anarchy_action, event_data, event_name):
             event_spec = {
                 'event': {
                     'name': event_name,
@@ -264,7 +263,7 @@ class AnarchyGovernor(object):
     @classmethod
     def register(_class, resource):
         governor = _class(resource)
-        logger.info("Registered governor %s", governor.name)
+        operator_logger.info("Registered governor %s", governor.name)
         AnarchyGovernor.cache[governor.name] = governor
         return governor
 
@@ -422,15 +421,15 @@ class AnarchyGovernor(object):
 
         anarchy_action.status_event_log(runtime, event_name, event_data)
 
-        self.process_event_handlers(runtime, action_config.event_handlers, anarchy_subject, anarchy_action, event_data, event_name, runtime.logger)
+        self.process_event_handlers(runtime, action_config.event_handlers, anarchy_subject, anarchy_action, event_data, event_name)
 
-    def process_subject_event_handlers(self, runtime, anarchy_subject, event_name, logger):
-        return self.process_event_handlers(runtime, self.subject_event_handlers, anarchy_subject, None, {}, event_name, logger)
+    def process_subject_event_handlers(self, runtime, anarchy_subject, event_name):
+        return self.process_event_handlers(runtime, self.subject_event_handlers, anarchy_subject, None, {}, event_name)
 
-    def process_event_handlers(self, runtime, event_handlers, anarchy_subject, anarchy_action, event_data, event_name, logger):
+    def process_event_handlers(self, runtime, event_handlers, anarchy_subject, anarchy_action, event_data, event_name):
         event_handled = False
         for event_handler in event_handlers:
             if event_handler.event == event_name:
                 event_handled = True
-                event_handler.process(runtime, self, anarchy_subject, anarchy_action, event_data, event_name, logger)
+                event_handler.process(runtime, self, anarchy_subject, anarchy_action, event_data, event_name)
         return event_handled

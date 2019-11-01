@@ -5,42 +5,39 @@ from datetime import datetime, timedelta
 import ansible_runner
 import copy
 import json
-import kopf
 import kubernetes
-import logging
 import os
+import requests
 import shutil
 import threading
+import time
 import queue
 
-class AnarchyEventRunner(object):
+import logging
+logging.basicConfig(
+    format = '%(asctime)s %(levelname)s %(message)s',
+    level = os.environ.get('LOG_LEVEL', 'INFO')
+)
+
+class AnarchyRunner(object):
 
     def __init__(self):
+        self.anarchy_url = os.environ.get('ANARCHY_URL', 'http://anarchy-operator:5000')
         self.domain = os.environ.get('OPERATOR_DOMAIN', 'anarchy.gpte.redhat.com')
-        self.event_cache = {}
-        self.event_queue = queue.Queue()
-        self.event_queue_lock = threading.Lock()
         self.kubeconfig = os.environ.get('KUBECONFIG', None)
         self.name = os.environ.get('RUNNER_NAME', None)
+        self.polling_interval = int(os.environ.get('POLLING_INTERVAL', 5))
+        self.queue_name = os.environ.get('RUN_QUEUE', 'default')
         self.runner_dir = os.environ.get('RUNNER_DIR', '/anarchy-runner/ansible-runner')
+        self.runner_token = os.environ.get('RUNNER_TOKEN', None)
+        if not self.runner_token:
+            raise Exception('Environment variable RUNNER_TOKEN must be set')
         if not self.kubeconfig:
             raise Exception('Environment variable KUBECONFIG must be set')
         if not self.name:
             raise Exception('Environment variable RUNNER_NAME must be set')
-        self.__init_kube_apis()
         self.__init_namespace()
         self.__init_runner_dir()
-
-    def __init_kube_apis(self):
-        self.kube_auth_token = open('/run/secrets/kubernetes.io/serviceaccount/token').read().strip()
-        self.kube_ca_cert = open('/run/secrets/kubernetes.io/serviceaccount/ca.crt').read()
-        kube_config = kubernetes.client.Configuration()
-        kube_config.api_key['authorization'] = self.kube_auth_token
-        kube_config.api_key_prefix['authorization'] = 'Bearer'
-        kube_config.host = os.environ['KUBERNETES_PORT'].replace('tcp://', 'https://', 1)
-        kube_config.ssl_ca_cert = '/run/secrets/kubernetes.io/serviceaccount/ca.crt'
-        api_client = kubernetes.client.ApiClient(kube_config)
-        self.custom_objects_api = kubernetes.client.CustomObjectsApi(api_client)
 
     def __init_namespace(self):
         if 'OPERATOR_NAMESPACE' in os.environ:
@@ -52,6 +49,13 @@ class AnarchyEventRunner(object):
             self.namespace = 'anarchy-operator'
 
     def __init_runner_dir(self):
+        if not os.path.exists(self.kubeconfig) \
+        or 0 == os.path.getsize(self.kubeconfig):
+            self.__write_kubeconfig()
+
+    def __write_kubeconfig(self):
+        kube_auth_token = open('/run/secrets/kubernetes.io/serviceaccount/token').read().strip()
+        kube_ca_cert = open('/run/secrets/kubernetes.io/serviceaccount/ca.crt').read()
         kubeconfig_fh = open(self.kubeconfig, 'w')
         kubeconfig_fh.write(json.dumps({
             'apiVersion': 'v1',
@@ -59,7 +63,7 @@ class AnarchyEventRunner(object):
                 'name': 'cluster',
                 'cluster': {
                     'certificate-authority-data': \
-                        b64encode(self.kube_ca_cert.encode('ascii')).decode('ascii'),
+                        b64encode(kube_ca_cert.encode('ascii')).decode('ascii'),
                     'server': 'https://kubernetes.default.svc.cluster.local'
                 }
             }],
@@ -75,7 +79,7 @@ class AnarchyEventRunner(object):
             'users': [{
                 'name': 'ansible',
                 'user': {
-                    'token': self.kube_auth_token
+                    'token': kube_auth_token
                 }
             }]
         }))
@@ -91,24 +95,31 @@ class AnarchyEventRunner(object):
         for tasks_file in os.listdir(tasks_dir):
             os.unlink(os.path.join(tasks_dir, tasks_file))
 
-    def queue_event_run(self, anarchy_event, logger):
-        anarchy_event_meta = anarchy_event['metadata']
-        anarchy_event_name = anarchy_event_meta['name']
-        
-        if anarchy_event_name in self.event_cache:
-            self.event_cache[anarchy_event_name] = anarchy_event
-        else:
-            self.event_cache[anarchy_event_name] = anarchy_event
-            logger.info('queueing %s', anarchy_event_name)
-            self.event_queue.put(anarchy_event_name)
+    def get_run(self):
+        response = requests.get(
+            '{}/runner/{}/{}'.format(self.anarchy_url, self.queue_name, self.name),
+            headers={'Authorization': 'Bearer ' + self.runner_token}
+        )
+        return response.json()
+
+    def post_result(self, run, result):
+        requests.post(
+            '{}/runner/{}/{}'.format(self.anarchy_url, self.queue_name, self.name),
+            headers={'Authorization': 'Bearer ' + self.runner_token},
+            json=dict(run=run, result=result)
+        )
 
     def run(self):
-        anarchy_event_name = self.event_queue.get()
-        anarchy_event = self.event_cache[anarchy_event_name]
-        self.run_event(anarchy_event_name, anarchy_event)
-        del self.event_cache[anarchy_event_name]
+        run = self.get_run()
+        if not run:
+            logging.info('No tasks to run')
+            self.sleep()
+        elif run['kind'] == 'AnarchyEvent':
+            result = self.run_event(run)
+            self.post_result(run, result)
 
-    def run_event(self, anarchy_event_name, anarchy_event):
+    def run_event(self, anarchy_event):
+        anarchy_event_name = anarchy_event['metadata']['name']
         self.clean_runner_dir()
         self.write_runner_vars(anarchy_event)
         self.write_runner_tasks(anarchy_event)
@@ -117,44 +128,14 @@ class AnarchyEventRunner(object):
             playbook = 'main.yml',
             private_data_dir = self.runner_dir
         )
-        stdout = ansible_run.stdout.read()
-        status_str = ansible_run.status
-        if status_str == 'successful':
-            logging.info('Ansible run for %s successful', anarchy_event_name)
-            self.update_anarchy_event(anarchy_event_name, anarchy_event, 'success', status_str, stdout)
-        else:
-            logging.warning('Ansible run for %s %s', anarchy_event_name, ansible_run.status)
-            self.update_anarchy_event(anarchy_event_name, anarchy_event, 'failed', status_str, stdout)
-
-    def update_anarchy_event(self, anarchy_event_name, anarchy_event, status, status_str, stdout):
-        timestamp = datetime.utcnow().strftime('%FT%TZ')
-        patch = {
-            'metadata': {
-                'labels': {
-                    self.domain + '/runner': status + '-' + self.name
-                }
-            },
-            'spec': {
-                'lastRun': timestamp,
-                'log': anarchy_event['spec'].get('log', []) + [{
-                    'runner': self.name,
-                    'result': status_str,
-                    'stdout': stdout,
-                    'timestamp': timestamp
-                }]
-            }
+        return {
+            'rc': ansible_run.rc,
+            'status': ansible_run.status,
+            'stdout': ansible_run.stdout.read()
         }
-        if status != 'success':
-            patch['spec']['failures'] = anarchy_event['spec'].get('failures', 0) + 1
-        try:
-            self.custom_objects_api.patch_namespaced_custom_object(
-                self.domain, 'v1', self.namespace, 'anarchyevents', anarchy_event_name, patch
-            )
-        except kubernetes.client.rest.ApiException as e:
-            if e.status == 404:
-                logging.warning('Unable to updated deleted AnarchyEvent %s', anarchy_event_name)
-            else:
-                raise
+
+    def sleep(self):
+        time.sleep(self.polling_interval)
 
     def write_runner_vars(self, anarchy_event):
         extravars = {
@@ -183,20 +164,7 @@ class AnarchyEventRunner(object):
             json.dumps(anarchy_event['spec']['event']['tasks'])
         )
 
-anarchy_runner = AnarchyEventRunner()
-
-@kopf.on.event(
-    anarchy_runner.domain, 'v1', 'anarchyevents',
-    labels={anarchy_runner.domain + '/runner': anarchy_runner.name}
-)
-def handle_event_event(event, logger, **_):
-    event_type = event['type']
-    anarchy_event = event['object']
-
-    if event_type == 'DELETED':
-        logger.info('AnarchyEvent %s deleted', anarchy_event['metadata']['name'])
-    elif event_type in ['ADDED', 'MODIFIED', None]:
-        anarchy_runner.queue_event_run(anarchy_event, logger)
+anarchy_runner = AnarchyRunner()
 
 def runner_loop():
     while True:
@@ -204,6 +172,7 @@ def runner_loop():
             anarchy_runner.run()
         except Exception:
             logging.exception('Error in runner loop')
+            anarchy_runner.sleep()
 
 threading.Thread(
     name = 'start-actions',

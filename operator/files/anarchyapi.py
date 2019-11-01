@@ -4,7 +4,7 @@ import requests
 import requests.auth
 import tempfile
 
-logger = logging.getLogger('anarchy')
+operator_logger = logging.getLogger('operator')
 
 class AnarchyAPI(object):
     """API for Anarchy Governor"""
@@ -14,7 +14,7 @@ class AnarchyAPI(object):
     @classmethod
     def register(_class, resource):
         api = _class(resource)
-        logger.info("Registered api %s (%s)", api.name, api.resource_version)
+        operator_logger.info("Registered api %s (%s)", api.name, api.resource_version)
         AnarchyAPI.apis[api.name] = api
         return api
 
@@ -68,7 +68,7 @@ class AnarchyAPI(object):
             return self._ca_certificate_file
 
         if not self.ca_certificate:
-            logger.warning('Disabling TLS certificate verification for %s', self.name)
+            operator_logger.warn('Disabling TLS certificate verification for %s', self.name)
             return False
 
         cert = tempfile.NamedTemporaryFile(delete=False, mode='w')
@@ -139,9 +139,6 @@ class AnarchyAPI(object):
         method = method or self.method
         path = path or self.path
         url = self.base_url + path
-
-        logger.debug("%s to %s", method, url)
-        logger.debug(headers)
 
         resp = None
         if method == 'GET':

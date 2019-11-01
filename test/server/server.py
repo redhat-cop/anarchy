@@ -19,6 +19,7 @@ import yaml
 
 api = flask.Flask('rest')
 callbacks = {}
+domain = os.environ.get('OPERATOR_DOMAIN', 'anarchy.gpte.redhat.com')
 
 def init():
     global logger
@@ -123,6 +124,57 @@ def launch():
         "id": job_id,
         "job": job_id
     })
+
+@api.route('/runner/<string:runner_queue_name>/<string:runner_name>', methods=['GET', 'POST'])
+def runner_get(runner_queue_name, runner_name):
+    if flask.request.method == 'POST':
+        logger.info("RUNNER POST %s %s %s", runner_queue_name, runner_name, flask.request.json)
+        return flask.jsonify(None)
+
+    logger.info("RUNNER GET")
+    n = random.randint(0,2)
+    if n == 0:
+        return flask.jsonify(None)
+    else:
+        if n == 1:
+            tasks = []
+        else:
+            tasks = [{
+                'name': 'test failure',
+                'fail': {
+                    'msg': 'test failure'
+                }
+            }]
+        return flask.jsonify({
+            'apiVersion': domain + '/v1',
+            'kind': 'AnarchyEvent',
+            'metadata': {
+                'name': 'test'
+            },
+            'spec': {
+                'action': {
+                    'metadata': {
+                        'name': 'test-action'
+                    }
+                },
+                'event': {
+                    'name': 'test',
+                    'data': {
+                    },
+                    'tasks': tasks
+                },
+                'governor': {
+                    'metadata': {
+                        'name': 'test-governor'
+                    }
+                },
+                'subject': {
+                    'metadata': {
+                        'name': 'test-subject'
+                    }
+                }
+            }
+        })
 
 def main():
     """Main function."""

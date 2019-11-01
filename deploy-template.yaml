@@ -10,14 +10,14 @@ parameters:
 - name: ANARCHY_NAMESPACE
   value: anarchy-operator
 - name: ANARCHY_IMAGE
-  value: quay.io/gpte-devops-automation/anarchy-operator:0.2.3
+  value: quay.io/gpte-devops-automation/anarchy-operator:0.3.0
   #value: docker-registry.default.svc:5000/anarchy-operator/anarchy-operator:latest
   #value: image-registry.openshift-image-registry.svc:5000/anarchy-operator/anarchy-operator:latest
 - name: ANARCHY_IMAGE_PULL_POLICY
   value: IfNotPresent
   #value: Always
 - name: ANARCHY_RUNNER_IMAGE
-  value: quay.io/gpte-devops-automation/anarchy-runner:0.2.3
+  value: quay.io/gpte-devops-automation/anarchy-runner:0.3.0
   #value: docker-registry.default.svc:5000/anarchy-operator/anarchy-runner:latest
   #value: image-registry.openshift-image-registry.svc:5000/anarchy-operator/anarchy-runner:latest
 - name: ANARCHY_RUNNER_IMAGE_PULL_POLICY
@@ -28,6 +28,12 @@ parameters:
 - name: ANARCHY_RUNNER_SERVICE_NAME
   value: anarchy-runner
 - name: APP_DOMAIN
+  required: true
+- name: DEFAULT_RUNNER_TOKEN
+  description: Token use to validate anarchy runner to anarchy operator
+  displayName: Default Runner Token
+  from: '[a-zA-Z0-9]{16}'
+  generate: expression
   required: true
 
 objects:
@@ -139,6 +145,11 @@ objects:
           env:
           - name: CALLBACK_BASE_URL
             value: https://${ANARCHY_NAMESPACE}.${APP_DOMAIN}
+          - name: RUNNER_TOKEN
+            valueFrom:
+              secretKeyRef:
+                key: token
+                name: ${ANARCHY_RUNNER_SERVICE_NAME}
           image: ${ANARCHY_IMAGE}
           imagePullPolicy: ${ANARCHY_IMAGE_PULL_POLICY}
           # FIXME - Add probes
@@ -178,6 +189,11 @@ objects:
             valueFrom:
               fieldRef:
                 fieldPath: metadata.name
+          - name: RUNNER_TOKEN
+            valueFrom:
+              secretKeyRef:
+                key: token
+                name: ${ANARCHY_RUNNER_SERVICE_NAME}
           image: ${ANARCHY_RUNNER_IMAGE}
           imagePullPolicy: ${ANARCHY_RUNNER_IMAGE_PULL_POLICY}
           # FIXME - Add probes
@@ -197,21 +213,12 @@ objects:
         serviceAccountName: ${ANARCHY_SERVICE_NAME}
         terminationGracePeriodSeconds: 30
 
-- apiVersion: autoscaling/v1
-  kind: HorizontalPodAutoscaler
+- kind: Secret
+  apiVersion: v1
   metadata:
     name: ${ANARCHY_RUNNER_SERVICE_NAME}
-    namespace: ${ANARCHY_NAMESPACE}
-  spec:
-    scaleTargetRef:
-      apiVersion: extensions/v1beta1
-      kind: Deployment
-      name: ${ANARCHY_RUNNER_SERVICE_NAME}
-      subresource: scale
-    minReplicas: 2
-    maxReplicas: 20
-    cpuUtilization:
-      targetPercentage: 30
+  stringData:
+    token: ${DEFAULT_RUNNER_TOKEN}
 
 - kind: ClusterRole
   apiVersion: v1

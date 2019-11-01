@@ -1,0 +1,10 @@
+flask
+gevent
+jinja2
+kopf
+kubernetes
+ndg-httpsclient
+prometheus_client
+pyasn1
+pyOpenSSL
+werkzeug

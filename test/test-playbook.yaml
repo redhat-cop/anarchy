@@ -10,6 +10,8 @@
     build_anarchy_runner: "{{ build }}"
     build_anarchy_operator: "{{ build }}"
     build_anarchy_operator_test: "{{ build }}"
+    restart_anarchy_operator: "{{ build_anarchy_operator }}"
+    restart_anarchy_runner: "{{ build_anarchy_runner }}"
     local_test: false
   tasks:
   - name: Get route for test api server
@@ -135,6 +137,7 @@
 
   - name: Scale down anarchy-operator
     command: oc scale deployment -n {{ anarchy_operator_namespace | quote }} anarchy-operator --replicas=0
+    when: restart_anarchy_operator | bool
     #k8s_scale:
     #  api_version: extensions/v1beta1
     #  kind: Deployment
@@ -144,6 +147,7 @@
 
   - name: Scale down anarchy-runner
     command: oc scale deployment -n {{ anarchy_operator_namespace | quote }} anarchy-runner --replicas=0
+    when: restart_anarchy_runner | bool
     #k8s_scale:
     #  api_version: extensions/v1beta1
     #  kind: Deployment
@@ -158,6 +162,7 @@
       namespace: "{{ anarchy_operator_namespace }}"
       label_selectors:
       - name=anarchy-operator
+    when: restart_anarchy_operator | bool
     register: get_anarchy_operator_pod
     until: get_anarchy_operator_pod.resources | length == 0
     retries: 30
@@ -170,6 +175,7 @@
       namespace: "{{ anarchy_operator_namespace }}"
       label_selectors:
       - name=anarchy-runner
+    when: restart_anarchy_runner | bool
     register: get_anarchy_runner_pod
     until: get_anarchy_runner_pod.resources | length == 0
     retries: 30
@@ -246,15 +252,18 @@
       command: >-
         oc scale deployment -n {{ anarchy_operator_namespace | quote }}
         anarchy-operator --replicas=1
+      when: restart_anarchy_operator | bool
 
     - name: Scale up anarchy-runner
       command: >-
         oc scale deployment -n {{ anarchy_operator_namespace | quote }}
         anarchy-runner --replicas={{ anarchy_runner_replicas }}
+      when: restart_anarchy_runner | bool
 
     - name: Pause for anarchy-operator start-up
       pause:
         seconds: 40
+      when: restart_anarchy_runner | bool or restart_anarchy_operator | bool
 
   - name: Create AnarchySubject test-1
     k8s:

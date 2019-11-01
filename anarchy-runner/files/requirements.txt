@@ -1,0 +1,7 @@
+ansible
+ansible-runner
+jmespath
+jsonpatch
+kopf
+kubernetes
+openshift

@@ -2,10 +2,10 @@ from datetime import datetime
 import logging
 import os
 
-logger = logging.getLogger('anarchy')
-
 from anarchygovernor import AnarchyGovernor
 from anarchysubject import AnarchySubject
+
+operator_logger = logging.getLogger('operator')
 
 class AnarchyAction(object):
     def __init__(self, resource):
@@ -81,7 +81,7 @@ class AnarchyAction(object):
         return self.callback_token == authorization_header[7:]
 
     def create(self, runtime):
-        logger.debug('Creating action...')
+        operator_logger.debug('Creating action...')
         resource = runtime.custom_objects_api.create_namespaced_custom_object(
             runtime.operator_domain, 'v1', runtime.operator_namespace, 'anarchyactions',
             {
@@ -93,7 +93,7 @@ class AnarchyAction(object):
         )
         self.metadata = resource['metadata']
         self.spec = resource['spec']
-        logger.debug('Created action %s', self.name)
+        operator_logger.debug('Created action %s', self.name)
 
     def get_subject(self, runtime):
         return AnarchySubject.get(self.subject_name, runtime)
@@ -127,7 +127,7 @@ class AnarchyAction(object):
         if anarchy_subject:
             return anarchy_subject.start_action(runtime, self)
         else:
-            runtime.logger.warning(
+            operator_logger.warn(
                 "Unable to find AnarchySubject %s for AnarchyAction %s!",
                 self.subject_name, self.name
             )
