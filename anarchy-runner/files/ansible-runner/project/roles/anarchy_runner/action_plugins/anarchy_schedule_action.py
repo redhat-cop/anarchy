@@ -4,21 +4,11 @@
 # GNU General Public License v3.0+ (see COPYING or https://www.gnu.org/licenses/gpl-3.0.txt)
 
 import datetime
-import kubernetes
 import os
 import re
-import uuid
+import requests
 
 from ansible.plugins.action import ActionBase
-
-kubernetes.config.load_kube_config()
-api_client = kubernetes.client.ApiClient()
-custom_objects_api = kubernetes.client.CustomObjectsApi(api_client)
-operator_domain = os.environ.get('OPERATOR_DOMAIN', 'anarchy.gpte.redhat.com')
-operator_namespace = 'anarchy-operator'
-if os.path.exists('/run/secrets/kubernetes.io/serviceaccount/namespace'):
-    with open('/run/secrets/kubernetes.io/serviceaccount/namespace') as namespace_fh:
-        operator_namespace = namespace_fh.read()
 
 datetime_re = re.compile(r'^\d\d\d\d-\d\d-\d\dT\d\d:\d\d:\d\dZ$')
 time_interval_re = re.compile(r'^\d+[dhms]?$')
@@ -40,103 +30,45 @@ def time_interval_to_seconds(interval):
     else:
         raise Exception("Invalid type for time interval, %s, must be int or str" % (type(interval).__name__))
 
-def create_action(anarchy_governor, anarchy_subject, action, after=None):
-    if after:
-        if time_interval_re.match(after):
-            after = (
-                datetime.datetime.utcnow() +
-                datetime.timedelta(0, time_interval_to_seconds(after))
-            ).strftime('%FT%TZ')
-    else:
-        after = datetime.datetime.utcnow().strftime('%FT%TZ')
-    return custom_objects_api.create_namespaced_custom_object(
-        operator_domain,
-        'v1',
-        anarchy_subject['metadata']['namespace'],
-        'anarchyactions',
-        {
-            "apiVersion": operator_domain + "/v1",
-            "kind": "AnarchyAction",
-            "metadata": {
-                "generateName": "%s-%s-" % (anarchy_subject['metadata']['name'], action),
-                "labels": {
-                    operator_domain + '/action': action,
-                    operator_domain + "/subject": anarchy_subject['metadata']['name'],
-                    operator_domain + "/governor": anarchy_governor['metadata']['name'],
-                },
-                "ownerReferences": [{
-                    "apiVersion": operator_domain + "/v1",
-                    "controller": True,
-                    "kind": "AnarchySubject",
-                    "name": anarchy_subject['metadata']['name'],
-                    "uid": anarchy_subject['metadata']['uid']
-                }]
-            },
-            "spec": {
-                "action": action,
-                "after": after,
-                "callbackToken": uuid.uuid4().hex,
-                "governorRef": {
-                    "apiVersion": operator_domain + "/v1",
-                    "kind": "AnarchyGovernor",
-                    "name": anarchy_governor['metadata']['name'],
-                    "namespace":  anarchy_governor['metadata']['namespace'],
-                    "uid": anarchy_governor['metadata']['uid']
-                },
-                "subjectRef": {
-                    "apiVersion": operator_domain + "/v1",
-                    "kind": "AnarchySubject",
-                    "name": anarchy_subject['metadata']['name'],
-                    "namespace":  anarchy_subject['metadata']['namespace'],
-                    "uid": anarchy_subject['metadata']['uid']
-                }
-            }
-        }
-    )
-
-def delete_action(action):
-    return custom_objects_api.delete_namespaced_custom_object(
-        operator_domain, 'v1', action['metadata']['namespace'],
-        'anarchyactions', action['metadata']['name'],
-        kubernetes.client.V1DeleteOptions()
-    )
-
-def find_actions(anarchy_subject, actions):
-    return [
-        resource for resource in custom_objects_api.list_namespaced_custom_object(
-            operator_domain, 'v1', anarchy_subject['metadata']['namespace'], 'anarchyactions',
-            label_selector='{}/subject={}'.format(operator_domain, anarchy_subject['metadata']['name'])
-        ).get('items', []) if resource['spec']['action'] in actions
-    ]
-
 class ActionModule(ActionBase):
     def run(self, tmp=None, task_vars=None, **_):
         result = super(ActionModule, self).run(tmp, task_vars)
         module_args = self._task.args.copy()
-        anarchy_governor = task_vars['anarchy_governor']
         anarchy_subject = task_vars['anarchy_subject']
+        anarchy_url = task_vars['anarchy_url']
+        anarchy_run_pod_name = task_vars['anarchy_run_pod_name']
+        anarchy_runner_name = task_vars['anarchy_runner_name']
+        anarchy_runner_token = task_vars['anarchy_runner_token']
 
         action = module_args.get('action', None)
         after = module_args.get('after', None)
+        cancel = module_args.get('cancel', [])
 
         if isinstance(after, datetime.datetime):
             after = after.strftime('%FT%TZ')
-        elif after \
-        and not datetime_re.match(after) \
-        and not time_interval_re.match(after):
+        elif not after:
+            after = datetime.datetime.utcnow().strftime('%FT%TZ')
+        elif time_interval_re.match(after):
+            after = (
+                datetime.datetime.utcnow() +
+                datetime.timedelta(0, time_interval_to_seconds(after))
+            ).strftime('%FT%TZ')
+        elif datetime_re.match(after):
+            pass
+        else:
             result['failed'] = True
             result['message'] = 'Invalid value for `after`: {}'.format(after)
             return result
 
-        for action_obj in find_actions(anarchy_subject, module_args.get('cancel', [action])):
-            delete_action(action_obj)
+        response = requests.post(
+            anarchy_url + '/run/subject/' + anarchy_subject['name'] + '/actions',
+            headers={'Authorization': 'Bearer {}:{}:{}'.format(
+                anarchy_runner_name, anarchy_run_pod_name, anarchy_runner_token
+            )},
+            json=dict(action=action, after=after, cancel=cancel)
+        )
 
-        if action:
-            result['action'] = create_action(
-                anarchy_governor=anarchy_governor,
-                anarchy_subject=anarchy_subject,
-                action=action,
-                after=after
-            )
+        result['action'] = response.json()['result']
+        result['failed'] = not response.json()['success']
 
         return result

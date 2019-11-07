@@ -1,6 +1,9 @@
 from datetime import datetime
+import copy
+import kubernetes
 import logging
 import os
+import time
 
 from anarchygovernor import AnarchyGovernor
 from anarchysubject import AnarchySubject
@@ -8,13 +11,67 @@ from anarchysubject import AnarchySubject
 operator_logger = logging.getLogger('operator')
 
 class AnarchyAction(object):
+    """
+    AnarchyAction class
+    """
+
+    # Cache of active AnarchyActions
+    cache = {}
+
+    @staticmethod
+    def cache_clean():
+        for anarchy_action_name in list(AnarchyAction.cache.keys()):
+            anarchy_action = AnarchyAction.cache[anarchy_action_name]
+            if time.time() - anarchy_action.last_active > cache_age_limit:
+                del AnarchyAction.cache[anarchy_action_name]
+
+    @staticmethod
+    def cache_put(anarchy_action):
+        anarchy_action.last_active = time.time()
+        AnarchyAction.cache[anarchy_action.name] = anarchy_action
+
+    @staticmethod
+    def cache_update(resource):
+        """Update action in cache if present in cache"""
+        resource_meta = resource['metadata']
+        anarchy_action_name = resource_meta['name']
+        anarchy_action = AnarchyAction.cache.get(anarchy_action_name, None)
+        if anarchy_action:
+            anarchy_action.metadata = resource_meta
+            anarchy_action.spec = resource['spec']
+            anarchy_action.status = resource.get('status', None)
+            return anarchy_action
+
+    @staticmethod
+    def get(name, runtime):
+        # FIXME
+        """Get action by name from cache or get resource"""
+        anarchy_action = AnarchyAction.cache.get(name, None)
+        if anarchy_action:
+            anarchy_action.last_active = time.time()
+            return anarchy_action
+
+        try:
+            resource = runtime.custom_objects_api.get_namespaced_custom_object(
+                runtime.operator_domain, 'v1', runtime.operator_namespace,
+                'anarchyactions', name
+            )
+            anarchy_action = AnarchyAction(resource)
+            AnarchyAction.cache_put(anarchy_action)
+            return anarchy_action
+        except kubernetes.client.rest.ApiException as e:
+            if e.status == 404:
+                return None
+            else:
+                raise
+
     def __init__(self, resource):
         self.metadata = resource['metadata']
         self.spec = resource['spec']
-        self.status = resource.get('status', {})
-        self.sanity_check()
+        self.status = resource.get('status', None)
+        self.__sanity_check()
 
-    def sanity_check(self):
+    def __sanity_check(self):
         # FIXME
         pass
 
@@ -37,17 +94,6 @@ class AnarchyAction(object):
         return self.spec.get('callbackToken', '')
 
     @property
-    def callback_url(self, event_name = None):
-        # FIXME - ensure that callback base url is set
-        callback_url = '{}/event/{}'.format(
-            os.environ['CALLBACK_BASE_URL'], self.name
-        )
-        if event_name:
-            return callback_url + '/' + event_name
-        else:
-            return callback_url
-
-    @property
     def governor(self):
         return AnarchyGovernor.get(self.spec['governorRef']['name'])
 
@@ -64,36 +110,17 @@ class AnarchyAction(object):
         return self.metadata['name']
 
     @property
-    def uid(self):
-        return self.metadata['uid']
-
-    @property
     def subject_name(self):
         return self.spec['subjectRef']['name']
 
     @property
-    def vars(self):
-        return self.spec.get('vars', {})
+    def uid(self):
+        return self.metadata['uid']
 
     def check_callback_token(self, authorization_header):
         if not authorization_header.startswith('Bearer '):
             return false
         return self.callback_token == authorization_header[7:]
-
-    def create(self, runtime):
-        operator_logger.debug('Creating action...')
-        resource = runtime.custom_objects_api.create_namespaced_custom_object(
-            runtime.operator_domain, 'v1', runtime.operator_namespace, 'anarchyactions',
-            {
-                "apiVersion": runtime.operator_domain + "/v1",
-                "kind": "AnarchyAction",
-                "metadata": self.metadata,
-                "spec": self.spec
-            }
-        )
-        self.metadata = resource['metadata']
-        self.spec = resource['spec']
-        operator_logger.debug('Created action %s', self.name)
 
     def get_subject(self, runtime):
         return AnarchySubject.get(self.subject_name, runtime)
@@ -107,28 +134,77 @@ class AnarchyAction(object):
         self.spec = resource['spec']
         self.status = resource['status']
 
-    def status_event_log(self, runtime, event_name, event_data):
-        events = self.status.get('events', [])
-        events.append({
-            "name": event_name,
-            "data": event_data,
-            "timestamp": datetime.utcnow().strftime('%FT%TZ')
-        })
-        self.patch_status(runtime, {
-            "events": events
-        })
+    def process_callback(self, runtime, callback_name, callback_data):
+        subject = self.get_subject(runtime)
+        governor = subject.get_governor(runtime)
+        if not governor:
+            operator_logger.warning('Received callback for subject "%s", but cannot find AnarchyGovernor %s', subject.name, governor.name)
+            return
+        action_config = governor.actions.get(self.action, None)
 
-    def process_event(self, runtime, event_data, event_name=None):
-        anarchy_subject = self.get_subject(runtime)
-        anarchy_subject.process_action_event_handlers(runtime, self, event_data, event_name)
+        if not action_config:
+            operator_logger.warning('Received callback for action, "%s", which is not defined in AnarchyGovernor %s', self.action, governor.name)
+            return
+        if not callback_name:
+            name_parameter = action_config.callback_name_parameter or governor.callback_name_parameter
+            callback_name = callback_data.get(name_parameter, None)
+            if not callback_name:
+                operator_logger.warning('Name parameter, "%s", not set in callback data', name_parameter)
+                return
+
+        callback_events = self.status.get('callbackEvents', [])
+        callback_events.append({
+            'name': callback_name,
+            'data': callback_data,
+            'timestamp': datetime.utcnow().strftime('%FT%TZ')
+        })
+        self.patch_status(runtime, {'callbackEvents': callback_events})
+
+        handler = action_config.callback_handlers.get(callback_name, None)
+        if not handler:
+            operator_logger.warning('No callback handler in %s for %s', action_config.name, callback_name)
+            return
+
+        context = (
+            ('governor', governor),
+            ('subject', subject),
+            ('actionConfig', action_config),
+            ('handler', handler)
+        )
+        run_vars = {
+            'anarchy_action_name': self.name,
+            'anarchy_action_callback_name': callback_name,
+            'anarchy_action_callback_data': callback_data,
+            'anarchy_action_callback_name_parameter': action_config.callback_name_parameter or governor.callback_name_parameter,
+            'anarchy_action_callback_token': self.callback_token,
+            'anarchy_action_callback_url': runtime.action_callback_url(self.name)
+        }
+
+        governor.run_ansible(runtime, handler.tasks, run_vars, context, subject, self, callback_name)
 
     def start(self, runtime):
-        anarchy_subject = self.get_subject(runtime)
-        if anarchy_subject:
-            return anarchy_subject.start_action(runtime, self)
-        else:
-            operator_logger.warn(
-                "Unable to find AnarchySubject %s for AnarchyAction %s!",
-                self.subject_name, self.name
-            )
-            return False
+        subject = self.get_subject(runtime)
+        governor = subject.get_governor(runtime)
+
+        action_config = governor.actions.get(self.action, None)
+        if not action_config:
+            operator_logger.warning('Attempting to start action, "%s", which is not defined in AnarchyGovernor %s', self.action, governor.name)
+            return
+
+        context = (
+            ('governor', governor),
+            ('subject', subject),
+            ('actionConfig', action_config)
+        )
+        run_vars = {
+            'anarchy_action_name': self.name,
+            'anarchy_action_callback_name_parameter': action_config.callback_name_parameter or governor.callback_name_parameter,
+            'anarchy_action_callback_token': self.callback_token,
+            'anarchy_action_callback_url': runtime.action_callback_url(self.name)
+        }
+
+        self.patch_status(runtime, {
+            'runScheduled': datetime.utcnow().strftime('%FT%TZ'),
+        })
+        governor.run_ansible(runtime, action_config.tasks, run_vars, context, subject, self)
+        return True

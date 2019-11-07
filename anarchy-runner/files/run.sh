@@ -14,4 +14,4 @@ export NSS_WRAPPER_PASSWD
 export NSS_WRAPPER_GROUP
 export OPERATOR_NAMESPACE="$(cat /run/secrets/kubernetes.io/serviceaccount/namespace)"
 
-exec kopf run --standalone --namespace $OPERATOR_NAMESPACE /anarchy-runner/anarchy-runner.py
+exec python3 /anarchy-runner/anarchy-runner.py

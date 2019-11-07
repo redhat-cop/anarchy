@@ -11,17 +11,14 @@ parameters:
   value: registry.access.redhat.com/ubi8:latest
 - name: GIT_REPO
   value: https://github.com/redhat-gpte-devopsautomation/anarchy-operator.git
-- name: SERVICE_NAME
-  value: anarchy-operator
-- name: NAMESPACE
+- name: NAME
   value: anarchy-operator
 
 objects:
 - apiVersion: image.openshift.io/v1
   kind: ImageStream
   metadata:
-    name: ${SERVICE_NAME}
-    namespace: ${NAMESPACE}
+    name: ${NAME}
   spec:
     lookupPolicy:
       local: false
@@ -30,7 +27,6 @@ objects:
   kind: ImageStream
   metadata:
     name: anarchy-runner
-    namespace: ${NAMESPACE}
   spec:
     lookupPolicy:
       local: false
@@ -38,13 +34,12 @@ objects:
 - apiVersion: v1
   kind: BuildConfig
   metadata:
-    name: ${SERVICE_NAME}
-    namespace: ${NAMESPACE}
+    name: ${NAME}
   spec:
     output:
       to:
         kind: ImageStreamTag
-        name: ${SERVICE_NAME}:latest
+        name: ${NAME}:latest
     postCommit: {}
     resources: {}
     runPolicy: Serial
@@ -65,7 +60,6 @@ objects:
   kind: BuildConfig
   metadata:
     name: anarchy-runner
-    namespace: ${NAMESPACE}
   spec:
     output:
       to:

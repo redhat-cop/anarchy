@@ -4,236 +4,322 @@ kind: AnarchyGovernor
 metadata:
   name: {{ anarchy_governor_name }}
   namespace: {{ anarchy_operator_namespace | to_json }}
-{% raw %}
 spec:
-  api: test
+  runner: default
+  vars:
+    babylon_tower_hostname: {{ test_api_server_hostname | to_json }}
+{% raw %}
+    poolboy_resource_index: >-
+      {{ anarchy_subject.metadata.annotations['poolboy.gpte.redhat.com/resource-index'] | default('') }}
+    poolboy_resource_claim_name: >-
+      {{ anarchy_subject.metadata.annotations['poolboy.gpte.redhat.com/resource-claim-name'] | default('') }}
+    poolboy_resource_claim_namespace: >-
+      {{ anarchy_subject.metadata.annotations['poolboy.gpte.redhat.com/resource-claim-namespace'] | default('') }}
+    poolboy_resource_handle_name: >-
+      {{ anarchy_subject.metadata.annotations['poolboy.gpte.redhat.com/resource-handle-name'] | default('') }}
+    poolboy_resource_handle_namespace: >-
+      {{ anarchy_subject.metadata.annotations['poolboy.gpte.redhat.com/resource-handle-namespace'] | default('') }}
+    job_vars:
+      aws_access_key_id: "{{ aws_access_key_id }}"
+      aws_secret_access_key: "{{ aws_secret_access_key }}"
+      check_late_variable_binding: "{% raw %}{{ this_variable_not_defined }}{% {% endraw %}endraw{% raw %} %}"
+      cloud_provider: ec2
+      __meta__:
+        callback:
+          token: "{{ anarchy_action_callback_token }}"
+          url: "{{ anarchy_action_callback_url }}"
+        tower:
+          organization: test
 
-  parameters:
-    cloud_provider: ec2
-    check_late_variable_binding: "{{ this_variable_not_defined }}"
-
-  parameterSecrets:
+  varSecrets:
+  - name: test-api-creds
+    var: api_creds
   - name: test-aws-creds
 
-  vars:
-    tower_organization: test
-
   subjectEventHandlers:
-  - event: create
-    tasks:
-    - name: Set state provision-scheduled in subject status
-      anarchy_subject_update:
-        metadata:
-          labels:
+    create:
+      tasks:
+      - name: Set state provision-scheduled in subject status
+        anarchy_subject_update:
+          metadata:
+            labels:
+              state: provision-scheduled
+          status:
             state: provision-scheduled
-        status:
-          state: provision-scheduled
-    - name: Start Provision
-      anarchy_schedule_action:
-        action: provision
-
-  - event: update
-    tasks:
-    - when: >-
-        anarchy_subject.spec.desiredState|default('') == 'started' and
-        (anarchy_subject.status|default({})).state|default('') == 'stopped'
-      block:
-      - name: Set state start-scheduled in subject status
-        anarchy_subject_update:
-          metadata:
-            labels:
+      - name: Start Provision
+        anarchy_schedule_action:
+          action: provision
+    update:
+      tasks:
+      - when: >-
+          'started' == anarchy_subject.spec.desiredState | default('') and
+          'stopped' == anarchy_subject.status.state | default('')
+        block:
+        - name: Set state start-scheduled in subject status
+          anarchy_subject_update:
+            metadata:
+              labels:
+                state: start-scheduled
+            status:
               state: start-scheduled
-          status:
-            state: start-scheduled
-      - name: Schedule start
-        anarchy_schedule_action:
-          action: start
-    - when: >-
-        anarchy_subject.spec.desiredState|default('') == 'stopped' and
-        (anarchy_subject.status|default({})).state|default('') == 'started'
-      block:
-      - name: Set state stop-scheduled in subject status
-        anarchy_subject_update:
-          metadata:
-            labels:
+        - name: Schedule start
+          anarchy_schedule_action:
+            action: start
+      - when: >-
+          'stopped' == anarchy_subject.spec.desiredState | default('') and
+          'started' == anarchy_subject.status.state | default('')
+        block:
+        - name: Set state stop-scheduled in subject status
+          anarchy_subject_update:
+            metadata:
+              labels:
+                state: stop-scheduled
+            status:
               state: stop-scheduled
-          status:
-            state: stop-scheduled
-      - name: Schedule stop
-        anarchy_schedule_action:
-          action: stop
-
-  - event: delete
-    tasks:
-    - name: Schedule destroy
-      anarchy_schedule_action:
-        action: destroy
-
-  actions:
-  - name: provision
-    request:
-      parameters:
-        ACTION: provision
-    vars:
-      deployer_entry_point: ansible/main.yml
-    eventHandlers:
-    - event: started
+        - name: Schedule stop
+          anarchy_schedule_action:
+            action: stop
+    delete:
       tasks:
-      - name: Set state provisioning in subject status
-        anarchy_subject_update:
-          metadata:
-            labels:
-              state: provisioning
-          status:
-            state: provisioning
-    - event: complete
-      tasks:
-      - name: Set state started in subject status
-        anarchy_subject_update:
-          metadata:
-            labels:
-              state: started
-          status:
-            state: started
-      - name: Schedule stop
-        anarchy_schedule_action:
-          action: stop
-          after: 8h
       - name: Schedule destroy
         anarchy_schedule_action:
           action: destroy
-          after: 6d
 
-  - name: stop
-    request:
-      parameters:
-        ACTION: stop
-    vars:
-      deployer_entry_point: ansible/lifecycle.yml
-    eventHandlers:
-    - event: started
+  actions:
+    provision:
       tasks:
-      - name: Set state stopping in subject status
-        anarchy_subject_update:
-          spec:
-            desiredState: stopped
-          metadata:
-            labels:
-              state: stopping
-          status:
-            state: stopping
-      - name: Update desiredState stopped in subject resource handle
-        when: >-
-          'poolboy.gpte.redhat.com/resource-handle-name' in anarchy_subject.metadata.annotations and
-          'poolboy.gpte.redhat.com/resource-handle-namespace' in anarchy_subject.metadata.annotations
-        vars:
-          resource_index: >-
-            {{ anarchy_subject.metadata.annotations['poolboy.gpte.redhat.com/resource-index'] | default(0) }}
-        k8s:
-          api_version: poolboy.gpte.redhat.com/v1
-          kind: ResourceHandle
-          name: >-
-            {{ anarchy_subject.metadata.annotations['poolboy.gpte.redhat.com/resource-handle-name'] }}
-          namespace: >-
-            {{ anarchy_subject.metadata.annotations['poolboy.gpte.redhat.com/resource-handle-namespace'] }}
-          merge_type: json
-          definition:
-          - op: replace
-            path: /spec/resources/{{ resource_index }}/template/spec/desiredState
-            value: stopped
-      - name: Update desiredState stopped in subject resource claim
-        when: >-
-          'poolboy.gpte.redhat.com/resource-claim-name' in anarchy_subject.metadata.annotations and
-          'poolboy.gpte.redhat.com/resource-claim-namespace' in anarchy_subject.metadata.annotations
-        vars:
-          resource_index: >-
-            {{ anarchy_subject.metadata.annotations['poolboy.gpte.redhat.com/resource-index'] | default(0) }}
-        k8s:
-          api_version: poolboy.gpte.redhat.com/v1
-          kind: ResourceClaim
-          name: >-
-            {{ anarchy_subject.metadata.annotations['poolboy.gpte.redhat.com/resource-claim-name'] }}
-          namespace: >-
-            {{ anarchy_subject.metadata.annotations['poolboy.gpte.redhat.com/resource-claim-namespace'] }}
-          merge_type: json
-          definition:
-          - op: replace
-            path: /spec/resources/{{ resource_index }}/template/spec/desiredState
-            value: stopped
-    - event: complete
-      tasks:
-      - name: Set state stopped in subject status
-        anarchy_subject_update:
-          metadata:
-            labels:
-              state: stopped
-          status:
-            state: stopped
+      - name: Call API
+        uri:
+          url: https://{{ babylon_tower_hostname }}/api/v2/job_templates/job-runner/launch/
+          url_username: "{{ api_creds.user }}"
+          url_password: "{{ api_creds.password }}"
+          validate_certs: false
+          method: POST
+          return_content: true
+          body_format: json
+          body:
+            extra_vars:
+              job_vars: >-
+                {{ anarchy_subject.vars.job_vars | default({})
+                 | combine(anarchy_governor.vars.job_vars, recursive=True)
+                 | combine({
+                     'ACTION': 'provision',
+                     '__meta__': {
+                       'deployer': {'entry_point': 'ansible/main.yml'},
+                       'tower': {'action': 'provision'}
+                     }
+                   }, recursive=True)
+                }}
+        ignore_errors: true
+        register: r_api_response
 
-  - name: start
-    request:
-      parameters:
-        ACTION: start
-    vars:
-      deployer_entry_point: ansible/lifecycle.yml
-    eventHandlers:
-    - event: started
-      tasks:
-      - name: Set state starting in subject status
-        anarchy_subject_update:
-          metadata:
-            labels:
-              state: starting
-          status:
-            state: starting
-    - event: complete
-      tasks:
-      - name: Set state started in subject status
-        anarchy_subject_update:
-          metadata:
-            labels:
-              state: started
-          status:
-            state: started
-      - name: Schedule stop
-        anarchy_schedule_action:
-          action: stop
-          after: 8h
+      callbackHandlers:
+        started:
+          tasks:
+          - name: Set state provisioning in subject status
+            anarchy_subject_update:
+              metadata:
+                labels:
+                  state: provisioning
+              status:
+                state: provisioning
+        complete:
+          tasks:
+          - name: Set state started in subject status
+            anarchy_subject_update:
+              metadata:
+                labels:
+                  state: started
+              status:
+                state: started
+          - name: Schedule stop
+            anarchy_schedule_action:
+              action: stop
+              after: 8h
+          - name: Schedule destroy
+            anarchy_schedule_action:
+              action: destroy
+              after: 6d
 
-  - name: destroy
-    request:
-      parameters:
-        ACTION: destroy
-    vars:
-      deployer_entry_point: ansible/destroy.yml
-    eventHandlers:
-    - event: complete
+    stop:
       tasks:
-      - name: Delete anarchy subject
-        anarchy_subject_delete:
-          remove_finalizers: true
-      - name: Delete resource handle
-        when: >-
-          'poolboy.gpte.redhat.com/resource-handle-name' in anarchy_subject.metadata.annotations and
-          'poolboy.gpte.redhat.com/resource-handle-namespace' in anarchy_subject.metadata.annotations
-        k8s:
-          api_version: poolboy.gpte.redhat.com/v1
-          kind: ResourceHandle
-          name: >-
-            {{ anarchy_subject.metadata.annotations['poolboy.gpte.redhat.com/resource-handle-name'] }}
-          namespace: >-
-            {{ anarchy_subject.metadata.annotations['poolboy.gpte.redhat.com/resource-handle-namespace'] }}
-          state: absent
-      - name: Delete resource claim
-        when: >-
-          'poolboy.gpte.redhat.com/resource-claim-name' in anarchy_subject.metadata.annotations and
-          'poolboy.gpte.redhat.com/resource-claim-namespace' in anarchy_subject.metadata.annotations
-        k8s:
-          api_version: poolboy.gpte.redhat.com/v1
-          kind: ResourceClaim
-          name: >-
-            {{ anarchy_subject.metadata.annotations['poolboy.gpte.redhat.com/resource-claim-name'] }}
-          namespace: >-
-            {{ anarchy_subject.metadata.annotations['poolboy.gpte.redhat.com/resource-claim-namespace'] }}
-          state: absent
+      - name: Call API for stop
+        uri:
+          url: https://{{ babylon_tower_hostname }}/api/v2/job_templates/job-runner/launch/
+          url_username: "{{ api_creds.user }}"
+          url_password: "{{ api_creds.password }}"
+          validate_certs: false
+          method: POST
+          return_content: true
+          body_format: json
+          body:
+            extra_vars:
+              job_vars: >-
+                {{ anarchy_subject.vars.job_vars | default({})
+                 | combine(anarchy_governor.vars.job_vars, recursive=True)
+                 | combine({
+                     'ACTION': 'stop',
+                     '__meta__': {
+                       'deployer': {'entry_point': 'ansible/lifecycle.yml'},
+                       'tower': {'action': 'stop'}
+                     }
+                   }, recursive=True)
+                }}
+        ignore_errors: true
+        register: r_api_response
+
+      callbackHandlers:
+        started:
+          tasks:
+          - name: Set state stopping in subject status
+            anarchy_subject_update:
+              spec:
+                desiredState: stopped
+              metadata:
+                labels:
+                  state: stopping
+              status:
+                state: stopping
+          - name: Update desiredState stopped in subject resource handle
+            when:
+            - poolboy_resource_handle_name != ''
+            - poolboy_resource_handle_namespace != ''
+            k8s:
+              api_version: poolboy.gpte.redhat.com/v1
+              kind: ResourceHandle
+              name: "{{ poolboy_resource_handle_name }}"
+              namespace: "{{ poolboy_resource_handle_namespace }}"
+              merge_type: json
+              definition:
+              - op: replace
+                path: /spec/resources/{{ poolboy_resource_index }}/template/spec/desiredState
+                value: stopped
+          - name: Update desiredState stopped in subject resource claim
+            when:
+            - poolboy_resource_claim_name != ''
+            - poolboy_resource_claim_namespace != ''
+            k8s:
+              api_version: poolboy.gpte.redhat.com/v1
+              kind: ResourceClaim
+              name: "{{ poolboy_resource_claim_name }}"
+              namespace: "{{ poolboy_resource_claim_name }}"
+              merge_type: json
+              definition:
+              - op: replace
+                path: /spec/resources/{{ poolboy_resource_index }}/template/spec/desiredState
+                value: stopped
+        complete:
+          tasks:
+          - name: Set state stopped in subject status
+            anarchy_subject_update:
+              metadata:
+                labels:
+                  state: stopped
+              status:
+                state: stopped
+
+    start:
+      tasks:
+      - name: Call API
+        uri:
+          url: https://{{ babylon_tower_hostname }}/api/v2/job_templates/job-runner/launch/
+          url_username: "{{ api_creds.user }}"
+          url_password: "{{ api_creds.password }}"
+          validate_certs: false
+          method: POST
+          return_content: true
+          body_format: json
+          body:
+            extra_vars:
+              job_vars: >-
+                {{ anarchy_subject.vars.job_vars | default({})
+                 | combine(anarchy_governor.vars.job_vars, recursive=True)
+                 | combine({
+                     'ACTION': 'start',
+                     '__meta__': {
+                       'deployer': {'entry_point': 'ansible/lifecycle.yml'},
+                       'tower': {'action': 'start'}
+                     }
+                   }, recursive=True)
+                }}
+        ignore_errors: true
+        register: r_api_response
+
+      callbackHandlers:
+        started:
+          tasks:
+          - name: Set state starting in subject status
+            anarchy_subject_update:
+              metadata:
+                labels:
+                  state: starting
+              status:
+                state: starting
+        complete:
+          tasks:
+          - name: Set state started in subject status
+            anarchy_subject_update:
+              metadata:
+                labels:
+                  state: started
+              status:
+                state: started
+          - name: Schedule stop
+            anarchy_schedule_action:
+              action: stop
+              after: 8h
+
+    destroy:
+      tasks:
+      - name: Call API
+        uri:
+          url: https://{{ babylon_tower_hostname }}/api/v2/job_templates/job-runner/launch/
+          url_username: "{{ api_creds.user }}"
+          url_password: "{{ api_creds.password }}"
+          validate_certs: false
+          method: POST
+          return_content: true
+          body_format: json
+          body:
+            extra_vars:
+              job_vars: >-
+                {{ anarchy_subject.vars.job_vars | default({})
+                 | combine(anarchy_governor.vars.job_vars, recursive=True)
+                 | combine({
+                     'ACTION': 'destroy',
+                     '__meta__': {
+                       'deployer': {'entry_point': 'ansible/destroy.yml'},
+                       'tower': {'action': 'destroy'}
+                     }
+                   }, recursive=True)
+                }}
+        ignore_errors: true
+        register: r_api_response
+
+      callbackHandlers:
+        complete:
+          tasks:
+          - name: Delete anarchy subject
+            anarchy_subject_delete:
+              remove_finalizers: true
+          - name: Delete resource handle
+            when:
+            - poolboy_resource_handle_name != ''
+            - poolboy_resource_handle_namespace != ''
+            k8s:
+              api_version: poolboy.gpte.redhat.com/v1
+              kind: ResourceHandle
+              name: "{{ poolboy_resource_handle_name }}"
+              namespace: "{{ poolboy_resource_handle_namespace }}"
+              state: absent
+          - name: Delete resource claim
+            when:
+            - poolboy_resource_claim_name != ''
+            - poolboy_resource_claim_namespace != ''
+            k8s:
+              api_version: poolboy.gpte.redhat.com/v1
+              kind: ResourceClaim
+              name: "{{ poolboy_resource_claim_name }}"
+              namespace: "{{ poolboy_resource_claim_namespace }}"
+              state: absent
 {% endraw %}

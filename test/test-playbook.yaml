@@ -226,19 +226,6 @@
       name: test-new
       namespace: "{{ anarchy_operator_namespace }}"
 
-  - name: Remove test AnarchyAPI
-    k8s:
-      state: absent
-      api_version: anarchy.gpte.redhat.com/v1
-      kind: AnarchyAPI
-      name: test
-      namespace: "{{ anarchy_operator_namespace }}"
-
-  - name: Create test AnarchyAPI
-    k8s:
-      state: present
-      definition: "{{ lookup('template', 'test-api.yaml.j2') | from_yaml }}"
-
   - name: Create test AnarchyGovernor
     k8s:
       state: present
@@ -279,8 +266,9 @@
         spec:
           desiredState: started
           governor: test
-          parameters:
-            name: test-1
+          vars:
+            job_vars:
+              test_subject_var: test-1
 
   - name: Pause for provision start
     pause:
@@ -306,8 +294,8 @@
     assert:
       that:
       - action.spec.action == 'provision'
-      - action.status.events | length >= 1
-      - action.status.events[0].name == 'started'
+      - action.status.callbackEvents | length >= 1
+      - action.status.callbackEvents[0].name == 'started'
       fail_msg: test-1 provision not started
       success_msg: test-1 provision not found started
     vars:
@@ -338,8 +326,8 @@
     assert:
       that:
       - action.spec.action == 'provision'
-      - action.status.events | length == 2
-      - action.status.events[1].name == 'complete'
+      - action.status.callbackEvents | length == 2
+      - action.status.callbackEvents[1].name == 'complete'
       fail_msg: test-1 provision not complete
       success_msg: test-1 provision complete
     vars:

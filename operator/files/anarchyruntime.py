@@ -1,4 +1,5 @@
 import base64
+import copy
 import kubernetes
 import logging
 import os
@@ -16,6 +17,7 @@ class AnarchyRuntime(object):
         self.__init_domain(operator_domain)
         self.__init_namespace(operator_namespace)
         self.__init_kube_apis()
+        self.anarchy_service = os.environ.get('ANARCHY_SERVICE', 'anarchy-operator')
         self.anarchy_runners = {}
         self.last_lost_runner_check = time.time()
         self.runner_label = self.operator_domain + '/runner'
@@ -55,6 +57,12 @@ class AnarchyRuntime(object):
         else:
             self.operator_namespace = 'anarchy-operator'
 
+    def action_callback_url(self, action_name):
+        return '{}/action/{}'.format(
+            os.environ['CALLBACK_BASE_URL'], action_name
+        )
+
+
     def get_secret_data(self, secret_name, secret_namespace=None):
         if not secret_namespace:
             secret_namespace = self.operator_namespace
@@ -62,6 +70,28 @@ class AnarchyRuntime(object):
             secret_name, secret_namespace
         )
         return { k: base64.b64decode(v).decode('utf-8') for (k, v) in secret.data.items() }
+
+    def get_vars(self, obj):
+        if not obj:
+            return
+        merged_vars = copy.deepcopy(obj.vars)
+        for var_secret in obj.var_secrets:
+            secret_name = var_secret.get('name', None)
+            if secret_name:
+                try:
+                    secret_data = self.get_secret_data(secret_name)
+                    var_name = var_secret.get('var', None)
+                    if var_name:
+                        merged_vars[var_name] = secret_data
+                    else:
+                        merged_vars.update(secret_data)
+                except kubernetes.client.rest.ApiException as e:
+                    if e.status != 404:
+                        raise
+                    operator_logger.warning('varSecrets references missing secret, %s', secret_name)
+            else:
+                operator_logger.warning('varSecrets has entry with no name')
+        return merged_vars
 
     def register_runner(self, runner):
         self.anarchy_runners[runner] = time.time()

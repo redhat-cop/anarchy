@@ -147,11 +147,12 @@ def runner_get(runner_queue_name, runner_name):
             }]
         return flask.jsonify({
             'apiVersion': domain + '/v1',
-            'kind': 'AnarchyEvent',
+            'kind': 'AnarchyRun',
             'metadata': {
                 'name': 'test'
             },
             'spec': {
+                # vars? tasks?
                 'action': {
                     'metadata': {
                         'name': 'test-action'

@@ -17,6 +17,10 @@ class AnarchySubjectRunQueue(object):
     active_subjects = set()
 
     @staticmethod
+    def check_for_lost_runner_pods(runtime):
+        FIXME
+
+    @staticmethod
     def get(name, runtime):
         queue = AnarchySubjectRunQueue.queues.get(name, None)
         if queue:
@@ -37,6 +41,7 @@ class AnarchySubjectRunQueue(object):
             queue = AnarchySubjectRunQueue(name)
         return queue
 
+    @staticmethod
     def release(anarchy_subject_name):
         if anarchy_subject_name in AnarchySubjectRunQueue.active_subjects:
             operator_logger.debug('Release AnarchySubject %s to re-enter run queue', anarchy_subject_name)
@@ -70,17 +75,17 @@ class AnarchySubject(object):
     cache = {}
 
     @staticmethod
-    def cache_put(anarchy_subject):
-        anarchy_subject.last_active = time.time()
-        AnarchySubject.cache[anarchy_subject.name] = anarchy_subject
-
-    @staticmethod
     def cache_clean():
         for anarchy_subject_name in list(AnarchySubject.cache.keys()):
             anarchy_subject = AnarchySubject.cache[anarchy_subject_name]
-            if not anarchy_subject.current_event \
+            if not anarchy_subject.current_anarchy_run \
             and time.time() - anarchy_subject.last_active > cache_age_limit:
                 del AnarchySubject.cache[anarchy_subject_name]
+
+    @staticmethod
+    def cache_put(anarchy_subject):
+        anarchy_subject.last_active = time.time()
+        AnarchySubject.cache[anarchy_subject.name] = anarchy_subject
 
     @staticmethod
     def cache_update(resource):
@@ -118,7 +123,7 @@ class AnarchySubject(object):
 
     @staticmethod
     def get_pending(runner_queue_name, runtime):
-        """Get AnarchySubject with pending events or return None"""
+        """Get AnarchySubject with pending ansible runs or return None"""
         return AnarchySubjectRunQueue.get(runner_queue_name, runtime)
 
     def __init__(self, resource):
@@ -126,20 +131,13 @@ class AnarchySubject(object):
         self.metadata = resource['metadata']
         self.spec = resource['spec']
         self.status = resource.get('status', None)
-        self.__init_event_properties()
-        self.__sanity_check()
-
-    def __init_event_properties(self):
         # Last activity on subject, used to manage caching
         self.last_active = 0
-        # Lock for managing pending events
-        self.event_lock = threading.Lock()
-        # Dictionary of active AnarchyEvents for this AnarchySubject
-        self.active_events = {}
-        # Current running AnarchyEvent name or AnarchyEvent waiting for retry
-        self.current_event = None
-        # Queue of AnarchyEvent names waiting to be run
-        self.event_queue = queue.Queue()
+        self.anarchy_run_lock = threading.Lock()
+        self.anarchy_run_queue = queue.Queue()
+        self.anarchy_runs = {}
+        self.current_anarchy_run = None
+        self.__sanity_check()
 
     def __sanity_check(self):
         assert 'governor' in self.spec, \
@@ -181,37 +179,51 @@ class AnarchySubject(object):
     def vars(self):
         return self.spec.get('vars', {})
 
+    @property
+    def var_secrets(self):
+        return self.spec.get('varSecrets', [])
+
     def add_finalizer(self, runtime):
         finalizers = self.metadata.get('finalizers', [])
-        runtime.custom_objects_api.patch_namespaced_custom_object(
-            runtime.operator_domain, 'v1', runtime.operator_namespace, 'anarchysubjects', self.name,
-            {'metadata': {'finalizers': finalizers + [runtime.operator_domain] } }
-        )
+        if runtime.operator_domain not in finalizers:
+            runtime.custom_objects_api.patch_namespaced_custom_object(
+                runtime.operator_domain, 'v1', runtime.operator_namespace, 'anarchysubjects', self.name,
+                {'metadata': {'finalizers': finalizers + [runtime.operator_domain] } }
+            )
 
-    def enqueue_event(self, anarchy_event, runtime):
-        """Add event to queue or update event definition in queue if already present"""
+    def enqueue_anarchy_run(self, anarchy_run, runtime):
+        """Add anarchy_run to queue or update anarchy_run definition in queue if already present"""
         self.last_active = time.time()
-        self.event_lock.acquire()
+        self.anarchy_run_lock.acquire()
         try:
-            anarchy_event_name = anarchy_event.name
-            event_is_new = anarchy_event_name not in self.active_events
-            self.active_events[anarchy_event_name] = anarchy_event
-            if event_is_new:
-                if self.current_event:
-                    self.event_queue.put(anarchy_event_name)
+            anarchy_run_name = anarchy_run.name
+            anarchy_run_is_new = anarchy_run_name not in self.anarchy_runs
+            self.anarchy_runs[anarchy_run_name] = anarchy_run
+            if anarchy_run_is_new:
+                if self.current_anarchy_run:
+                    self.anarchy_run_queue.put(anarchy_run_name)
                 else:
-                    self.current_event = anarchy_event_name
+                    self.current_anarchy_run = anarchy_run_name
                     self.put_in_job_queue(runtime)
         finally:
-            self.event_lock.release()
+            self.anarchy_run_lock.release()
 
-    def event_update(self, anarchy_event, runtime):
+    def anarchy_run_update(self, anarchy_run, runtime):
         self.last_active = time.time()
-        self.event_lock.acquire()
+        self.anarchy_run_lock.acquire()
         try:
-            self.active_events[anarchy_event.name] = anarchy_event
+            self.anarchy_runs[anarchy_run.name] = anarchy_run
         finally:
-            self.event_lock.release()
+            self.anarchy_run_lock.release()
+
+    def delete(self, remove_finalizers, runtime):
+        result = runtime.custom_objects_api.delete_namespaced_custom_object(
+            runtime.operator_domain, 'v1', runtime.operator_namespace,
+            'anarchysubjects', self.name, kubernetes.client.V1DeleteOptions()
+        )
+        if remove_finalizers:
+            self.remove_finalizers(runtime)
+        return result
 
     def get_governor(self, runtime):
         governor = AnarchyGovernor.get(self.spec['governor'])
@@ -219,8 +231,8 @@ class AnarchySubject(object):
             operator_logger.error('Unable to find governor %s', self.governor_name)
         return governor
 
-    def get_event_to_run(self, runtime):
-        return self.active_events[self.current_event]
+    def get_anarchy_run(self, runtime):
+        return self.anarchy_runs.get(self.current_anarchy_run, None)
 
     def handle_create(self, runtime):
         self.add_finalizer(runtime)
@@ -232,25 +244,57 @@ class AnarchySubject(object):
         self.record_delete_started(runtime)
         event_handled = self.process_subject_event_handlers(runtime, 'delete')
         if not event_handled:
-            self.remove_finalizer(runtime)
+            self.remove_finalizers(runtime)
 
     def handle_update(self, runtime):
         self.process_subject_event_handlers(runtime, 'update')
+
+    def patch(self, patch, runtime):
+        # FIXME - mechanism to prevent this from being processed double with a status update?
+        resource_patch = {}
+        result = None
+        if 'metadata' in patch:
+            resource_patch['metadata'] = patch['metadata']
+        if 'spec' in patch:
+            resource_patch['spec'] = patch['spec']
+        if resource_patch:
+            result = runtime.custom_objects_api.patch_namespaced_custom_object(
+                runtime.operator_domain, 'v1', runtime.operator_namespace,
+                'anarchysubjects', self.name, resource_patch
+            )
+        if 'status' in patch:
+            result = runtime.custom_objects_api.patch_namespaced_custom_object_status(
+                runtime.operator_domain, 'v1', runtime.operator_namespace,
+                'anarchysubjects', self.name, {'status': patch['status']}
+            )
+        return result
 
     def put_in_job_queue(self, runtime):
         operator_logger.info('Putting AnarchySubject %s in run queue', self.name)
         # FIXME - Allow for other job queues
         AnarchySubjectRunQueue.put('default', self.name, runtime)
 
-    def process_action_event_handlers(self, runtime, action, event_data, event_name):
-        governor = self.get_governor(runtime)
-        if governor:
-            governor.process_action_event_handlers(runtime, self, action, event_data, event_name)
-
     def process_subject_event_handlers(self, runtime, event_name):
         governor = self.get_governor(runtime)
-        if governor:
-            return governor.process_subject_event_handlers(runtime, self, event_name)
+        if not governor:
+            operator_logger.warning('Received "%s" event for subject "%s", but cannot find AnarchyGovernor %s', event_name, subject.name, governor.name)
+            return
+
+        handler = governor.subject_event_handlers.get(event_name, None)
+        if not handler:
+            return
+
+        context = (
+            ('governor', governor),
+            ('subject', self),
+            ('handler', handler)
+        )
+        run_vars = {
+            'anarchy_event_name': event_name
+        }
+
+        governor.run_ansible(runtime, handler.tasks, run_vars, context, self, None, event_name)
+        return True
 
     def record_delete_started(self, runtime):
         runtime.custom_objects_api.patch_namespaced_custom_object_status(
@@ -258,47 +302,47 @@ class AnarchySubject(object):
             {'status': {'deleteHandlersStarted': datetime.utcnow().strftime('%FT%TZ') } }
         )
 
-    def remove_finalizer(self, runtime):
-        runtime.custom_objects_api.patch_namespaced_custom_object(
+    def remove_finalizers(self, runtime):
+        return runtime.custom_objects_api.patch_namespaced_custom_object(
             runtime.operator_domain, 'v1', runtime.operator_namespace, 'anarchysubjects', self.name,
             {'metadata': {'finalizers': None } }
         )
 
-    def remove_active_event(self, anarchy_event, runtime):
-        anarchy_event_name = anarchy_event.name
-        self.event_lock.acquire()
+    def remove_anarchy_run(self, anarchy_run, runtime):
+        anarchy_run_name = anarchy_run.name
+        self.anarchy_run_lock.acquire()
         try:
             try:
-                del self.active_events[anarchy_event_name]
-                operator_logger.info('Removed AnarchyEvent %s from active events', anarchy_event_name)
+                del self.anarchy_runs[anarchy_run_name]
+                operator_logger.info('Removed AnarchyRun %s from anarchy_runs', anarchy_run_name)
             except KeyError:
-                operator_logger.debug('Removed AnarchyEvent %s was not in active events', anarchy_event_name)
+                operator_logger.debug('Removed AnarchyRun %s was not found in anarchy_runs', anarchy_run_name)
 
-            if self.current_event == anarchy_event_name:
-                operator_logger.info('Removing current AnarchyEvent %s for AnarchySubject %s', anarchy_event_name, self.name)
-                self.current_event = None
+            if self.current_anarchy_run == anarchy_run_name:
+                operator_logger.info('Removing current AnarchyRun %s for AnarchySubject %s', anarchy_run_name, self.name)
+                self.current_anarchy_run = None
                 while True:
                     try:
-                        next_event_name = self.event_queue.get_nowait()
-                        if next_event_name in self.active_events:
-                            operator_logger.debug('New current AnarchyEvent is %s for AnarchySubject %s', next_event_name, self.name)
-                            self.current_event = next_event_name
+                        next_run_name = self.anarchy_run_queue.get_nowait()
+                        if next_run_name in self.anarchy_runs:
+                            operator_logger.debug('New current AnarchyRun is %s for AnarchySubject %s', next_run_name, self.name)
+                            self.current_anarchy_run = next_run_name
                             self.put_in_job_queue(runtime)
                             break
                         else:
-                            operator_logger.warn('AnarchyEvent %s for AnarchySubject %s removed before processing', next_event_name, self.name)
+                            operator_logger.warn('AnarchyRun %s for AnarchySubject %s removed before processing', next_run_name, self.name)
                     except queue.Empty:
                         break
         finally:
-            self.event_lock.release()
+            self.anarchy_run_lock.release()
 
     def run_queue_release(self):
         AnarchySubjectRunQueue.release(self.name)
 
     def start_action(self, runtime, anarchy_action):
-        if self.current_event:
+        if self.current_anarchy_run:
             operator_logger.info(
-                'Deferring AnarchyAction %s on AnarchySubject %s due to AnarchyEvent processing',
+                'Deferring AnarchyAction %s on AnarchySubject %s due to AnarchyRun processing',
                 anarchy_action.name, self.name
             )
             return False

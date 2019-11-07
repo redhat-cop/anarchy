@@ -9,116 +9,96 @@ import kubernetes.client.rest
 import logging
 import os
 import prometheus_client
+import re
 import sys
 import threading
 import time
+import uuid
 import yaml
 
 from anarchyruntime import AnarchyRuntime
-from anarchyapi import AnarchyAPI
+from anarchyrunner import AnarchyRunner
 from anarchygovernor import AnarchyGovernor
 from anarchysubject import AnarchySubject
 from anarchyaction import AnarchyAction
-from anarchyevent import AnarchyEvent
+from anarchyrun import AnarchyRun
 
 api = flask.Flask('rest')
+runner_check_interval = 60
 runner_token = os.environ.get('RUNNER_TOKEN', None)
+
+action_cache_lock = threading.Lock()
+action_cache = {}
 
 operator_logger = logging.getLogger('operator')
 operator_logger.setLevel(os.environ.get('LOGGING_LEVEL', 'INFO'))
 runtime = AnarchyRuntime()
-
-# Variables initialized during init()
-api_load_complete = False
-event_load_complete = False
-governor_load_complete = False
-
-# Action running globals
-action_cache_lock = threading.Lock()
-action_cache = {}
+init_complete = False
 
 def init():
     """Initialization function before management loops."""
-    init_apis()
+    global init_complete
+    init_runners()
     init_governors()
-    init_events()
+    init_runs()
+    init_complete = True
     operator_logger.debug("Completed init")
 
-def init_apis():
-    """Get initial list of anarchy apis"""
-    global api_load_complete
+def init_runners():
+    """Get initial list of AnarchyRunners"""
     for resource in runtime.custom_objects_api.list_namespaced_custom_object(
-        runtime.operator_domain, 'v1', runtime.operator_namespace, 'anarchyapis'
+        runtime.operator_domain, 'v1', runtime.operator_namespace, 'anarchyrunners'
     ).get('items', []):
-        AnarchyAPI.register(resource)
-    api_load_complete = True
-
-def init_events():
-    """Load events that require processing"""
-    global event_load_complete
-    anarchy_events = []
-    for resource in runtime.custom_objects_api.list_namespaced_custom_object(
-        runtime.operator_domain, 'v1', runtime.operator_namespace, 'anarchyevents',
-        label_selector = runtime.runner_label
-    ).get('items', []):
-        anarchy_event = AnarchyEvent(resource)
-        runner = anarchy_event.get_runner_name(runtime)
-
-        if not runner or runner == 'successful':
-            pass
-        else:
-            anarchy_events.append(anarchy_event)
-            if runner != 'pending':
-                # If runner is not "pending", then it is either the name of a
-                # specific runner or "failed". Either way it is the subject's
-                # current event.
-                anarchy_subject = anarchy_event.get_subject(runtime)
-                anarchy_subject.current_event = anarchy_event.name
-                if runner != 'failed':
-                    # If the event is recorded as executing on a specific runner
-                    # then we need to track the runner in case it has been lost.
-                    runtime.anarchy_runners[runner] = 0
-
-    anarchy_events.sort(key=lambda x: x.creation_timestamp)
-    for anarchy_event in anarchy_events:
-        AnarchyEvent.register(anarchy_event, runtime)
-
-    for pod in runtime.core_v1_api.list_namespaced_pod(
-        runtime.operator_namespace,
-        label_selector = 'name=anarchy-runner'
-    ).items:
-        runner = pod.metadata.name
-        if pod.status.phase == 'Running':
-            runtime.register_runner(runner)
-
-    check_for_lost_runners()
-    event_load_complete = True
+        runner = AnarchyRunner.register(resource)
+    AnarchyRunner.refresh_all_runner_pods(runtime)
 
 def init_governors():
     """Get initial list of anarchy governors"""
-    global governor_load_complete
     for resource in runtime.custom_objects_api.list_namespaced_custom_object(
         runtime.operator_domain, 'v1', runtime.operator_namespace, 'anarchygovernors'
     ).get('items', []):
         AnarchyGovernor.register(resource)
-    governor_load_complete = True
+
+def init_runs():
+    """Load AnarchyRuns that require processing"""
+    anarchy_runs = []
+    for resource in runtime.custom_objects_api.list_namespaced_custom_object(
+        runtime.operator_domain, 'v1', runtime.operator_namespace, 'anarchyruns',
+        label_selector = runtime.runner_label
+    ).get('items', []):
+        anarchy_run = AnarchyRun(resource)
+        runner_value = anarchy_run.get_runner_label_value(runtime)
+
+        if runner_value and runner_value not in ('successful', 'pending'):
+            # If runner vaule is not "successful" or "pending", then it is
+            # either the name of a specific runner pod or "failed". Either
+            # way it is the subject's current run.
+            anarchy_subject = anarchy_run.get_subject(runtime)
+            anarchy_subject.current_anarchy_run = anarchy_run.name
+            anarchy_subject.anarchy_runs[anarchy_run.name] = anarchy_run
+            if '.' in runner_value:
+                runner_name, pod_name = runner_value.split('.')
+                if runner_name in AnarchyRunner.runners \
+                and pod_name in AnarchyRunner.runners[runner_name].runner_pods:
+                    AnarchyRunner.runners[runner_name].runner_pods[pod_name] = anarchy_run
+                else:
+                    anarchy_run.handle_lost_runner(pod_name, runtime)
 
 def wait_for_init():
-    while not api_load_complete or not governor_load_complete:
-        if not api_load_complete:
-            operator_logger.info('Wating for api init')
-        if not event_load_complete:
-            operator_logger.info('Wating for event init')
-        if not governor_load_complete:
-            operator_logger.info('Wating for governor init')
+    while not init_complete:
+        operator_logger.info('Waiting for initialization to complete')
         time.sleep(1)
 
-@kopf.on.event(runtime.operator_domain, 'v1', 'anarchyapis')
-def handle_api_event(event, **_):
+
+@kopf.on.event(runtime.operator_domain, 'v1', 'anarchyrunners')
+def handle_runner_event(event, **_):
     if event['type'] == 'DELETED':
-        AnarchyAPI.unregister(event['object']['metadata']['name'])
+        AnarchyRunner.unregister(event['object']['metadata']['name'])
     elif event['type'] in ['ADDED', 'MODIFIED', None]:
-        AnarchyAPI.register(event['object'])
+        runner = AnarchyRunner.register(event['object'])
+        runner.manage_runner_deployment(runtime)
+        runner.refresh_runner_pods(runtime)
+
 
 @kopf.on.event(runtime.operator_domain, 'v1', 'anarchygovernors')
 def handle_governor_event(event, **_):
@@ -126,6 +106,7 @@ def handle_governor_event(event, **_):
         AnarchyGovernor.unregister(event['object']['metadata']['name'])
     elif event['type'] in ['ADDED', 'MODIFIED', None]:
         AnarchyGovernor.register(event['object'])
+
 
 @kopf.on.create(runtime.operator_domain, 'v1', 'anarchysubjects')
 def handle_subject_create(body, **_):
@@ -149,6 +130,23 @@ def handle_subject_event(event, **_):
             anarchy_subject = AnarchySubject(resource)
         if anarchy_subject.is_pending_delete:
             anarchy_subject.handle_delete(runtime)
+
+
+# FIXME - Switch to using kopf.on.delete?
+@kopf.on.event(runtime.operator_domain, 'v1', 'anarchyactions')
+def handle_action_event(event, **_):
+    wait_for_init()
+    try:
+        action_cache_lock.acquire()
+        action = AnarchyAction(event['object'])
+        if event['type'] == 'DELETED':
+            cache_remove_action(action)
+        elif event['type'] in ['ADDED', 'MODIFIED', None]:
+            cache_action(action)
+        else:
+            operator_logger.warning('Unknown event for AnarchyAction %s', event)
+    finally:
+        action_cache_lock.release()
 
 def cache_action(action):
     if action.has_started \
@@ -177,7 +175,263 @@ def start_actions():
         except Exception as e:
             operator_logger.exception("Error running action %s", action.name)
 
-def start_actions_loop():
+
+@kopf.on.event(runtime.operator_domain, 'v1', 'anarchyruns')
+def handle_event_event(event, **_):
+    wait_for_init()
+    anarchy_event = AnarchyRun(event['object'])
+    if event['type'] == 'DELETED':
+        AnarchyRun.unregister(anarchy_event, runtime)
+    elif event['type'] in ['ADDED', 'MODIFIED', None]:
+        AnarchyRun.register(anarchy_event, runtime)
+
+
+@api.route('/action/<string:anarchy_action_name>', methods=['POST'])
+def action_callback(anarchy_action_name):
+    operator_logger.info("Action callback for %s", anarchy_action_name)
+    return handle_action_callback(anarchy_action_name, None)
+@api.route('/action/<string:anarchy_action_name>/<string:callback_name>', methods=['POST'])
+def named_action_callback(anarchy_action_name, callback_name):
+    operator_logger.info("AnarchyAction %s received callback %s", anarchy_action_name, callback_name)
+    return handle_action_callback(anarchy_action_name, callback_name)
+
+def handle_action_callback(anarchy_action_name, callback_name):
+    if not flask.request.json:
+        flask.abort(400)
+        return
+    anarchy_action = AnarchyAction.get(anarchy_action_name, runtime)
+    if not anarchy_action:
+        operator_logger.warning("AnarchyAction %s not found for callback", anarchy_action_name)
+        flask.abort(404)
+        return
+    if not anarchy_action.check_callback_token(flask.request.headers.get('Authorization', '')):
+        operator_logger.warning("Invalid callback token for AnarchyAction %s", anarchy_action_name)
+        flask.abort(403)
+        return
+    anarchy_action.process_callback(runtime, callback_name, flask.request.json)
+    return flask.jsonify({'status': 'ok'})
+
+
+@api.route('/run', methods=['GET'])
+def get_run():
+    anarchy_runner, runner_pod = check_runner_auth(flask.request.headers.get('Authorization', ''))
+    if not anarchy_runner:
+        flask.abort(400)
+        return
+    anarchy_run = anarchy_runner.runner_pods.get(runner_pod, None)
+    if anarchy_run:
+        operator_logger.warning(
+            'AnarchyRunner %s pod %s get run, but already had run %s!',
+            anarchy_runner.name, runner_pod, anarchy_run.name
+        )
+        anarchy_run.handle_lost_runner(runner_pod, runtime)
+    anarchy_subject = AnarchySubject.get_pending(anarchy_runner.name, runtime)
+    if not anarchy_subject:
+        return flask.jsonify(None)
+    anarchy_run = anarchy_subject.get_anarchy_run(runtime)
+    if not anarchy_run:
+        return flask.jsonify(None)
+    anarchy_runner.runner_pods[runner_pod] = anarchy_run
+    anarchy_run.set_runner(anarchy_runner.name + '.' + runner_pod, runtime)
+    return flask.jsonify(anarchy_run.to_dict(runtime))
+
+@api.route('/run/<string:run_name>', methods=['POST'])
+def post_run(run_name):
+    anarchy_runner, runner_pod = check_runner_auth(flask.request.headers.get('Authorization', ''))
+    if not anarchy_runner:
+        flask.abort(400)
+        return
+
+    anarchy_run = anarchy_runner.runner_pods.get(runner_pod, None)
+    anarchy_runner.runner_pods[runner_pod] = None
+    if not anarchy_run and anarchy_run.name == run_name:
+        operator_logger.warning(
+            'AnarchyRunner %s pod %s posted unexpected run %s!',
+            anarchy_runner.name, runner_pod, anarchy_run.name
+        )
+        flask.abort(400)
+        return
+
+    try:
+        result = flask.request.json['result']
+    except KeyError:
+        return flask.abort(400, flask.jsonify(
+            {'success': False, 'error': 'Invalid run data'}
+        ))
+    
+    anarchy_subject = anarchy_run.get_subject(runtime)
+    if not anarchy_subject:
+        return flask.abort(404, flask.jsonify(
+            {'success': False, 'error': 'AnarchySubject not found'}
+        ))
+
+    anarchy_subject.run_queue_release()
+    anarchy_run.post_result(result, runner_pod, runtime)
+    return flask.jsonify({'success':True})
+
+@api.route('/run/subject/<string:subject_name>', methods=['PATCH','DELETE'])
+def patch_or_delete_subject(subject_name):
+    anarchy_runner, runner_pod = check_runner_auth(flask.request.headers.get('Authorization', ''))
+    if not anarchy_runner:
+        flask.abort(400)
+        return
+
+    anarchy_run = anarchy_runner.runner_pods.get(runner_pod, None)
+    if not anarchy_run:
+        operator_logger.warning(
+            'AnarchyRunner %s pod %s cannot update AnarchySubject %s without AnarchyRun!',
+            anarchy_runner.name, runner_pod, subject_name
+        )
+        flask.abort(400)
+        return
+
+    anarchy_subject = anarchy_run.get_subject(runtime)
+    if not anarchy_subject or anarchy_subject.name != subject_name:
+        operator_logger.warning(
+            'AnarchyRunner %s pod %s cannot update AnarchySubject %s!',
+            anarchy_runner.name, runner_pod, subject_name
+        )
+        flask.abort(400)
+        return
+
+    if flask.request.method == 'PATCH':
+        if not 'patch' in flask.request.json:
+            operator_logger.warning('No patch in AnarchySubject %s post', subject_name)
+            flask.abort(400)
+            return
+        result = anarchy_subject.patch(flask.request.json['patch'], runtime)
+    elif flask.request.method == 'DELETE':
+        result = anarchy_subject.delete(flask.request.json.get('remove_finalizers', False), runtime)
+
+    return flask.jsonify({'success': True, 'result': result})
+
+@api.route('/run/subject/<string:subject_name>/actions', methods=['POST'])
+def post_subject_action(subject_name):
+    anarchy_runner, runner_pod = check_runner_auth(flask.request.headers.get('Authorization', ''))
+    if not anarchy_runner:
+        flask.abort(400)
+        return
+
+    anarchy_run = anarchy_runner.runner_pods.get(runner_pod, None)
+    if not anarchy_run:
+        operator_logger.warning(
+            'AnarchyRunner %s pod %s cannot update AnarchySubject %s without AnarchyRun!',
+            anarchy_runner.name, runner_pod, subject_name
+        )
+        flask.abort(400)
+        return
+
+    anarchy_subject = anarchy_run.get_subject(runtime)
+    if not anarchy_subject or anarchy_subject.name != subject_name:
+        operator_logger.warning(
+            'AnarchyRunner %s pod %s cannot update AnarchySubject %s!',
+            anarchy_runner.name, runner_pod, subject_name
+        )
+        flask.abort(400)
+        return
+
+    anarchy_governor = anarchy_subject.get_governor(runtime)
+    if not anarchy_governor:
+        operator_logger.warning(
+            'AnarchyRunner %s pod %s cannot update AnarchySubject %s, unable to find AnarchyGovernor %s!',
+            anarchy_runner.name, runner_pod, subject_name, anarchy_subject.governor_name
+        )
+        flask.abort(400)
+        return
+
+    action_name = flask.request.json.get('action', None)
+    after_timestamp = flask.request.json.get('after', None)
+    cancel_actions = flask.request.json.get('cancel', None)
+    if not action_name or cancel_actions:
+        operator_logger.warning('No action or cancel given for scheduling action')
+        flask.abort(400)
+        return
+    if after_timestamp and not re.match(r'\d\d\d\d-\d\d-\d\dT\d\d:\d\d:\d\dZ', after_timestamp):
+        operator_logger.warning('Invalide datetime format "%s" given for action after value', after_timestamp)
+        flask.abort(400)
+        return
+
+    if action_name not in cancel_actions:
+        cancel_actions.append(action_name)
+
+    for action_resource in runtime.custom_objects_api.list_namespaced_custom_object(
+        runtime.operator_domain, 'v1', runtime.operator_namespace, 'anarchyactions',
+        label_selector='{}/subject={}'.format(runtime.operator_domain, anarchy_subject.name)
+    ).get('items', []):
+        if action_resource['spec']['action'] in cancel_actions \
+        and 'status' not in action_resource:
+            runtime.custom_objects_api.delete_namespaced_custom_object(
+                runtime.operator_domain, 'v1', runtime.operator_namespace, 'anarchyactions',
+                action_resource['metadata']['name'], kubernetes.client.V1DeleteOptions()
+            )
+
+    if action_name:
+        result = runtime.custom_objects_api.create_namespaced_custom_object(
+            runtime.operator_domain, 'v1', runtime.operator_namespace, 'anarchyactions',
+            {
+                "apiVersion": runtime.operator_domain + "/v1",
+                "kind": "AnarchyAction",
+                "metadata": {
+                    "generateName": "%s-%s-" % (anarchy_subject.name, action_name),
+                    "labels": {
+                        runtime.operator_domain + '/action': action_name,
+                        runtime.operator_domain + "/subject": anarchy_subject.name,
+                        runtime.operator_domain + "/governor": anarchy_governor.name
+                    },
+                    "ownerReferences": [{
+                        "apiVersion": runtime.operator_domain + "/v1",
+                        "controller": True,
+                        "kind": "AnarchySubject",
+                        "name": anarchy_subject.name,
+                        "uid": anarchy_subject.uid
+                    }]
+                },
+                "spec": {
+                    "action": action_name,
+                    "after": after_timestamp,
+                    "callbackToken": uuid.uuid4().hex,
+                    "governorRef": {
+                        "apiVersion": runtime.operator_domain + "/v1",
+                        "kind": "AnarchyGovernor",
+                        "name": anarchy_governor.name,
+                        "namespace":  runtime.operator_namespace,
+                        "uid": anarchy_governor.uid
+                    },
+                    "subjectRef": {
+                        "apiVersion": runtime.operator_domain + "/v1",
+                        "kind": "AnarchySubject",
+                        "name": anarchy_subject.name,
+                        "namespace":  runtime.operator_namespace,
+                        "uid": anarchy_subject.uid
+                    }
+                }
+            }
+        )
+    else:
+        result = None
+
+    return flask.jsonify({'success': True, 'result': result})
+        
+def check_runner_auth(auth_header):
+    match = re.match(r'Bearer ([^:]+):([^:]+):(.*)', auth_header)
+    if not match:
+        return None, None
+    runner_name = match.group(1)
+    runner_pod = match.group(2)
+    runner_token = match.group(3)
+
+    anarchy_runner = AnarchyRunner.get(runner_name)
+    if not anarchy_runner:
+        operator_logger.warning('Failed auth for unknown AnarchyRunner %s %s', runner_name, runner_pod)
+        return None, None
+    elif anarchy_runner.runner_token != runner_token:
+        operator_logger.warning('Invalid auth token for AnarchyRunner %s %s', runner_name, runner_pod)
+        return None, None
+
+    return anarchy_runner, runner_pod
+
+def main_loop():
+    last_runner_check = 0
     while True:
         try:
             action_cache_lock.acquire()
@@ -186,156 +440,23 @@ def start_actions_loop():
             operator_logger.exception("Error in start_actions_loop!")
         finally:
             action_cache_lock.release()
-            time.sleep(1)
 
-@kopf.on.event(runtime.operator_domain, 'v1', 'anarchyactions')
-def handle_action_event(event, **_):
-    wait_for_init()
-    action = AnarchyAction(event['object'])
-    if event['type'] == 'DELETED':
-        cache_remove_action(action)
-    elif event['type'] in ['ADDED', 'MODIFIED', None]:
-        cache_action(action)
-    else:
-        operator_logger.warn('Unknown event for AnarchyAction %s', event)
+        if runner_check_interval < time.time() - last_runner_check:
+            try:
+                AnarchyRunner.refresh_all_runner_pods(runtime)
+                last_runner_check = time.time()
+            except:
+                operator_logger.exception('Error checking runner pods in main loop')
 
-@kopf.on.event(runtime.operator_domain, 'v1', 'anarchyevents')
-def handle_event_event(event, **_):
-    wait_for_init()
-    anarchy_event = AnarchyEvent(event['object'])
-    if event['type'] == 'DELETED':
-        AnarchyEvent.unregister(anarchy_event, runtime)
-    elif event['type'] in ['ADDED', 'MODIFIED', None]:
-        AnarchyEvent.register(anarchy_event, runtime)
-
-@kopf.on.event('', 'v1', 'pods', labels={runtime.runner_label: None})
-def handle_ansible_runner_event(event, **_):
-    wait_for_init()
-    pod = event['object']
-    pod_meta = pod['metadata']
-    pod_name = pod_meta['name']
-    if pod_meta.get('labels', {}).get('name', '') != 'anarchy-runner':
-        operator_logger.debug('not an anarchy-runner pod')
-        return
-    if event['type'] == 'DELETED':
-        AnarchyEvent.handle_lost_runner(pod_name, runtime)
-        runtime.remove_runner(pod_name)
-    elif event['type'] in ['ADDED', 'MODIFIED', None]:
-        pod_status = pod['status']
-        if pod['status']['phase'] == 'Running':
-            runtime.register_runner(pod_name)
-        else:
-            AnarchyEvent.handle_lost_runner(pod_name, runtime)
-            runtime.remove_runner(pod_name)
-
-    # Check for lost runner pods every 15 minutes
-    if runtime.last_lost_runner_check < time.time() - 900:
-        check_for_lost_runners()
-
-def check_for_lost_runners():
-    runtime.last_lost_runner_check = time.time()
-    lost_runner_pods = []
-    for runner_name, last_running_time in runtime.anarchy_runners.items():
-        if last_running_time < time.time() - 900:
-            operator_logger.warn('Lost runner pod %s', runner_name)
-            AnarchyEvent.handle_lost_runner(runner_name, runtime)
-            lost_runner_pods.append(runner_name)
-    for runner_name in lost_runner_pods:
-        del runtime.anarchy_runners[runner_name]
-
-def __event_callback(anarchy_action_name, event_name):
-    if not flask.request.json:
-        flask.abort(400)
-        return
-
-    try:
-        anarchy_action_resource = runtime.custom_objects_api.get_namespaced_custom_object(
-            runtime.operator_domain, 'v1', runtime.operator_namespace,
-            'anarchyactions', anarchy_action_name
-        )
-    except kubernetes.client.rest.ApiException as e:
-        if e.status == 404:
-            operator_logger.warn("Callback for AnarchyAction %s not found", anarchy_action_name)
-            flask.abort(404)
-            return
-        else:
-            raise
-
-    anarchy_action = AnarchyAction(anarchy_action_resource)
-
-    if not anarchy_action.check_callback_token(flask.request.headers.get('Authorization')):
-        operator_logger.warn("Invalid callback token for AnarchyAction %s", anarchy_action_name)
-        flask.abort(403)
-        return
-
-    anarchy_action.process_event(runtime, flask.request.json)
-    return flask.jsonify({'status': 'ok'})
-
-@api.route(
-    '/event/<string:anarchy_action_name>',
-    methods=['POST']
-)
-def action_callback(anarchy_action_name):
-    operator_logger.info("Action callback for %s", anarchy_action_name)
-    return __event_callback(anarchy_action_name, None)
-
-@api.route(
-    '/event/<string:anarchy_action_name>/<string:event_name>',
-    methods=['POST']
-)
-def event_callback(anarchy_action_name, event_name):
-    operator_logger.info("AnarchyAction %s received callback event %s", anarchy_action_name, event_name)
-    return __event_callback(anarchy_action_name, event_name)
-
-@api.route('/runner/<string:runner_queue_name>/<string:runner_name>', methods=['GET', 'POST'])
-def runner(runner_queue_name, runner_name):
-    authorization_header = flask.request.headers.get('Authorization', '')
-    if authorization_header != 'Bearer ' + runner_token:
-        flask.abort(400)
-        return
-
-    if flask.request.method == 'POST':
-        operator_logger.debug('Received POST with %s', flask.request.json)
-        try:
-            run = flask.request.json['run']
-            result = flask.request.json['result']
-            anarchy_event_name = run['metadata']['name']
-            anarchy_subject_name = run['spec']['subject']['metadata']['name']
-        except KeyError:
-            return flask.abort(400, flask.jsonify(
-                {'success': False, 'error': 'Invalid run data'}
-            ))
-
-        anarchy_subject = AnarchySubject.get(anarchy_subject_name, runtime)
-        if not anarchy_subject:
-            return flask.abort(400, flask.jsonify(
-                {'success': False, 'error': 'AnarchySubject not found'}
-            ))
-
-        anarchy_event = anarchy_subject.active_events.get(anarchy_event_name, None)
-        if not anarchy_event:
-            return flask.abort(400, flask.jsonify(
-                {'success': False, 'error': 'AnarchyEvent not found'}
-            ))
-
-        anarchy_subject.run_queue_release()
-        anarchy_event.post_result(result, runner_name, runtime)
-        return flask.jsonify({'success':True})
-    else:
-        anarchy_subject = AnarchySubject.get_pending(runner_queue_name, runtime)
-        if not anarchy_subject:
-            return flask.jsonify(None)
-        anarchy_event = anarchy_subject.get_event_to_run(runtime)
-        anarchy_event.set_runner(runner_name, runtime)
-        return flask.jsonify(anarchy_event.to_dict(runtime))
+        time.sleep(1)
 
 def main():
     """Main function."""
     init()
 
     threading.Thread(
-        name = 'start-actions',
-        target = start_actions_loop
+        name = 'main',
+        target = main_loop
     ).start()
 
     prometheus_client.start_http_server(8000)

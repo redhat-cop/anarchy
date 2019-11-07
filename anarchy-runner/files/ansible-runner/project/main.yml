@@ -6,5 +6,5 @@
   roles:
   - role: anarchy_runner
   tasks:
-  - name: Run AnarchyEvent tasks
-    include_tasks: "{{ playbook_dir }}/tasks/event.yml"
+  - name: Run AnarchyRun tasks
+    include_tasks: "{{ playbook_dir }}/tasks/main.yml"

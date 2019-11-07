@@ -5,13 +5,10 @@ from datetime import datetime, timedelta
 import ansible_runner
 import copy
 import json
-import kubernetes
 import os
 import requests
 import shutil
-import threading
 import time
-import queue
 
 import logging
 logging.basicConfig(
@@ -25,28 +22,30 @@ class AnarchyRunner(object):
         self.anarchy_url = os.environ.get('ANARCHY_URL', 'http://anarchy-operator:5000')
         self.domain = os.environ.get('OPERATOR_DOMAIN', 'anarchy.gpte.redhat.com')
         self.kubeconfig = os.environ.get('KUBECONFIG', None)
-        self.name = os.environ.get('RUNNER_NAME', None)
+        self.pod_name = os.environ.get('POD_NAME', None)
+        self.runner_name = os.environ.get('RUNNER_NAME', None)
         self.polling_interval = int(os.environ.get('POLLING_INTERVAL', 5))
-        self.queue_name = os.environ.get('RUN_QUEUE', 'default')
         self.runner_dir = os.environ.get('RUNNER_DIR', '/anarchy-runner/ansible-runner')
         self.runner_token = os.environ.get('RUNNER_TOKEN', None)
-        if not self.runner_token:
-            raise Exception('Environment variable RUNNER_TOKEN must be set')
+
         if not self.kubeconfig:
             raise Exception('Environment variable KUBECONFIG must be set')
-        if not self.name:
+        if not self.pod_name:
+            raise Exception('Environment variable POD_NAME must be set')
+        if not self.runner_name:
             raise Exception('Environment variable RUNNER_NAME must be set')
-        self.__init_namespace()
-        self.__init_runner_dir()
+        if not self.runner_token:
+            raise Exception('Environment variable RUNNER_TOKEN must be set')
 
-    def __init_namespace(self):
-        if 'OPERATOR_NAMESPACE' in os.environ:
-            self.namespace = os.environ['OPERATOR_NAMESPACE']
-        elif os.path.exists('/run/secrets/kubernetes.io/serviceaccount/namespace'):
+        if os.path.exists('/run/secrets/kubernetes.io/serviceaccount/namespace'):
             f = open('/run/secrets/kubernetes.io/serviceaccount/namespace')
-            self.namespace = f.read()
+            self.anarchy_namespace = f.read()
+        elif 'ANARCHY_NAMESPACE' in os.environ:
+            self.anarchy_namespace = os.environ['ANARCHY_NAMESPACE']
         else:
-            self.namespace = 'anarchy-operator'
+            self.anarchy_namespace = 'anarchy-operator'
+
+        self.__init_runner_dir()
 
     def __init_runner_dir(self):
         if not os.path.exists(self.kubeconfig) \
@@ -71,7 +70,7 @@ class AnarchyRunner(object):
                 'name': 'ansible',
                 'context': {
                     'cluster': 'cluster',
-                    'namespace': self.namespace,
+                    'namespace': self.anarchy_namespace,
                     'user': 'ansible'
                 }
             }],
@@ -97,76 +96,88 @@ class AnarchyRunner(object):
 
     def get_run(self):
         response = requests.get(
-            '{}/runner/{}/{}'.format(self.anarchy_url, self.queue_name, self.name),
-            headers={'Authorization': 'Bearer ' + self.runner_token}
+            self.anarchy_url + '/run',
+            headers={'Authorization': 'Bearer {}:{}:{}'.format(self.runner_name, self.pod_name, self.runner_token)}
         )
         return response.json()
 
-    def post_result(self, run, result):
+    def post_result(self, anarchy_run, result):
+        run_name = anarchy_run['metadata']['name']
+        subject_name = anarchy_run['spec']['subject']['name']
         requests.post(
-            '{}/runner/{}/{}'.format(self.anarchy_url, self.queue_name, self.name),
-            headers={'Authorization': 'Bearer ' + self.runner_token},
-            json=dict(run=run, result=result)
+            self.anarchy_url + '/run/' + run_name,
+            headers={'Authorization': 'Bearer {}:{}:{}'.format(self.runner_name, self.pod_name, self.runner_token)},
+            json=dict(result=result)
         )
 
     def run(self):
-        run = self.get_run()
-        if not run:
-            logging.info('No tasks to run')
+        anarchy_run = self.get_run()
+        if not anarchy_run:
+            logging.debug('No tasks to run')
             self.sleep()
-        elif run['kind'] == 'AnarchyEvent':
-            result = self.run_event(run)
-            self.post_result(run, result)
+            return
 
-    def run_event(self, anarchy_event):
-        anarchy_event_name = anarchy_event['metadata']['name']
+        run_name = anarchy_run['metadata']['name']
         self.clean_runner_dir()
-        self.write_runner_vars(anarchy_event)
-        self.write_runner_tasks(anarchy_event)
+        self.write_runner_vars(anarchy_run)
+        self.write_runner_tasks(anarchy_run)
         logging.info('starting ansible runner')
         ansible_run = ansible_runner.interface.run(
             playbook = 'main.yml',
             private_data_dir = self.runner_dir
         )
-        return {
+        self.post_result(anarchy_run, {
             'rc': ansible_run.rc,
             'status': ansible_run.status,
             'stdout': ansible_run.stdout.read()
-        }
+        })
 
     def sleep(self):
         time.sleep(self.polling_interval)
 
-    def write_runner_vars(self, anarchy_event):
-        extravars = {
-            'anarchy_event': anarchy_event,
-            'anarchy_governor': anarchy_event['spec']['governor'],
-            'anarchy_governor_name': anarchy_event['spec']['governor']['metadata']['name'],
+    def write_runner_tasks(self, anarchy_run):
+        tasks_file = self.runner_dir + '/project/tasks/main.yml'
+        open(tasks_file, mode='w').write(
+            json.dumps(anarchy_run['spec'].get('tasks', []))
+        )
+
+    def write_runner_vars(self, anarchy_run):
+        anarchy_governor = anarchy_run['spec']['governor']
+        anarchy_subject = anarchy_run['spec']['subject']
+        extravars = copy.deepcopy(anarchy_run['spec'].get('vars', {}))
+        extravars.update({
+            'anarchy_governor': anarchy_governor,
+            'anarchy_governor_name': anarchy_governor['name'],
+            'anarchy_namespace': self.anarchy_namespace,
             'anarchy_operator_domain': self.domain,
-            'anarchy_operator_namespace': self.namespace,
-            'anarchy_subject': anarchy_event['spec']['subject'],
-            'anarchy_subject_name': anarchy_event['spec']['subject']['metadata']['name'],
-            'anarchy_runner_name': self.name,
-            'anarchy_runner_timestamp': datetime.utcnow().strftime('%FT%TZ'),
-            'event_data': anarchy_event['spec']['event']['data'],
-            'event_name': anarchy_event['spec']['event']['name']
-        }
-
-        if 'action' in anarchy_event['spec']:
-            extravars['anarchy_action'] = anarchy_event['spec']['action']
-            extravars['anarchy_action_name'] = anarchy_event['spec']['action']['metadata']['name']
-
+            'anarchy_run': anarchy_run,
+            'anarchy_run_name': anarchy_run['metadata']['name'],
+            'anarchy_run_pod_name': self.pod_name,
+            'anarchy_run_timestamp': datetime.utcnow().strftime('%FT%TZ'),
+            'anarchy_runner_name': self.runner_name,
+            'anarchy_runner_token': self.runner_token,
+            'anarchy_subject': anarchy_subject,
+            'anarchy_subject_name': anarchy_subject['name'],
+            'anarchy_url': self.anarchy_url
+        })
+        anarchy_action = anarchy_run['spec'].get('action', None)
+        if anarchy_action:
+            extravars.update({
+                'anarchy_action': anarchy_action,
+                'anarchy_action_name': anarchy_action['name']
+            })
+        anarchy_action_config = anarchy_run['spec'].get('actionConfig', None)
+        if anarchy_action_config:
+            extravars.update({
+                'anarchy_action_config': anarchy_action_config,
+                'anarchy_action_config_name': anarchy_action_config['name']
+            })
         open(self.runner_dir + '/env/extravars', mode='w').write(json.dumps(extravars))
 
-    def write_runner_tasks(self, anarchy_event):
-        tasks_file = self.runner_dir + '/project/tasks/event.yml'
-        open(tasks_file, mode='w').write(
-            json.dumps(anarchy_event['spec']['event']['tasks'])
-        )
 
 anarchy_runner = AnarchyRunner()
 
-def runner_loop():
+def main():
     while True:
         try:
             anarchy_runner.run()
@@ -174,7 +185,5 @@ def runner_loop():
             logging.exception('Error in runner loop')
             anarchy_runner.sleep()
 
-threading.Thread(
-    name = 'start-actions',
-    target = runner_loop
-).start()
+if __name__ == '__main__':
+    main()
