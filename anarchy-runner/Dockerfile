@@ -1,6 +1,7 @@
 FROM registry.access.redhat.com/ubi8/ubi:latest
 
-ENV OCP_VERSION=4.2.2 \
+ENV HELM_VERSION=3.0.0 \
+    OCP_VERSION=4.2.5 \
     PYTHON_VERSION=3.7 \
     PYTHON_RELEASE=3.7.5
 
@@ -47,6 +48,8 @@ RUN yum install -y \
       /anarchy-runner/ansible-runner/artifacts \
       /anarchy-runner/ansible-runner/env \
       /anarchy-runner/ansible-runner/project/tasks \
+ && curl -s https://get.helm.sh/helm-v${HELM_VERSION}-linux-amd64.tar.gz \
+    | tar zxvf - -C /bin linux-amd64/helm --strip-components=1 \
  && curl -s https://mirror.openshift.com/pub/openshift-v4/clients/ocp/${OCP_VERSION}/openshift-client-linux-${OCP_VERSION}.tar.gz \
     | tar zxvf - -C /bin
 

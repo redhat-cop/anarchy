@@ -23,6 +23,9 @@ class AnarchyRunner(object):
     @staticmethod
     def register(resource):
         runner = AnarchyRunner(resource)
+        current_runner = AnarchyRunner.runners.get(runner.name, None)
+        if current_runner:
+            runner.runner_pods = current_runner.runner_pods
         operator_logger.info("Registered runner %s (%s)", runner.name, runner.resource_version)
         AnarchyRunner.runners[runner.name] = runner
         return runner

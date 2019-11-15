@@ -218,6 +218,7 @@ def get_run():
     if not anarchy_runner:
         flask.abort(400)
         return
+
     anarchy_run = anarchy_runner.runner_pods.get(runner_pod, None)
     if anarchy_run:
         operator_logger.warning(
@@ -225,12 +226,15 @@ def get_run():
             anarchy_runner.name, runner_pod, anarchy_run.name
         )
         anarchy_run.handle_lost_runner(runner_pod, runtime)
+
     anarchy_subject = AnarchySubject.get_pending(anarchy_runner.name, runtime)
     if not anarchy_subject:
         return flask.jsonify(None)
+
     anarchy_run = anarchy_subject.get_anarchy_run(runtime)
     if not anarchy_run:
         return flask.jsonify(None)
+
     anarchy_runner.runner_pods[runner_pod] = anarchy_run
     anarchy_run.set_runner(anarchy_runner.name + '.' + runner_pod, runtime)
     return flask.jsonify(anarchy_run.to_dict(runtime))
@@ -244,10 +248,10 @@ def post_run(run_name):
 
     anarchy_run = anarchy_runner.runner_pods.get(runner_pod, None)
     anarchy_runner.runner_pods[runner_pod] = None
-    if not anarchy_run and anarchy_run.name == run_name:
+    if not anarchy_run or anarchy_run.name != run_name:
         operator_logger.warning(
             'AnarchyRunner %s pod %s posted unexpected run %s!',
-            anarchy_runner.name, runner_pod, anarchy_run.name
+            anarchy_runner.name, runner_pod, run_name
         )
         flask.abort(400)
         return

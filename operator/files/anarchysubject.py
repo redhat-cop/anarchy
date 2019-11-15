@@ -1,4 +1,5 @@
 from datetime import datetime
+import kubernetes
 import logging
 import os
 import queue
