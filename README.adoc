@@ -45,24 +45,49 @@ image::docs/AnarchyCallbackDiagram.png[Anarchy Diagram,748,338]
 . A new AnarchyRun is created to process the callback from Tower
 . The AnarchyRun for the callback updates the status of the AnarchySubject
 
-== Installation
+== Installation on OpenShift
 
 . Clone this repo to your local workstation:
 +
 ----
-$ git clone https://github.com/redhat-gpte-devopsautomation/anarchy-operator.git
+git clone https://github.com/redhat-gpte-devopsautomation/anarchy-operator.git
 ----
+
+. Process the `install-template.yaml` and apply resource definitions to create Custom Resource Definitions and Cluster Roles:
++
+----
+oc process -f install-template.yaml | oc apply -f -
+----
+
+. Create a new project namespace to deploy the Anarchy operator:
++
+----
+oc new-project anarchy-operator
+----
+
+. Process the template `deploy-template.yaml` to deploy the Anarchy operator into your namespace:
++
+----
+oc process -f deploy-template.yaml \
+-p OPERATOR_HOSTNAME=anarchy-operator.$(oc get ingresses.config.openshift.io cluster -o jsonpath='{.spec.domain}') \
+| oc apply -n anarchy-operator -f -
+----
+
+. Check your to make sure the anarchy-operator pod is running and the default runner starts soon after:
++
+----
+$ oc get pods
+NAME                                     READY   STATUS    RESTARTS   AGE
+anarchy-operator-5f7d7898d7-f6dww        1/1     Running   0          11m
+anarchy-runner-default-9767c79b6-vt6b4   1/1     Running   0          12m
+----
+
+== Building the Anarchy Operator and Runner
 
 . Change to the project directory and create a Build Config using the provided template:
 +
 ----
 $ oc process -f build-template.yaml | oc apply -f -
-----
-
-. Check your work:
-+
-----
-$ oc get all
 ----
 
 . Start the operator build:
@@ -80,52 +105,6 @@ $ oc start-build anarchy-runner --from-dir=.
 +
 ----
 $ oc logs -f anarchy-operator-1-build
-----
-
-. For the "deploy" step you'll have to provide the `APP_DOMAIN` parameter.
-Find out your app domain from the output of this command:
-+
-----
-$ oc whoami --show-console
-https://console-openshift-console.apps.cluster-396f.sandbox663.opentlc.com
-----
-
-. Use the part starting with `apps.` as the `APP_DOMAIN` parameter and deploy the operator:
-+
-----
-$ oc process -f deploy-template.yaml -p APP_DOMAIN=apps.cluster-396f.sandbox663.opentlc.com | oc apply -f -
-Warning: oc apply should be used on resource created by either oc create --save-config or oc apply
-namespace/anarchy-operator configured
-serviceaccount/anarchy-operator created
-rolebinding.rbac.authorization.k8s.io/anarchy-operator-edit created
-service/anarchy-operator created
-route.route.openshift.io/anarchy-operator created
-deployment.extensions/anarchy-operator created
-clusterrole.authorization.openshift.io/anarchy-operator created
-clusterrolebinding.authorization.openshift.io/anarchy-operator:anarchy-operator:anarchy-operator created
-customresourcedefinition.apiextensions.k8s.io/anarchyapis.anarchy.gpte.redhat.com created
-customresourcedefinition.apiextensions.k8s.io/anarchygovernors.anarchy.gpte.redhat.com created
-customresourcedefinition.apiextensions.k8s.io/anarchysubjects.anarchy.gpte.redhat.com created
-customresourcedefinition.apiextensions.k8s.io/anarchyactions.anarchy.gpte.redhat.com created
-----
-
-. Check your work: make sure these 4 CRDs have been created:
-+
-----
-$ oc get crd | grep anarchy.gpte.redhat.com
-anarchyactions.anarchy.gpte.redhat.com                              2019-07-03T17:11:22Z
-anarchyapis.anarchy.gpte.redhat.com                                 2019-07-03T17:11:22Z
-anarchygovernors.anarchy.gpte.redhat.com                            2019-07-03T17:11:22Z
-anarchysubjects.anarchy.gpte.redhat.com                             2019-07-03T17:11:22Z
-----
-
-. Check your work: make sure the operator's pod is running:
-+
-----
-$ oc get pods
-NAME                                READY   STATUS      RESTARTS   AGE
-anarchy-operator-1-build            0/1     Completed   0          22m
-anarchy-operator-5f7d7898d7-f6dww   1/1     Running     0          19m
 ----
 
 == Anarchy Design
