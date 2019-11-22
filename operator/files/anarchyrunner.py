@@ -106,7 +106,7 @@ class AnarchyRunner(object):
 
     @property
     def service_account_name(self):
-        return self.spec.get('serviceAccountName', self.name)
+        return self.spec.get('serviceAccountName', 'anarchy-runner-' + self.name)
 
     @property
     def vars(self):

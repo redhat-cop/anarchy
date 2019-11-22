@@ -90,9 +90,9 @@ spec:
       tasks:
       - name: Call API
         uri:
-          url: https://{{ babylon_tower_hostname }}/api/v2/job_templates/job-runner/launch/
-          url_username: "{{ api_creds.user }}"
-          url_password: "{{ api_creds.password }}"
+          url: https://{{ babylon_tower.hostname }}/api/v2/job_templates/job-runner/launch/
+          url_username: "{{ babylon_tower.user }}"
+          url_password: "{{ babylon_tower.password }}"
           validate_certs: false
           method: POST
           return_content: true
@@ -145,9 +145,9 @@ spec:
       tasks:
       - name: Call API for stop
         uri:
-          url: https://{{ babylon_tower_hostname }}/api/v2/job_templates/job-runner/launch/
-          url_username: "{{ api_creds.user }}"
-          url_password: "{{ api_creds.password }}"
+          url: https://{{ babylon_tower.hostname }}/api/v2/job_templates/job-runner/launch/
+          url_username: "{{ babylon_tower.user }}"
+          url_password: "{{ babylon_tower.password }}"
           validate_certs: false
           method: POST
           return_content: true
@@ -222,9 +222,9 @@ spec:
       tasks:
       - name: Call API
         uri:
-          url: https://{{ babylon_tower_hostname }}/api/v2/job_templates/job-runner/launch/
-          url_username: "{{ api_creds.user }}"
-          url_password: "{{ api_creds.password }}"
+          url: https://{{ babylon_tower.hostname }}/api/v2/job_templates/job-runner/launch/
+          url_username: "{{ babylon_tower.user }}"
+          url_password: "{{ babylon_tower.password }}"
           validate_certs: false
           method: POST
           return_content: true
@@ -273,9 +273,9 @@ spec:
       tasks:
       - name: Call API
         uri:
-          url: https://{{ babylon_tower_hostname }}/api/v2/job_templates/job-runner/launch/
-          url_username: "{{ api_creds.user }}"
-          url_password: "{{ api_creds.password }}"
+          url: https://{{ babylon_tower.hostname }}/api/v2/job_templates/job-runner/launch/
+          url_username: "{{ babylon_tower.user }}"
+          url_password: "{{ babylon_tower.password }}"
           validate_certs: false
           method: POST
           return_content: true

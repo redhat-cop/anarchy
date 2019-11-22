@@ -6,6 +6,8 @@ import os
 import queue
 import time
 
+from anarchyutil import deep_update
+
 operator_logger = logging.getLogger('operator')
 
 class AnarchyRuntime(object):
@@ -33,8 +35,7 @@ class AnarchyRuntime(object):
             f = open('/run/secrets/kubernetes.io/serviceaccount/token')
             kube_auth_token = f.read()
             kube_config = kubernetes.client.Configuration()
-            kube_config.api_key['authorization'] = kube_auth_token
-            kube_config.api_key_prefix['authorization'] = 'Bearer'
+            kube_config.api_key['authorization'] = 'Bearer ' + kube_auth_token
             kube_config.host = os.environ['KUBERNETES_PORT'].replace('tcp://', 'https://', 1)
             kube_config.ssl_ca_cert = '/run/secrets/kubernetes.io/serviceaccount/ca.crt'
         else:
@@ -42,7 +43,6 @@ class AnarchyRuntime(object):
             kube_config = None
 
         api_client = kubernetes.client.ApiClient(kube_config)
-        #api_client.select_header_content_type = override_select_header_content_type
         self.core_v1_api = kubernetes.client.CoreV1Api(api_client)
         self.custom_objects_api = kubernetes.client.CustomObjectsApi(api_client)
 
@@ -82,9 +82,9 @@ class AnarchyRuntime(object):
                     secret_data = self.get_secret_data(secret_name)
                     var_name = var_secret.get('var', None)
                     if var_name:
-                        merged_vars[var_name] = secret_data
+                        deep_update(merged_vars, {var_name: secret_data})
                     else:
-                        merged_vars.update(secret_data)
+                        deep_update(merged_vars, secret_data)
                 except kubernetes.client.rest.ApiException as e:
                     if e.status != 404:
                         raise
