@@ -1,7 +1,7 @@
 FROM registry.access.redhat.com/ubi8/ubi:latest
 
 ENV HELM_VERSION=3.0.0 \
-    OCP_VERSION=4.2.5 \
+    OCP_VERSION=4.2.9 \
     PYTHON_VERSION=3.7 \
     PYTHON_RELEASE=3.7.5
 

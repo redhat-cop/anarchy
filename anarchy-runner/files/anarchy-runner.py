@@ -9,6 +9,7 @@ import os
 import requests
 import shutil
 import time
+import yaml
 
 import logging
 logging.basicConfig(
@@ -26,6 +27,7 @@ class AnarchyRunner(object):
         self.runner_name = os.environ.get('RUNNER_NAME', None)
         self.polling_interval = int(os.environ.get('POLLING_INTERVAL', 5))
         self.runner_dir = os.environ.get('RUNNER_DIR', '/anarchy-runner/ansible-runner')
+        self.ansible_private_dir = os.environ.get('RUNNER_DIR', '/anarchy-runner/.ansible')
         self.runner_token = os.environ.get('RUNNER_TOKEN', None)
 
         if not self.kubeconfig:
@@ -122,14 +124,18 @@ class AnarchyRunner(object):
         self.write_runner_vars(anarchy_run)
         self.write_runner_tasks(anarchy_run)
         logging.info('starting ansible runner')
-        ansible_run = ansible_runner.interface.run(
+        ansible_run = ansible_runner.interface.init_runner(
             playbook = 'main.yml',
             private_data_dir = self.runner_dir
         )
+        ansible_run.config.env['ANSIBLE_STDOUT_CALLBACK'] = 'anarchy'
+        ansible_run.run()
         self.post_result(anarchy_run, {
             'rc': ansible_run.rc,
             'status': ansible_run.status,
-            'stdout': ansible_run.stdout.read()
+            'ansible_run': yaml.safe_load(
+                open(self.ansible_private_dir + '/anarchy-result.yaml').read()
+            )
         })
 
     def sleep(self):

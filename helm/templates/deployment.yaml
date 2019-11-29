@@ -1,0 +1,50 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "anarchy.name" . }}
+  labels:
+    {{- include "anarchy.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "anarchy.selectorLabels" . | nindent 6 }}
+  strategy:
+    type: Recreate
+  template:
+    metadata:
+      labels:
+        {{- include "anarchy.selectorLabels" . | nindent 8 }}
+    spec:
+    {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+    {{- end }}
+      serviceAccountName: {{ include "anarchy.serviceAccountName" . }}
+      containers:
+      - name: manager
+        env:
+        - name: ANARCHY_SERVICE
+          value: {{ include "anarchy.name" . }}
+        - name: CALLBACK_BASE_URL
+          value: https://{{ .Values.anarchyHostname }}
+        - name: RUNNER_IMAGE
+          value: {{ .Values.image.anarchyRunner.repository }}:{{ .Chart.AppVersion }}
+        - name: RUNNER_IMAGE_PULL_POLICY
+          value: {{ .Values.image.anarchyRunner.pullPolicy }}
+        image: {{ .Values.image.anarchyOperator.repository }}:{{ .Chart.AppVersion }}
+        imagePullPolicy: {{ .Values.image.anarchyOperator.pullPolicy }}
+        resources:
+          {{- toYaml .Values.resources | nindent 10 }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+    {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+    {{- end }}
+    {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+    {{- end }}

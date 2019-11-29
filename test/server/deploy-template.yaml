@@ -20,11 +20,6 @@ parameters:
 
 objects:
 - apiVersion: v1
-  kind: Namespace
-  metadata:
-    name: ${ANARCHY_TEST_NAMESPACE}
-
-- apiVersion: v1
   kind: Service
   metadata:
     name: ${ANARCHY_TEST_SERVICE_NAME}

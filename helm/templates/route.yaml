@@ -1,0 +1,16 @@
+{{- if .Values.openshift.enabled -}}
+{{- $name := include "anarchy.name" . -}}
+apiVersion: route.openshift.io/v1
+kind: Route
+metadata:
+  name: {{ $name }}
+spec:
+  host: {{ .Values.openshift.route.host }}
+  port:
+    targetPort: api
+  tls:
+    termination: edge
+  to:
+    kind: Service
+    name: {{ $name }}
+{{- end }}

@@ -45,15 +45,18 @@ image::docs/AnarchyCallbackDiagram.png[Anarchy Diagram,748,338]
 . A new AnarchyRun is created to process the callback from Tower
 . The AnarchyRun for the callback updates the status of the AnarchySubject
 
-== Installation on OpenShift
+== Installation
 
-. Clone this repo to your local workstation:
+=== OpenShift
+
+. Clone this repo to your local workstation and change directory:
 +
 ----
 git clone https://github.com/redhat-gpte-devopsautomation/anarchy-operator.git
+cd anarchy-operator
 ----
 
-. Process the `install-template.yaml` and apply resource definitions to create Custom Resource Definitions and Cluster Roles:
+. Process the `install-template.yaml` to create anarchy custom resource definitions and related cluster Roles:
 +
 ----
 oc process -f install-template.yaml | oc apply -f -
@@ -68,8 +71,10 @@ oc new-project anarchy-operator
 . Process the template `deploy-template.yaml` to deploy the Anarchy operator into your namespace:
 +
 ----
-oc process -f deploy-template.yaml \
--p OPERATOR_HOSTNAME=anarchy-operator.$(oc get ingresses.config.openshift.io cluster -o jsonpath='{.spec.domain}') \
+INGRESS_DOMAIN=$(oc get ingresses.config.openshift.io cluster -o jsonpath='{.spec.domain}')
+oc process \
+  -f deploy-template.yaml \
+  -p OPERATOR_HOSTNAME=anarchy-operator.$INGRESS_DOMAIN \
 | oc apply -n anarchy-operator -f -
 ----
 
@@ -82,29 +87,82 @@ anarchy-operator-5f7d7898d7-f6dww        1/1     Running   0          11m
 anarchy-runner-default-9767c79b6-vt6b4   1/1     Running   0          12m
 ----
 
+=== Using Helm
+
+Helm v3 support only.
+
+. Clone this repo to your local workstation and change directory:
++
+----
+git clone https://github.com/redhat-gpte-devopsautomation/anarchy-operator.git
+cd anarchy-operator
+----
+
+. Create a namespace in which to deploy the Anarchy operator
++
+----
+kubectl create namespace anarchy-operator
+----
+
+. Install with Helm
++
+----
+helm install --namespace anarchy-operator anarchy helm/
+----
++
+Support for Kubernetes ingress is included in the Helm chart, but is currently untested.
+
 == Building the Anarchy Operator and Runner
+
+=== OpenShift
 
 . Change to the project directory and create a Build Config using the provided template:
 +
 ----
-$ oc process -f build-template.yaml | oc apply -f -
+oc process -f build-template.yaml --local | oc apply -n anarchy-operator -f -
 ----
 
 . Start the operator build:
 +
 ----
-$ oc start-build anarchy-operator --from-dir=.
+oc start-build -n anarchy-operator anarchy-operator --from-dir=.
 ----
 
 . Start the ansible-runner build:
++
 ----
-$ oc start-build anarchy-runner --from-dir=.
+oc start-build -n anarchy-operator anarchy-runner --from-dir=.
 ----
 
 . Watch the build process:
 +
 ----
-$ oc logs -f anarchy-operator-1-build
+oc logs -f anarchy-operator-1-build
+----
+
+== Testing
+
+=== OpenShift
+
+. Create test namespace
++
+----
+oc new-project anarchy-operator-test
+----
+
+. Process and apply test server template
++
+----
+oc process -f test/server/deploy-template.yaml \
+  -p ANARCHY_NAMESPACE=anarchy-operator \
+  -p ANARCHY_TEST_NAMESPACE=anarchy-operator-test \
+| oc apply -f -
+----
+
+. Run test playbook
++
+----
+ansible-playbook test/test-playbook.yaml
 ----
 
 == Anarchy Design

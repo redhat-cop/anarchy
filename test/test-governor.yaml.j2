@@ -33,7 +33,7 @@ spec:
 
   varSecrets:
   - name: test-api-creds
-    var: api_creds
+    var: babylon_tower
   - name: test-aws-creds
 
   subjectEventHandlers:
@@ -90,7 +90,7 @@ spec:
       tasks:
       - name: Call API
         uri:
-          url: https://{{ babylon_tower.hostname }}/api/v2/job_templates/job-runner/launch/
+          url: https://{% endraw %}{{ test_api_server_hostname }}{% raw %}/api/v2/job_templates/job-runner/launch/
           url_username: "{{ babylon_tower.user }}"
           url_password: "{{ babylon_tower.password }}"
           validate_certs: false
@@ -145,7 +145,7 @@ spec:
       tasks:
       - name: Call API for stop
         uri:
-          url: https://{{ babylon_tower.hostname }}/api/v2/job_templates/job-runner/launch/
+          url: https://{% endraw %}{{ test_api_server_hostname }}{% raw %}/api/v2/job_templates/job-runner/launch/
           url_username: "{{ babylon_tower.user }}"
           url_password: "{{ babylon_tower.password }}"
           validate_certs: false
@@ -222,7 +222,7 @@ spec:
       tasks:
       - name: Call API
         uri:
-          url: https://{{ babylon_tower.hostname }}/api/v2/job_templates/job-runner/launch/
+          url: https://{% endraw %}{{ test_api_server_hostname }}{% raw %}/api/v2/job_templates/job-runner/launch/
           url_username: "{{ babylon_tower.user }}"
           url_password: "{{ babylon_tower.password }}"
           validate_certs: false
@@ -273,7 +273,7 @@ spec:
       tasks:
       - name: Call API
         uri:
-          url: https://{{ babylon_tower.hostname }}/api/v2/job_templates/job-runner/launch/
+          url: https://{% endraw %}{{ test_api_server_hostname }}{% raw %}/api/v2/job_templates/job-runner/launch/
           url_username: "{{ babylon_tower.user }}"
           url_password: "{{ babylon_tower.password }}"
           validate_certs: false
