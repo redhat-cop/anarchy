@@ -5,6 +5,7 @@ import logging
 import os
 import queue
 import time
+import yaml
 
 from anarchyutil import deep_update
 
@@ -69,7 +70,15 @@ class AnarchyRuntime(object):
         secret = self.core_v1_api.read_namespaced_secret(
             secret_name, secret_namespace
         )
-        return { k: base64.b64decode(v).decode('utf-8') for (k, v) in secret.data.items() }
+        data = { k: base64.b64decode(v).decode('utf-8') for (k, v) in secret.data.items() }
+
+        # Attempt to evaluate secret data valuse as YAML
+        for k, v in data.items():
+            try:
+                data[k] = yaml.safe_load(v)
+            except yaml.parser.ParserError:
+                pass
+        return data
 
     def get_vars(self, obj):
         if not obj:
