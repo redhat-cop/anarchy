@@ -68,7 +68,12 @@ oc process -f install-template.yaml | oc apply -f -
 oc new-project anarchy-operator
 ----
 
-. Process the template `deploy-template.yaml` to deploy the Anarchy operator into your namespace:
+. Process the template `deploy-template.yaml` to deploy the Anarchy operator into your namespace.
++
+The template requires the parameter `OPERATOR_HOSTNAME`.
+This should be a hostname within the domain served by the ingress router.
+We recommend using the namespace name as the host name within this domain.
+For OpenShift 4, the router ingress domain can be retrived from the `ingresses.config.openshift.io` named `cluster`:
 +
 ----
 INGRESS_DOMAIN=$(oc get ingresses.config.openshift.io cluster -o jsonpath='{.spec.domain}')
