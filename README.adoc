@@ -145,6 +145,22 @@ oc start-build -n anarchy-operator anarchy-runner --from-dir=.
 oc logs -f anarchy-operator-1-build
 ----
 
+. Deploy Anarchy images from build:
++
+----
+INGRESS_DOMAIN=$(oc get ingresses.config.openshift.io cluster -o jsonpath='{.spec.domain}')
+OPERATOR_IMAGE=$(oc get imagestream anarchy-operator -n anarchy-operator -o jsonpath='{.status.tags[?(@.tag=="latest")].items[0].dockerImageReference}')
+RUNNER_IMAGE=$(oc get imagestream anarchy-runner -n anarchy-operator -o jsonpath='{.status.tags[?(@.tag=="latest")].items[0].dockerImageReference}')
+oc process \
+  -f deploy-template.yaml \
+  -p OPERATOR_HOSTNAME=anarchy-operator.$INGRESS_DOMAIN \
+  -p OPERATOR_IMAGE=$OPERATOR_IMAGE \
+  -p OPERATOR_IMAGE_PULL_POLICY=Always \
+  -p RUNNER_IMAGE=$RUNNER_IMAGE \
+  -p RUNNER_IMAGE_PULL_POLICY=Always \
+| oc apply -n anarchy-operator -f -
+----
+
 == Testing
 
 === OpenShift
