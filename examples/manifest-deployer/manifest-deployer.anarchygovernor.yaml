@@ -1,0 +1,105 @@
+---
+apiVersion: anarchy.gpte.redhat.com/v1
+kind: AnarchyGovernor
+metadata:
+  name: manifest-deployer
+spec:
+  ansibleGalaxyRequirements:
+    collections: []
+    roles: []
+  runner: default
+  vars:
+    # Interval for deployment
+    # Should be specified as a positive number folled by 'd', 'h', or 'm'
+    # for units of 'day', 'hour', or 'minute'
+    deploy_interval: 1h
+
+    # List of kubernetes manifest files
+    #
+    # manifests:
+    # - name: Custom Resource Definitions
+    #   path: custom-resource-definitions.yaml
+    # - name: Role-Based Access Control
+    #   path: rbac.yaml.j2
+    manifests: []
+
+    # List of OpenShift templates to apply.
+    # Each template must be given as a dictionary with key "path" and optional
+    # "parameters" dictionary:
+    #
+    # openshift_templates:
+    # - path: deploy-template.yaml
+    #   parameters:
+    #     image: quay.io/example/repo:latest
+    openshift_templates: []
+
+  subjectEventHandlers:
+    create:
+      tasks:
+      - name: Schedule Deploy
+        anarchy_schedule_action:
+          action: deploy
+    update:
+      tasks:
+      - name: Schedule Deploy
+        anarchy_schedule_action:
+          action: deploy
+
+  actions:
+    deploy:
+      tasks:
+      - block:
+        - name: Create temporary directory for git clone
+          tempfile:
+            prefix: git-
+            state: directory
+          register: r_tempdir
+
+        - name: Download project
+          git:
+            dest: "{{ r_tempdir.path }}/git"
+            repo: "{{ git_repo }}"
+            version: "{{ git_version }}"
+
+        - name: Apply manifests
+          loop: "{{ manifests }}"
+          loop_control:
+            loop_var: manifest
+            label: "{{ manifest.name | default(manifest.path) }}"
+          vars:
+            template_path: "{{ r_tempdir.path }}/git/{{ template.path }}"
+          command: oc apply -n {{ target_namespace | quote }} -f -
+          args:
+            stdin: >-
+              {%- if template_path.endswith('.j2') -%}
+              {{ lookup('template', tempdir_path }}
+              {%- else -%}
+              {{ lookup('file', tempdir_path }}
+              {%- endif -%}
+
+        - name: Apply OpenShift templates
+          loop: "{{ openshift_templates }}"
+          loop_control:
+            loop_var: template
+            label: "{{ template.name | default(template.path) }}"
+          shell: >-
+            oc process --local -f "{{ r_tempdir.path }}/git/{{ template.path }}"
+            {% for name, value in (template.parameters | default({})).items() %}
+            --param={{ name }}={{ value | quote }}
+            {% endfor %}
+            | oc apply -n {{ target_namespace | quote }} -f -
+
+        rescue:
+        - name: Report failure
+          debug:
+            msg: FAILED
+
+        always:
+        - name: Clean up temporary directory
+          file:
+            path: "{{ r_tempdir.path }}"
+            state: absent
+        - name: Schedule next deploy
+          anarchy_schedule_action:
+            action: deploy
+            after: "{{ deploy_interval }}"

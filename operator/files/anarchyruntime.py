@@ -86,9 +86,10 @@ class AnarchyRuntime(object):
         merged_vars = copy.deepcopy(obj.vars)
         for var_secret in obj.var_secrets:
             secret_name = var_secret.get('name', None)
+            secret_namespace = var_secret.get('namespace', None)
             if secret_name:
                 try:
-                    secret_data = self.get_secret_data(secret_name)
+                    secret_data = self.get_secret_data(secret_name, secret_namespace)
                     var_name = var_secret.get('var', None)
                     if var_name:
                         deep_update(merged_vars, {var_name: secret_data})

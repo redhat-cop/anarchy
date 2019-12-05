@@ -175,8 +175,8 @@ class CallbackModule(CallbackModule_default):
             self.anarchy_record_task_end()
         self.anarchy_record_task_start(task)
 
-    def v2_runner_item_on_failed(self, result, ignore_errors=False):
-        super().v2_runner_item_on_failed(result, ignore_errors=False)
+    def v2_runner_item_on_failed(self, result):
+        super().v2_runner_item_on_failed(result)
         self.anarchy_record_item(
             result, dict(failed=True, label=self._get_item_label(result._result))
         )

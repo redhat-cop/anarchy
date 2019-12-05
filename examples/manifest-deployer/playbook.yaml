@@ -1,0 +1,44 @@
+---
+- name: Setup manifest-deployer example
+  connection: local
+  gather_facts: false
+  hosts: localhost
+  tasks:
+  - name: Define manifest-deployer AnarchyGovernor
+    k8s:
+      namespace: anarchy-operator
+      definition: "{{ lookup('file', 'manifest-deployer.anarchygovernor.yaml') | from_yaml }}"
+
+  - name: Define cakephp-ex Namespace
+    k8s:
+      definition:
+        apiVersion: v1
+        kind: Namespace
+        metadata:
+          name: cakephp-ex
+
+  - name: Define cakephp-ex RoleBinding
+    k8s:
+      namespace: cakephp-ex
+      definition: "{{ lookup('file', 'cakephp-ex.rolebinding.yaml') | from_yaml }}"
+
+  - name: Define cakephp-ex Secret
+    k8s:
+      namespace: cakephp-ex
+      definition: "{{ lookup('file', 'cakephp-ex.secret.yaml') | from_yaml }}"
+
+  - name: Define cakephp-ex AnarchySubject
+    k8s:
+      namespace: anarchy-operator
+      definition: "{{ lookup('file', 'cakephp-ex.anarchysubject.yaml') | from_yaml }}"
+
+  - name: Verify cakephp-ex deployment
+    k8s_facts:
+      api_version: apps.openshift.io/v1
+      kind: DeploymentConfig
+      namespace: cakephp-ex
+      name: cakephp-mysql-example
+    register: r_get_deploymentconfig
+    until: 0 < r_get_deploymentconfig.resources | length
+    retries: 10
+    delay: 5

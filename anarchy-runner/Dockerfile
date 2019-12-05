@@ -11,6 +11,7 @@ COPY files /anarchy-runner
 
 RUN yum install -y \
       gcc \
+      git \
       openssl-devel \
       bzip2-devel \
       libffi-devel \

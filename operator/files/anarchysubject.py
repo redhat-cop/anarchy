@@ -150,7 +150,7 @@ class AnarchySubject(object):
 
     @property
     def delete_started(self):
-        return 'deleteHandlersStarted' in self.status
+        return self.status and 'deleteHandlersStarted' in self.status
 
     @property
     def governor_name(self):

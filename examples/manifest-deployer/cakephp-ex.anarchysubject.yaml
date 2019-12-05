@@ -1,0 +1,19 @@
+---
+apiVersion: anarchy.gpte.redhat.com/v1
+kind: AnarchySubject
+metadata:
+  name: cakephp-ex
+spec:
+  governor: manifest-deployer
+  vars:
+    git_repo: https://github.com/sclorg/cakephp-ex
+    git_version: master
+    openshift_templates:
+    - name: CakePHP Example
+      path: openshift/templates/cakephp-mysql.json
+      parameters: "{{ template_parameters }}"
+    target_namespace: cakephp-ex
+  varSecrets:
+  - name: cakephp-ex
+    namespace: cakephp-ex
+    var: template_parameters
