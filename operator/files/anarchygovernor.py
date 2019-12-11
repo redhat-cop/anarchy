@@ -17,6 +17,18 @@ class AnarchyGovernor(object):
             self.spec = spec
 
         @property
+        def post_tasks(self):
+            return self.spec.get('postTasks', [])
+
+        @property
+        def pre_tasks(self):
+            return self.spec.get('preTasks', [])
+
+        @property
+        def roles(self):
+            return self.spec.get('roles', [])
+
+        @property
         def tasks(self):
             return self.spec.get('tasks', [])
 
@@ -40,6 +52,18 @@ class AnarchyGovernor(object):
         @property
         def callback_name_parameter(self):
             return self.spec.get('callbackNameParameter', None)
+
+        @property
+        def post_tasks(self):
+            return self.spec.get('postTasks', [])
+
+        @property
+        def pre_tasks(self):
+            return self.spec.get('preTasks', [])
+
+        @property
+        def roles(self):
+            return self.spec.get('roles', [])
 
         @property
         def tasks(self):
@@ -96,6 +120,10 @@ class AnarchyGovernor(object):
         pass
 
     @property
+    def ansible_galaxy_requirements(self):
+        return self.spec.get('ansibleGalaxyRequirements', None)
+
+    @property
     def api(self):
         return AnarchyAPI.get(self.spec.get('api', None))
 
@@ -148,8 +176,14 @@ class AnarchyGovernor(object):
             'governor has no action named {}'.format(name)
         return self.actions[name]
 
-    def run_ansible(self, runtime, run_tasks, run_vars, context, anarchy_subject, anarchy_action, event_name=None):
-        run_spec = { 'tasks': run_tasks }
+    def run_ansible(self, runtime, run_config, run_vars, context, anarchy_subject, anarchy_action, event_name=None):
+        run_spec = {
+            'ansibleGalaxyRequirements': self.ansible_galaxy_requirements,
+            'preTasks': run_config.pre_tasks,
+            'roles': run_config.roles,
+            'tasks': run_config.tasks,
+            'postTasks': run_config.post_tasks,
+        }
         collected_run_vars = {}
         for context_item in context:
             name, obj = context_item
@@ -186,22 +220,8 @@ class AnarchyGovernor(object):
             else:
                 generate_name = anarchy_action.name + '-'
             labels[runtime.operator_domain + '/action'] = anarchy_action.name
-            owner_ref = {
-                'apiVersion': runtime.operator_domain + '/v1',
-                'controller': True,
-                'kind': 'AnarchyAction',
-                'name': anarchy_action.name,
-                'uid': anarchy_action.uid
-            }
         else:
             generate_name = '{}-{}-'.format(anarchy_subject.name, event_name)
-            owner_ref = {
-                'apiVersion': runtime.operator_domain + '/v1',
-                'controller': True,
-                'kind': 'AnarchySubject',
-                'name': anarchy_subject.name,
-                'uid': anarchy_subject.uid
-            }
 
         runtime.custom_objects_api.create_namespaced_custom_object(
             runtime.operator_domain, 'v1', runtime.operator_namespace, 'anarchyruns',
@@ -212,7 +232,13 @@ class AnarchyGovernor(object):
                     'generateName': generate_name,
                     'labels': labels,
                     'namespace': runtime.operator_namespace,
-                    'ownerReferences': [owner_ref]
+                    'ownerReferences': [{
+                        'apiVersion': runtime.operator_domain + '/v1',
+                        'controller': True,
+                        'kind': 'AnarchySubject',
+                        'name': anarchy_subject.name,
+                        'uid': anarchy_subject.uid
+                    }]
                 },
                 'spec': run_spec
             }

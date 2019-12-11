@@ -5,6 +5,9 @@ metadata:
   name: {{ anarchy_governor_name }}
   namespace: {{ anarchy_operator_namespace | to_json }}
 spec:
+  ansibleGalaxyRequirements:
+    collections: []
+    roles: []
   runner: default
   vars:
     babylon_tower_hostname: {{ test_api_server_hostname | to_json }}

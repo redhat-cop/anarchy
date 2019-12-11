@@ -121,36 +121,36 @@ Support for Kubernetes ingress is included in the Helm chart, but is currently u
 
 === OpenShift
 
-. Change to the project directory and create a Build Config using the provided template:
+. Set current project namespace to Anarchy operator namespace:
 +
 ----
-oc process -f build-template.yaml --local | oc apply -n anarchy-operator -f -
+oc project anarchy-operator
 ----
 
-. Start the operator build:
+. Create a Build Config using the provided template:
 +
 ----
-oc start-build -n anarchy-operator anarchy-operator --from-dir=.
+oc process -f build-template.yaml --local | oc apply -f -
 ----
 
-. Start the ansible-runner build:
+. Build the anarchy-operator image:
 +
 ----
-oc start-build -n anarchy-operator anarchy-runner --from-dir=.
+oc start-build -wF anarchy-operator --from-dir=.
 ----
 
-. Watch the build process:
+. Build the ansible-runner image:
 +
 ----
-oc logs -f anarchy-operator-1-build
+oc start-build -wF anarchy-runner --from-dir=.
 ----
 
 . Deploy Anarchy images from build:
 +
 ----
 INGRESS_DOMAIN=$(oc get ingresses.config.openshift.io cluster -o jsonpath='{.spec.domain}')
-OPERATOR_IMAGE=$(oc get imagestream anarchy-operator -n anarchy-operator -o jsonpath='{.status.tags[?(@.tag=="latest")].items[0].dockerImageReference}')
-RUNNER_IMAGE=$(oc get imagestream anarchy-runner -n anarchy-operator -o jsonpath='{.status.tags[?(@.tag=="latest")].items[0].dockerImageReference}')
+OPERATOR_IMAGE=$(oc get imagestream anarchy-operator -o jsonpath='{.status.tags[?(@.tag=="latest")].items[0].dockerImageReference}')
+RUNNER_IMAGE=$(oc get imagestream anarchy-runner -o jsonpath='{.status.tags[?(@.tag=="latest")].items[0].dockerImageReference}')
 oc process \
   -f deploy-template.yaml \
   -p OPERATOR_HOSTNAME=anarchy-operator.$INGRESS_DOMAIN \
@@ -158,7 +158,7 @@ oc process \
   -p OPERATOR_IMAGE_PULL_POLICY=Always \
   -p RUNNER_IMAGE=$RUNNER_IMAGE \
   -p RUNNER_IMAGE_PULL_POLICY=Always \
-| oc apply -n anarchy-operator -f -
+| oc apply -f -
 ----
 
 == Testing

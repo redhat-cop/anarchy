@@ -294,7 +294,7 @@ class AnarchySubject(object):
             'anarchy_event_name': event_name
         }
 
-        governor.run_ansible(runtime, handler.tasks, run_vars, context, self, None, event_name)
+        governor.run_ansible(runtime, handler, run_vars, context, self, None, event_name)
         return True
 
     def record_delete_started(self, runtime):

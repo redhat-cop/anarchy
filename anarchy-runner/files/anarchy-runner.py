@@ -4,10 +4,12 @@ from base64 import b64encode
 from datetime import datetime, timedelta
 import ansible_runner
 import copy
+import hashlib
 import json
 import os
 import requests
 import shutil
+import subprocess
 import time
 import yaml
 
@@ -92,9 +94,6 @@ class AnarchyRunner(object):
                 shutil.rmtree(os.path.join(artifacts_dir, subdir))
             except OSError as e:
                 logging.warn('Failed to clean arifacts dir %s/%s: %s', artifacts_dir, subdir, str(e))
-        tasks_dir = os.path.join(self.runner_dir, 'project', 'tasks')
-        for tasks_file in os.listdir(tasks_dir):
-            os.unlink(os.path.join(tasks_dir, tasks_file))
 
     def get_run(self):
         response = requests.get(
@@ -120,9 +119,10 @@ class AnarchyRunner(object):
             return
 
         run_name = anarchy_run['metadata']['name']
+        self.setup_ansible_galaxy_requirements(anarchy_run)
         self.clean_runner_dir()
         self.write_runner_vars(anarchy_run)
-        self.write_runner_tasks(anarchy_run)
+        self.write_runner_playbook(anarchy_run)
         logging.info('starting ansible runner')
         ansible_run = ansible_runner.interface.init_runner(
             playbook = 'main.yml',
@@ -133,19 +133,54 @@ class AnarchyRunner(object):
         self.post_result(anarchy_run, {
             'rc': ansible_run.rc,
             'status': ansible_run.status,
-            'ansible_run': yaml.safe_load(
+            'ansibleRun': yaml.safe_load(
                 open(self.ansible_private_dir + '/anarchy-result.yaml').read()
             )
         })
 
+    def setup_ansible_galaxy_requirements(self, anarchy_run):
+        requirements = anarchy_run['spec'].get('ansibleGalaxyRequirements', None)
+        requirements_md5 = hashlib.md5(json.dumps(
+            requirements,sort_keys=True, separators=(',', ':')
+        ).encode('utf-8')).hexdigest()
+        requirements_dir = self.ansible_private_dir + '/requirements-' + requirements_md5
+        requirements_file = requirements_dir + '/requirements.yaml'
+        ansible_collections_dir = self.ansible_private_dir + '/collections'
+        ansible_roles_dir = self.ansible_private_dir + '/roles'
+        if not os.path.exists(requirements_dir):
+            os.mkdir(requirements_dir)
+            os.mkdir(requirements_dir + '/collections')
+            os.mkdir(requirements_dir + '/roles')
+            with open(requirements_file, 'w') as fh:
+                yaml.safe_dump(requirements, stream=fh)
+        if os.path.lexists(ansible_collections_dir):
+            os.unlink(ansible_collections_dir)
+        if os.path.lexists(ansible_roles_dir):
+            os.unlink(ansible_roles_dir)
+        os.symlink(requirements_dir + '/collections', ansible_collections_dir)
+        os.symlink(requirements_dir + '/roles', ansible_roles_dir)
+        if requirements and 'collections' in requirements:
+            subprocess.run(['ansible-galaxy', 'collection', 'install', '-r', requirements_file])
+        if requirements:
+            subprocess.run(['ansible-galaxy', 'role', 'install', '-r', requirements_file])
+
     def sleep(self):
         time.sleep(self.polling_interval)
 
-    def write_runner_tasks(self, anarchy_run):
-        tasks_file = self.runner_dir + '/project/tasks/main.yml'
-        open(tasks_file, mode='w').write(
-            json.dumps(anarchy_run['spec'].get('tasks', []))
-        )
+    def write_runner_playbook(self, anarchy_run):
+        playbook_file = self.runner_dir + '/project/main.yml'
+        run_spec = anarchy_run['spec']
+        plays = [dict(
+            name = 'Anarchy Ansible Run',
+            hosts = 'localhost',
+            connection = 'local',
+            gather_facts = False,
+            pre_tasks = run_spec.get('preTasks', []),
+            roles = (['anarchy_runner'] + run_spec.get('roles', [])),
+            tasks = run_spec.get('tasks', []),
+            post_tasks = run_spec.get('postTasks', [])
+        )]
+        open(playbook_file, mode='w').write(json.dumps(plays))
 
     def write_runner_vars(self, anarchy_run):
         anarchy_governor = anarchy_run['spec']['governor']

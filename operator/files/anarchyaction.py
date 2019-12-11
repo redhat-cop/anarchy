@@ -180,7 +180,7 @@ class AnarchyAction(object):
             'anarchy_action_callback_url': runtime.action_callback_url(self.name)
         }
 
-        governor.run_ansible(runtime, handler.tasks, run_vars, context, subject, self, callback_name)
+        governor.run_ansible(runtime, handler, run_vars, context, subject, self, callback_name)
 
     def start(self, runtime):
         subject = self.get_subject(runtime)
@@ -206,5 +206,5 @@ class AnarchyAction(object):
         self.patch_status(runtime, {
             'runScheduled': datetime.utcnow().strftime('%FT%TZ'),
         })
-        governor.run_ansible(runtime, action_config.tasks, run_vars, context, subject, self)
+        governor.run_ansible(runtime, action_config, run_vars, context, subject, self)
         return True

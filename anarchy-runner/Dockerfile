@@ -32,10 +32,12 @@ RUN yum install -y \
  && ln -s pydoc${PYTHON_VERSION} pydoc3 \
  && pip3 install -r /anarchy-runner/requirements.txt --upgrade \
  && touch \
+      /anarchy-runner/ansible-runner/project/main.yml \
       /anarchy-runner/kubeconfig \
       /anarchy-runner/passwd \
       /anarchy-runner/group \
  && chmod ug=rw,o= \
+      /anarchy-runner/ansible-runner/project/main.yml \
       /anarchy-runner/kubeconfig \
       /anarchy-runner/passwd \
       /anarchy-runner/group \
@@ -43,12 +45,10 @@ RUN yum install -y \
       /anarchy-runner/.ansible \
       /anarchy-runner/ansible-runner/artifacts \
       /anarchy-runner/ansible-runner/env \
-      /anarchy-runner/ansible-runner/project/tasks \
  && chmod ug=rwx,o= \
       /anarchy-runner/.ansible \
       /anarchy-runner/ansible-runner/artifacts \
       /anarchy-runner/ansible-runner/env \
-      /anarchy-runner/ansible-runner/project/tasks \
  && curl -s https://get.helm.sh/helm-v${HELM_VERSION}-linux-amd64.tar.gz \
     | tar zxvf - -C /bin linux-amd64/helm --strip-components=1 \
  && curl -s https://mirror.openshift.com/pub/openshift-v4/clients/ocp/${OCP_VERSION}/openshift-client-linux-${OCP_VERSION}.tar.gz \
