@@ -9,7 +9,7 @@ spec:
     roles:
     - name: k8s_config
       src: git+https://github.com/redhat-gpte-devopsautomation/k8s_config.git
-      version: 0.1.3
+      version: 0.1.4
   runner: default
   vars:
     # Interval for processing
