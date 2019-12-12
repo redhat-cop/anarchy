@@ -127,6 +127,18 @@ class AnarchySubject(object):
         """Get AnarchySubject with pending ansible runs or return None"""
         return AnarchySubjectRunQueue.get(runner_queue_name, runtime)
 
+    @staticmethod
+    def retry_failures(runtime):
+        for anarchy_subject in AnarchySubject.cache.values():
+            if anarchy_subject.current_anarchy_run \
+            and anarchy_subject.retry_after \
+            and anarchy_subject.retry_after < datetime.utcnow():
+                operator_logger.warn(
+                    'Retrying AnarchyRun %s', anarchy_subject.current_anarchy_run
+                )
+                anarchy_subject.retry_after = None
+                anarchy_subject.put_in_job_queue(runtime)
+
     def __init__(self, resource):
         """Initialize AnarchySubject from resource object data."""
         self.metadata = resource['metadata']
@@ -134,6 +146,7 @@ class AnarchySubject(object):
         self.status = resource.get('status', None)
         # Last activity on subject, used to manage caching
         self.last_active = 0
+        self.retry_after = None
         self.anarchy_run_lock = threading.Lock()
         self.anarchy_run_queue = queue.Queue()
         self.anarchy_runs = {}

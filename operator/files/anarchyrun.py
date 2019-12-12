@@ -28,18 +28,14 @@ class AnarchyRun(object):
             return
         elif runner_value == 'failed':
             anarchy_subject.anarchy_run_update(anarchy_run, runtime)
-            if anarchy_run.failures < 10:
-                retry_delay = timedelta(seconds=5 * 2**anarchy_run.failures)
-            else:
-                retry_delay = timedelta(hours = 1)
             if not anarchy_run.last_run:
-                operator_logger.warn(
-                    'Retrying AnarchyRun %s (spec.lastRun not set)', anarchy_run.name
-                )
-                anarchy_subject.put_in_job_queue(runtime)
-            elif anarchy_run.last_run < datetime.utcnow() - retry_delay:
-                operator_logger.warn('Retrying AnarchyRun %s', anarchy_run.name)
-                anarchy_subject.put_in_job_queue(runtime)
+                next_attempt = datetime.utcnow()
+            else:
+                retry_delay = timedelta(seconds=5 * 2**anarchy_run.failures)
+                if retry_delay > timedelta(hours=1):
+                    retry_delay = timedelta(hours=1)
+                next_attempt = datetime.utcnow() + retry_delay
+            anarchy_subject.retry_after = next_attempt
         elif runner_value == 'lost':
             anarchy_subject.anarchy_run_update(anarchy_run, runtime)
             anarchy_subject.put_in_job_queue(runtime)

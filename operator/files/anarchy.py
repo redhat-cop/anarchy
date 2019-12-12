@@ -60,7 +60,13 @@ def init_governors():
         AnarchyGovernor.register(resource)
 
 def init_runs():
-    """Load AnarchyRuns that require processing"""
+    """
+    Load AnarchyRuns that require processing
+
+    The runner label on AnarchyRuns indicates whether it was currently being
+    processed by the last instance of the operator on shut-down. We collect
+    these jobs and register them with their AnarchySubject.
+    """
     anarchy_runs = []
     for resource in runtime.custom_objects_api.list_namespaced_custom_object(
         runtime.operator_domain, 'v1', runtime.operator_namespace, 'anarchyruns',
@@ -69,10 +75,11 @@ def init_runs():
         anarchy_run = AnarchyRun(resource)
         runner_value = anarchy_run.get_runner_label_value(runtime)
 
+        # If runner value is "successful" then it does not need to be processed.
+        # If runner value is "pending" then it will be handled for processing
+        # by the kopf watcher on anarchyruns. There should only be one AnarchyRun
+        # per subject that is not 'successful' or 'pending'.
         if runner_value and runner_value not in ('successful', 'pending'):
-            # If runner vaule is not "successful" or "pending", then it is
-            # either the name of a specific runner pod or "failed". Either
-            # way it is the subject's current run.
             anarchy_subject = anarchy_run.get_subject(runtime)
             anarchy_subject.current_anarchy_run = anarchy_run.name
             anarchy_subject.anarchy_runs[anarchy_run.name] = anarchy_run
@@ -177,7 +184,7 @@ def start_actions():
 
 
 @kopf.on.event(runtime.operator_domain, 'v1', 'anarchyruns')
-def handle_event_event(event, **_):
+def handle_run_event(event, **_):
     wait_for_init()
     anarchy_event = AnarchyRun(event['object'])
     if event['type'] == 'DELETED':
@@ -262,7 +269,7 @@ def post_run(run_name):
         return flask.abort(400, flask.jsonify(
             {'success': False, 'error': 'Invalid run data'}
         ))
-    
+
     anarchy_subject = anarchy_run.get_subject(runtime)
     if not anarchy_subject:
         return flask.abort(404, flask.jsonify(
@@ -415,7 +422,7 @@ def post_subject_action(subject_name):
         result = None
 
     return flask.jsonify({'success': True, 'result': result})
-        
+
 def check_runner_auth(auth_header):
     match = re.match(r'Bearer ([^:]+):([^:]+):(.*)', auth_header)
     if not match:
@@ -441,9 +448,14 @@ def main_loop():
             action_cache_lock.acquire()
             start_actions()
         except Exception as e:
-            operator_logger.exception("Error in start_actions_loop!")
+            operator_logger.exception("Error in start_actions!")
         finally:
             action_cache_lock.release()
+
+        try:
+            AnarchySubject.retry_failures(runtime)
+        except Exception as e:
+            operator_logger.exception("Error in retry_failures!")
 
         if runner_check_interval < time.time() - last_runner_check:
             try:
