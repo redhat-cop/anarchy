@@ -264,9 +264,9 @@
           labels:
             governor: test
         spec:
-          desiredState: started
           governor: test
           vars:
+            desired_state: started
             job_vars:
               test_subject_var: test-1
 
@@ -345,7 +345,7 @@
     assert:
       that:
       - subject.metadata.labels.state == 'started'
-      - subject.status.state == 'started'
+      - subject.spec.vars.current_state == 'started'
       fail_msg: test-1 subject not defined as expected
       success_msg: test-1 subject defined as expected
     vars:
@@ -360,7 +360,8 @@
       merge_type: merge
       definition:
         spec:
-          desiredState: stopped
+          vars:
+            desired_state: stopped
 
   - name: Pause for stop completion
     pause:
@@ -378,7 +379,7 @@
     assert:
       that:
       - subject.metadata.labels.state == 'stopped'
-      - subject.status.state == 'stopped'
+      - subject.spec.vars.current_state == 'stopped'
       fail_msg: test-1 subject not defined as expected
       success_msg: test-1 subject defined as expected
     vars:
@@ -393,7 +394,8 @@
       merge_type: merge
       definition:
         spec:
-          desiredState: started
+          vars:
+            desired_state: started
 
   - name: Pause for re-start completion
     pause:
@@ -411,12 +413,12 @@
     assert:
       that:
       - subject.metadata.labels.state == 'started'
-      - subject.status.state == 'started'
+      - subject.spec.vars.current_state == 'started'
       fail_msg: test-1 subject not defined as expected
       success_msg: test-1 subject defined as expected
     vars:
       subject: "{{ test_1_subject.resources[0] }}"
-  
+
   - name: Delete test-1 subject
     k8s:
       state: absent
