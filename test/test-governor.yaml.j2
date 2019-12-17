@@ -194,13 +194,13 @@ spec:
             when:
             - poolboy_resource_handle_name != ''
             - poolboy_resource_handle_namespace != ''
-            k8s:
-              api_version: poolboy.gpte.redhat.com/v1
-              kind: ResourceHandle
-              name: "{{ poolboy_resource_handle_name }}"
-              namespace: "{{ poolboy_resource_handle_namespace }}"
-              merge_type: json
-              definition:
+            command: >-
+              oc patch resourcehandles.poolboy.gpte.redhat.com --type=json
+              -n {{ poolboy_resource_handle_namespace | quote }}
+              {{ poolboy_resource_handle_name | quote }}
+              --patch={{ json_patch | to_json | quote }}
+            vars:
+              json_patch:
               - op: replace
                 path: /spec/resources/{{ poolboy_resource_index }}/template/spec/vars/desired_state
                 value: stopped
@@ -208,13 +208,13 @@ spec:
             when:
             - poolboy_resource_claim_name != ''
             - poolboy_resource_claim_namespace != ''
-            k8s:
-              api_version: poolboy.gpte.redhat.com/v1
-              kind: ResourceClaim
-              name: "{{ poolboy_resource_claim_name }}"
-              namespace: "{{ poolboy_resource_claim_name }}"
-              merge_type: json
-              definition:
+            command: >-
+              oc patch resourceclaims.poolboy.gpte.redhat.com --type=json
+              -n {{ poolboy_resource_claim_namespace | quote }}
+              {{ poolboy_resource_claim_name | quote }}
+              --patch={{ json_patch | to_json | quote }}
+            vars:
+              json_patch:
               - op: replace
                 path: /spec/resources/{{ poolboy_resource_index }}/template/spec/vars/desired_state
                 value: stopped
