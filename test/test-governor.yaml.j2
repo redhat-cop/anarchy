@@ -42,43 +42,46 @@ spec:
   subjectEventHandlers:
     create:
       tasks:
-      - name: Set state provision-scheduled in subject status
+      - name: Set state provision-scheduled
         anarchy_subject_update:
           metadata:
             labels:
               state: provision-scheduled
-          status:
-            state: provision-scheduled
+          spec:
+            vars:
+              current_state: provision-scheduled
       - name: Start Provision
         anarchy_schedule_action:
           action: provision
     update:
       tasks:
-      - when: >-
-          'started' == anarchy_subject.spec.desiredState | default('') and
-          'stopped' == anarchy_subject.status.state | default('')
+      - when:
+        - current_state == 'stopped'
+        - desired_state == 'started'
         block:
-        - name: Set state start-scheduled in subject status
+        - name: Set state start-scheduled
           anarchy_subject_update:
             metadata:
               labels:
                 state: start-scheduled
-            status:
-              state: start-scheduled
+            spec:
+              vars:
+                current_state: start-scheduled
         - name: Schedule start
           anarchy_schedule_action:
             action: start
-      - when: >-
-          'stopped' == anarchy_subject.spec.desiredState | default('') and
-          'started' == anarchy_subject.status.state | default('')
+      - when:
+        - current_state == 'started'
+        - desired_state == 'stopped'
         block:
-        - name: Set state stop-scheduled in subject status
+        - name: Set state stop-scheduled
           anarchy_subject_update:
             metadata:
               labels:
                 state: stop-scheduled
-            status:
-              state: stop-scheduled
+            spec:
+              vars:
+                current_state: stop-scheduled
         - name: Schedule stop
           anarchy_schedule_action:
             action: stop
@@ -119,22 +122,24 @@ spec:
       callbackHandlers:
         started:
           tasks:
-          - name: Set state provisioning in subject status
+          - name: Set state provisioning
             anarchy_subject_update:
               metadata:
                 labels:
                   state: provisioning
-              status:
-                state: provisioning
+              spec:
+                vars:
+                  current_state: provisioning
         complete:
           tasks:
-          - name: Set state started in subject status
+          - name: Set state started
             anarchy_subject_update:
               metadata:
                 labels:
                   state: started
-              status:
-                state: started
+              spec:
+                vars:
+                  current_state: started
           - name: Schedule stop
             anarchy_schedule_action:
               action: stop
@@ -174,52 +179,55 @@ spec:
       callbackHandlers:
         started:
           tasks:
-          - name: Set state stopping in subject status
+          - name: Set state stopping
             anarchy_subject_update:
               spec:
-                desiredState: stopped
+                vars:
+                  desired_state: stopped
               metadata:
                 labels:
                   state: stopping
-              status:
-                state: stopping
-          - name: Update desiredState stopped in subject resource handle
+              spec:
+                vars:
+                  current_state: stopping
+          - name: Update desired_state stopped in subject resource handle
             when:
             - poolboy_resource_handle_name != ''
             - poolboy_resource_handle_namespace != ''
-            k8s:
-              api_version: poolboy.gpte.redhat.com/v1
-              kind: ResourceHandle
-              name: "{{ poolboy_resource_handle_name }}"
-              namespace: "{{ poolboy_resource_handle_namespace }}"
-              merge_type: json
-              definition:
+            command: >-
+              oc patch resourcehandles.poolboy.gpte.redhat.com --type=json
+              -n {{ poolboy_resource_handle_namespace | quote }}
+              {{ poolboy_resource_handle_name | quote }}
+              --patch={{ json_patch | to_json | quote }}
+            vars:
+              json_patch:
               - op: replace
-                path: /spec/resources/{{ poolboy_resource_index }}/template/spec/desiredState
+                path: /spec/resources/{{ poolboy_resource_index }}/template/spec/vars/desired_state
                 value: stopped
-          - name: Update desiredState stopped in subject resource claim
+          - name: Update desired_state stopped in subject resource claim
             when:
             - poolboy_resource_claim_name != ''
             - poolboy_resource_claim_namespace != ''
-            k8s:
-              api_version: poolboy.gpte.redhat.com/v1
-              kind: ResourceClaim
-              name: "{{ poolboy_resource_claim_name }}"
-              namespace: "{{ poolboy_resource_claim_name }}"
-              merge_type: json
-              definition:
+            command: >-
+              oc patch resourceclaims.poolboy.gpte.redhat.com --type=json
+              -n {{ poolboy_resource_claim_namespace | quote }}
+              {{ poolboy_resource_claim_name | quote }}
+              --patch={{ json_patch | to_json | quote }}
+            vars:
+              json_patch:
               - op: replace
-                path: /spec/resources/{{ poolboy_resource_index }}/template/spec/desiredState
+                path: /spec/resources/{{ poolboy_resource_index }}/template/spec/vars/desired_state
                 value: stopped
         complete:
           tasks:
-          - name: Set state stopped in subject status
+          - name: Set state stopped
             anarchy_subject_update:
               metadata:
                 labels:
                   state: stopped
-              status:
-                state: stopped
+              spec:
+                vars:
+                  current_state: stopped
 
     start:
       tasks:
@@ -251,22 +259,24 @@ spec:
       callbackHandlers:
         started:
           tasks:
-          - name: Set state starting in subject status
+          - name: Set state starting
             anarchy_subject_update:
               metadata:
                 labels:
                   state: starting
-              status:
-                state: starting
+              spec:
+                vars:
+                  current_state: starting
         complete:
           tasks:
-          - name: Set state started in subject status
+          - name: Set state started
             anarchy_subject_update:
               metadata:
                 labels:
                   state: started
-              status:
-                state: started
+              spec:
+                vars:
+                  current_state: started
           - name: Schedule stop
             anarchy_schedule_action:
               action: stop
