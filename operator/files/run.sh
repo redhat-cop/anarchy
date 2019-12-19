@@ -12,4 +12,7 @@ export NSS_WRAPPER_PASSWD
 export NSS_WRAPPER_GROUP
 export OPERATOR_NAMESPACE="$(cat /run/secrets/kubernetes.io/serviceaccount/namespace)"
 
-exec kopf run --standalone --namespace $OPERATOR_NAMESPACE /operator/anarchy.py
+exec kopf run --standalone \
+  --namespace $OPERATOR_NAMESPACE \
+  --liveness=http://0.0.0.0:8080/healthz \
+  /operator/anarchy.py
