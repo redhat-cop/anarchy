@@ -147,40 +147,14 @@ def handle_action_event(event, **_):
         action_cache_lock.acquire()
         action = AnarchyAction(event['object'])
         if event['type'] == 'DELETED':
-            cache_remove_action(action)
+            AnarchyAction.cache_remove(action)
         elif event['type'] in ['ADDED', 'MODIFIED', None]:
-            cache_action(action)
+            if not action.has_started:
+                AnarchyAction.cache_put(action)
         else:
             operator_logger.warning('Unknown event for AnarchyAction %s', event)
     finally:
         action_cache_lock.release()
-
-def cache_action(action):
-    if action.has_started \
-    or action.after_datetime > datetime.utcnow() + timedelta(minutes=20):
-        return
-    cache_key = (action.action, action.subject_name)
-    action_cache[cache_key] = action
-
-def cache_remove_action(action):
-    cache_key = (action.action, action.subject_name)
-    try:
-        del action_cache[cache_key]
-    except KeyError:
-        pass
-
-def start_actions():
-    due_actions = {}
-    for key, action in action_cache.items():
-        if action.after_datetime > datetime.utcnow():
-            continue
-        due_actions[key] = action
-    for key, action in due_actions.items():
-        try:
-            if action.start(runtime):
-                del action_cache[key]
-        except Exception as e:
-            operator_logger.exception("Error running action %s", action.name)
 
 
 @kopf.on.event(runtime.operator_domain, 'v1', 'anarchyruns')
@@ -446,7 +420,7 @@ def main_loop():
     while True:
         try:
             action_cache_lock.acquire()
-            start_actions()
+            AnarchyAction.start_actions(runtime)
         except Exception as e:
             operator_logger.exception("Error in start_actions!")
         finally:

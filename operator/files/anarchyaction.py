@@ -20,50 +20,66 @@ class AnarchyAction(object):
 
     @staticmethod
     def cache_clean():
-        for anarchy_action_name in list(AnarchyAction.cache.keys()):
-            anarchy_action = AnarchyAction.cache[anarchy_action_name]
-            if time.time() - anarchy_action.last_active > cache_age_limit:
-                del AnarchyAction.cache[anarchy_action_name]
+        for action_name in list(AnarchyAction.cache.keys()):
+            action = AnarchyAction.cache[action_name]
+            if time.time() - action.last_active > cache_age_limit \
+            and not action.has_started:
+                del AnarchyAction.cache[action_name]
 
     @staticmethod
-    def cache_put(anarchy_action):
-        anarchy_action.last_active = time.time()
-        AnarchyAction.cache[anarchy_action.name] = anarchy_action
+    def cache_put(action):
+        action.last_active = time.time()
+        AnarchyAction.cache[action.name] = action
+
+    @staticmethod
+    def cache_remove(action):
+        AnarchyAction.cache.pop(action.name, None)
 
     @staticmethod
     def cache_update(resource):
         """Update action in cache if present in cache"""
         resource_meta = resource['metadata']
-        anarchy_action_name = resource_meta['name']
-        anarchy_action = AnarchyAction.cache.get(anarchy_action_name, None)
-        if anarchy_action:
-            anarchy_action.metadata = resource_meta
-            anarchy_action.spec = resource['spec']
-            anarchy_action.status = resource.get('status', None)
-            return anarchy_action
+        action_name = resource_meta['name']
+        action = AnarchyAction.cache.get(action_name, None)
+        if action:
+            action.metadata = resource_meta
+            action.spec = resource['spec']
+            action.status = resource.get('status', None)
+            return action
 
     @staticmethod
     def get(name, runtime):
         # FIXME
         """Get action by name from cache or get resource"""
-        anarchy_action = AnarchyAction.cache.get(name, None)
-        if anarchy_action:
-            anarchy_action.last_active = time.time()
-            return anarchy_action
+        action = AnarchyAction.cache.get(name, None)
+        if action:
+            action.last_active = time.time()
+            return action
 
         try:
             resource = runtime.custom_objects_api.get_namespaced_custom_object(
                 runtime.operator_domain, 'v1', runtime.operator_namespace,
                 'anarchyactions', name
             )
-            anarchy_action = AnarchyAction(resource)
-            AnarchyAction.cache_put(anarchy_action)
-            return anarchy_action
+            action = AnarchyAction(resource)
+            AnarchyAction.cache_put(action)
+            return action
         except kubernetes.client.rest.ApiException as e:
             if e.status == 404:
                 return None
             else:
                 raise
+
+    @staticmethod
+    def start_actions(runtime):
+        for action in AnarchyAction.cache.values():
+            if not action.has_started \
+            and action.after_datetime <= datetime.utcnow():
+                try:
+                    action.start(runtime)
+                except Exception as e:
+                    operator_logger.exception("Error running action %s", action.name)
+
 
     def __init__(self, resource):
         self.metadata = resource['metadata']
@@ -203,8 +219,7 @@ class AnarchyAction(object):
             'anarchy_action_callback_url': runtime.action_callback_url(self.name)
         }
 
-        self.patch_status(runtime, {
-            'runScheduled': datetime.utcnow().strftime('%FT%TZ'),
-        })
+        self.status = dict(runScheduled=datetime.utcnow().strftime('%FT%TZ'))
+        self.patch_status(runtime, self.status)
         governor.run_ansible(runtime, action_config, run_vars, context, subject, self)
         return True
