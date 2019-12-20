@@ -291,7 +291,10 @@ class AnarchySubject(object):
     def process_subject_event_handlers(self, runtime, event_name):
         governor = self.get_governor(runtime)
         if not governor:
-            operator_logger.warning('Received "%s" event for subject "%s", but cannot find AnarchyGovernor %s', event_name, subject.name, governor.name)
+            operator_logger.warning(
+                'Received "%s" event for subject "%s", but cannot find AnarchyGovernor %s',
+                event_name, self.name, governor.name
+            )
             return
 
         handler = governor.subject_event_handlers.get(event_name, None)
