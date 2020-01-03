@@ -2,7 +2,7 @@
 apiVersion: anarchy.gpte.redhat.com/v1
 kind: AnarchySubject
 metadata:
-  name: babylon
+  name: example
 spec:
   governor: gitops
   vars:
@@ -12,11 +12,5 @@ spec:
     run_interval: 1h
 
     # Variable used when loading babylon config source
-    k8s_config_environment_level: dev
-
-    # Configuration sources
-    k8s_config_sources:
-    - name: babylon
-      git:
-        repo: https://github.com/redhat-cop/babylon.git
-      base_path: openshift/config
+    k8s_config_environment_level: {{ k8s_config_environment_level | to_json }}
+    k8s_config_sources: {{ k8s_config_sources | to_json }}
