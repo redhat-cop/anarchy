@@ -36,6 +36,16 @@ DOCUMENTATION = '''
 def current_time():
     return '%sZ' % datetime.datetime.utcnow().isoformat()
 
+def munge_result(result):
+    """Return cleaned up and pruned version of result dict"""
+    # Clean up result for record
+    ret = result._result.copy()
+    if 'stdout' and 'stdout_lines' in ret:
+        del ret['stdout_lines']
+    if 'stderr' and 'stderr_lines' in ret:
+        del ret['stdout_lines']
+    return ret
+
 class CallbackModule(CallbackModule_default):
     CALLBACK_VERSION = 2.0
     CALLBACK_TYPE = 'stdout'
@@ -87,8 +97,7 @@ class CallbackModule(CallbackModule_default):
         else:
             items = self.anarchy_task_hosts[host]['items']
         item = extra.copy()
-
-        item['result'] = result._result.copy()
+        item['result'] = munge_result(result)
         items.append(item)
 
     def anarchy_record_stats(self, stats):
