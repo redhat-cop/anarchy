@@ -28,13 +28,14 @@ class AnarchyRun(object):
             return
         elif runner_value == 'failed':
             anarchy_subject.anarchy_run_update(anarchy_run, runtime)
-            if not anarchy_run.last_run:
-                next_attempt = datetime.utcnow()
-            else:
+            last_attempt = anarchy_run.run_post_datetime()
+            if last_attempt:
                 retry_delay = timedelta(seconds=5 * 2**anarchy_run.failures)
                 if retry_delay > timedelta(hours=1):
                     retry_delay = timedelta(hours=1)
-                next_attempt = datetime.utcnow() + retry_delay
+                next_attempt = last_attempt + retry_delay
+            else:
+                next_attempt = datetime.utcnow()
             anarchy_subject.retry_after = next_attempt
         elif runner_value == 'lost':
             anarchy_subject.anarchy_run_update(anarchy_run, runtime)
@@ -74,15 +75,15 @@ class AnarchyRun(object):
         return self.spec['governor']['metadata']['name']
 
     @property
-    def last_run(self):
-        if 'lastRun' in self.spec:
-            return datetime.strptime(self.spec['lastRun'], '%Y-%m-%dT%H:%M:%SZ')
+    def run_post_datetime(self):
+        if 'runPostTimestamp' in self.spec:
+            return datetime.strptime(self.spec['runPostTimestamp'], '%Y-%m-%dT%H:%M:%SZ')
         else:
             return None
 
     @property
-    def log(self):
-        return self.spec.get('log', [])
+    def run_post_timestamp(self):
+        return self.spec.get('runPostTimestamp')
 
     @property
     def name(self):
@@ -113,18 +114,14 @@ class AnarchyRun(object):
     def post_result(self, result, runner_pod_name, runtime):
         operator_logger.info('Update AnarchyRun %s for %s run', self.name, result['status'])
 
-        timestamp = datetime.utcnow().strftime('%FT%TZ')
         patch = {
             'metadata': {
                 'labels': {runtime.operator_domain + '/runner': result['status']}
             },
             'spec': {
-                'lastRun': timestamp,
-                'log': self.log + [{
-                    'result': result,
-                    'runner': runner_pod_name,
-                    'timestamp': timestamp
-                }]
+                'result': result,
+                'runner': runner_pod_name,
+                'runPostTimestamp': datetime.utcnow().strftime('%FT%TZ'),
             }
         }
         if result['status'] == 'failed':
