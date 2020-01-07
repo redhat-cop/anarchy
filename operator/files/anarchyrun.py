@@ -28,7 +28,7 @@ class AnarchyRun(object):
             return
         elif runner_value == 'failed':
             anarchy_subject.anarchy_run_update(anarchy_run, runtime)
-            last_attempt = anarchy_run.run_post_datetime()
+            last_attempt = anarchy_run.run_post_datetime
             if last_attempt:
                 retry_delay = timedelta(seconds=5 * 2**anarchy_run.failures)
                 if retry_delay > timedelta(hours=1):

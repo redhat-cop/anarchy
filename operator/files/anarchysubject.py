@@ -18,10 +18,6 @@ class AnarchySubjectRunQueue(object):
     active_subjects = set()
 
     @staticmethod
-    def check_for_lost_runner_pods(runtime):
-        FIXME
-
-    @staticmethod
     def get(name, runtime):
         queue = AnarchySubjectRunQueue.queues.get(name, None)
         if queue:
@@ -48,7 +44,7 @@ class AnarchySubjectRunQueue(object):
             operator_logger.debug('Release AnarchySubject %s to re-enter run queue', anarchy_subject_name)
             AnarchySubjectRunQueue.active_subjects.remove(anarchy_subject_name)
         else:
-            operator_logger.warn('Unable to release AnarchySubject %s, not in active_subjects', anarchy_subject_name)
+            operator_logger.warning('Unable to release AnarchySubject %s, not in active_subjects', anarchy_subject_name)
 
     def __init__(self, name):
         self.name = name
@@ -74,14 +70,19 @@ class AnarchySubject(object):
 
     # Cache of active AnarchySubjects
     cache = {}
+    cache_lock = threading.Lock()
 
     @staticmethod
     def cache_clean():
-        for anarchy_subject_name in list(AnarchySubject.cache.keys()):
-            anarchy_subject = AnarchySubject.cache[anarchy_subject_name]
-            if not anarchy_subject.current_anarchy_run \
-            and time.time() - anarchy_subject.last_active > cache_age_limit:
-                del AnarchySubject.cache[anarchy_subject_name]
+        try:
+            AnarchySubject.cache_lock.acquire()
+            for anarchy_subject_name in list(AnarchySubject.cache.keys()):
+                anarchy_subject = AnarchySubject.cache[anarchy_subject_name]
+                if not anarchy_subject.current_anarchy_run \
+                and time.time() - anarchy_subject.last_active > cache_age_limit:
+                    del AnarchySubject.cache[anarchy_subject_name]
+        finally:
+            AnarchySubject.cache_lock.release()
 
     @staticmethod
     def cache_put(anarchy_subject):
@@ -103,24 +104,42 @@ class AnarchySubject(object):
     @staticmethod
     def get(name, runtime):
         """Get subject by name from cache or get resource"""
-        anarchy_subject = AnarchySubject.cache.get(name, None)
-        if anarchy_subject:
-            anarchy_subject.last_active = time.time()
-            return anarchy_subject
-
         try:
-            resource = runtime.custom_objects_api.get_namespaced_custom_object(
-                runtime.operator_domain, 'v1', runtime.operator_namespace,
-                'anarchysubjects', name
-            )
-            anarchy_subject = AnarchySubject(resource)
-            AnarchySubject.cache_put(anarchy_subject)
-            return anarchy_subject
-        except kubernetes.client.rest.ApiException as e:
-            if e.status == 404:
-                return None
-            else:
-                raise
+            AnarchySubject.cache_lock.acquire()
+            subject = AnarchySubject.cache.get(name, None)
+            if subject:
+                operator_logger.debug('Got AnarchySubject %s from cache', name)
+                subject.last_active = time.time()
+                return subject
+            try:
+                operator_logger.debug('Getting AnarchySubject %s', name)
+                resource = runtime.custom_objects_api.get_namespaced_custom_object(
+                    runtime.operator_domain, 'v1', runtime.operator_namespace,
+                    'anarchysubjects', name
+                )
+            except kubernetes.client.rest.ApiException as e:
+                if e.status == 404:
+                    return None
+                else:
+                    raise
+            subject = AnarchySubject(resource)
+            AnarchySubject.cache_put(subject)
+            return subject
+        finally:
+            AnarchySubject.cache_lock.release()
+
+    @staticmethod
+    def get_from_resource(resource):
+        """Get subject by name from cache or get resource"""
+        try:
+            AnarchySubject.cache_lock.acquire()
+            subject = AnarchySubject.cache_update(resource)
+            if not subject:
+                subject = AnarchySubject(resource)
+                AnarchySubject.cache_put(subject)
+            return subject
+        finally:
+            AnarchySubject.cache_lock.release()
 
     @staticmethod
     def get_pending(runner_queue_name, runtime):
@@ -133,7 +152,7 @@ class AnarchySubject(object):
             if anarchy_subject.current_anarchy_run \
             and anarchy_subject.retry_after \
             and anarchy_subject.retry_after < datetime.utcnow():
-                operator_logger.warn(
+                operator_logger.warning(
                     'Retrying AnarchyRun %s', anarchy_subject.current_anarchy_run
                 )
                 anarchy_subject.retry_after = None
@@ -210,14 +229,16 @@ class AnarchySubject(object):
         self.last_active = time.time()
         self.anarchy_run_lock.acquire()
         try:
-            anarchy_run_name = anarchy_run.name
-            anarchy_run_is_new = anarchy_run_name not in self.anarchy_runs
-            self.anarchy_runs[anarchy_run_name] = anarchy_run
-            if anarchy_run_is_new:
+            if anarchy_run.name in self.anarchy_runs:
+                self.anarchy_runs[anarchy_run.name] = anarchy_run
+                if self.current_anarchy_run == anarchy_run.name:
+                    self.put_in_job_queue(runtime)
+            else:
+                self.anarchy_runs[anarchy_run.name] = anarchy_run
                 if self.current_anarchy_run:
-                    self.anarchy_run_queue.put(anarchy_run_name)
+                    self.anarchy_run_queue.put(anarchy_run.name)
                 else:
-                    self.current_anarchy_run = anarchy_run_name
+                    self.current_anarchy_run = anarchy_run.name
                     self.put_in_job_queue(runtime)
         finally:
             self.anarchy_run_lock.release()
@@ -253,6 +274,11 @@ class AnarchySubject(object):
         self.process_subject_event_handlers(runtime, 'create')
 
     def handle_delete(self, runtime):
+        '''
+        Handle delete if delete process has not started. If there is a delete
+        subject event handler then an AnarchyRun will be created to process the
+        delete, otherwise the finalizers are removed immediately.
+        '''
         if self.delete_started:
             return
         self.record_delete_started(runtime)
@@ -342,12 +368,18 @@ class AnarchySubject(object):
                     try:
                         next_run_name = self.anarchy_run_queue.get_nowait()
                         if next_run_name in self.anarchy_runs:
-                            operator_logger.debug('New current AnarchyRun is %s for AnarchySubject %s', next_run_name, self.name)
+                            operator_logger.debug(
+                                'New current AnarchyRun is %s for AnarchySubject %s',
+                                next_run_name, self.name
+                            )
                             self.current_anarchy_run = next_run_name
                             self.put_in_job_queue(runtime)
                             break
                         else:
-                            operator_logger.warn('AnarchyRun %s for AnarchySubject %s removed before processing', next_run_name, self.name)
+                            operator_logger.warning(
+                                'AnarchyRun %s for AnarchySubject %s removed before processing',
+                                next_run_name, self.name
+                            )
                     except queue.Empty:
                         break
         finally:
@@ -372,7 +404,7 @@ class AnarchySubject(object):
             governor.start_action(runtime, self, anarchy_action)
             return True
         else:
-            operator_logger.warn(
+            operator_logger.warning(
                 "Unable to find AnarchyGovernor %s for AnarchySubject %s!",
                 self.governor_name, self.name
             )
