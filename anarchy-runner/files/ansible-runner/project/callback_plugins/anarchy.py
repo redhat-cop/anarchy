@@ -38,12 +38,13 @@ def current_time():
 
 def munge_result(result):
     """Return cleaned up and pruned version of result dict"""
-    # Clean up result for record
     ret = result._result.copy()
-    if 'stdout' and 'stdout_lines' in ret:
-        del ret['stdout_lines']
-    if 'stderr' and 'stderr_lines' in ret:
-        del ret['stdout_lines']
+    # Discard stdout_lines if result has stdout
+    if 'stdout' in ret:
+        ret.pop('stdout_lines', None)
+    # Discard stderr_lines if result has stderr
+    if 'stderr' in ret:
+        ret.pop('stderr_lines', None)
     return ret
 
 class CallbackModule(CallbackModule_default):
