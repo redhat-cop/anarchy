@@ -118,28 +118,32 @@ def handle_governor_event(event, **_):
 @kopf.on.create(runtime.operator_domain, 'v1', 'anarchysubjects')
 def handle_subject_create(body, **_):
     wait_for_init()
-    subject = AnarchySubject(body)
+    subject = AnarchySubject.get_from_resource(resource)
     subject.handle_create(runtime)
 
 @kopf.on.update(runtime.operator_domain, 'v1', 'anarchysubjects')
 def handle_subject_update(body, **_):
     wait_for_init()
-    subject = AnarchySubject(body)
+    subject = AnarchySubject.get_from_resource(resource)
     subject.handle_update(runtime)
 
 @kopf.on.event(runtime.operator_domain, 'v1', 'anarchysubjects')
 def handle_subject_event(event, **_):
+    '''
+    Anarchy uses on.event instead of on.delete because Anarchy needs custom
+    for removing finalizers. The finalizer will be removed immediately if the
+    AnarchyGovernor does not have a delete subject event handler. If there is
+    a delete subject event handler then it is up to the governor logic to remove
+    the finalizer.
+    '''
     wait_for_init()
     resource = event['object']
-    anarchy_subject = AnarchySubject.cache_update(resource)
     if event['type'] in ['ADDED', 'MODIFIED', None]:
-        if not anarchy_subject:
-            anarchy_subject = AnarchySubject(resource)
-        if anarchy_subject.is_pending_delete:
-            anarchy_subject.handle_delete(runtime)
+        if 'deletionTimestamp' in resource['metadata']:
+            subject = AnarchySubject.get_from_resource(resource)
+            subject.handle_delete(runtime)
 
 
-# FIXME - Switch to using kopf.on.delete?
 @kopf.on.event(runtime.operator_domain, 'v1', 'anarchyactions')
 def handle_action_event(event, **_):
     wait_for_init()
