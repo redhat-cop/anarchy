@@ -30,9 +30,10 @@ class AnarchyRun(object):
             anarchy_subject.anarchy_run_update(anarchy_run, runtime)
             last_attempt = anarchy_run.run_post_datetime
             if last_attempt:
-                retry_delay = timedelta(seconds=5 * 2**anarchy_run.failures)
-                if retry_delay > timedelta(hours=1):
+                if anarchy_run.failures > 9:
                     retry_delay = timedelta(hours=1)
+                else:
+                    retry_delay = timedelta(seconds=5 * 2**anarchy_run.failures)
                 next_attempt = last_attempt + retry_delay
             else:
                 next_attempt = datetime.utcnow()
@@ -114,23 +115,50 @@ class AnarchyRun(object):
     def post_result(self, result, runner_pod_name, runtime):
         operator_logger.info('Update AnarchyRun %s for %s run', self.name, result['status'])
 
-        patch = {
-            'metadata': {
-                'labels': {runtime.operator_domain + '/runner': result['status']}
-            },
-            'spec': {
-                'result': result,
-                'runner': runner_pod_name,
-                'runPostTimestamp': datetime.utcnow().strftime('%FT%TZ'),
-            }
-        }
+        patch = [{
+            'op': 'add',
+            'path': '/metadata/labels/{0}~1runner'.format(runtime.operator_domain),
+            'value': result['status']
+        },{
+            'op': 'add',
+            'path': '/spec/result',
+            'value': result
+        },{
+            'op': 'add',
+            'path': '/spec/runner',
+            'value': runner_pod_name
+        },{
+            'op': 'add',
+            'path': '/spec/runPostTimestamp',
+            'value': datetime.utcnow().strftime('%FT%TZ')
+        }]
+
         if result['status'] == 'failed':
-            patch['spec']['failures'] = self.failures + 1
+            patch.append({
+                'op': 'add',
+                'path': '/spec/failures',
+                'value': self.failures + 1
+            })
 
         try:
-            runtime.custom_objects_api.patch_namespaced_custom_object(
-                runtime.operator_domain, 'v1', runtime.operator_namespace,
-                'anarchyruns', self.name, patch
+            runtime.custom_objects_api.api_client.call_api(
+                '/apis/{group}/{version}/namespaces/{namespace}/{plural}/{name}',
+                'PATCH',
+                { # path params
+                    'group': runtime.operator_domain,
+                    'version': 'v1',
+                    'plural': 'anarchyruns',
+                    'namespace': runtime.operator_namespace,
+                    'name': self.name
+                },
+                [], # query params
+                { # header params
+                    'Accept': 'application/json',
+                    'Content-Type': 'application/json-patch+json',
+                },
+                body=patch,
+                response_type='object',
+                auth_settings=['BearerToken'],
             )
         except kubernetes.client.rest.ApiException as e:
             if e.status == 404:
