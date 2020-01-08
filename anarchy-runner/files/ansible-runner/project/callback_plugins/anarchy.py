@@ -82,9 +82,8 @@ class CallbackModule(CallbackModule_default):
     def anarchy_record_run(self, result, extra):
         host = result._host.name
         if host not in self.anarchy_task_hosts:
-            self.anarchy_task_hosts[host] = {'result': result._result.copy()}
-        else:
-            self.anarchy_task_hosts[host]['result'] = result._result.copy()
+            self.anarchy_task_hosts[host] = {}
+        self.anarchy_task_hosts[host]['result'] = munge_result(result)
         self.anarchy_task_hosts[host].update(extra)
 
     def anarchy_record_item(self, result, extra):
