@@ -29,10 +29,10 @@ spec:
         - name: CALLBACK_BASE_URL
           value: https://{{ .Values.anarchyHostname }}
         - name: RUNNER_IMAGE
-          value: {{ .Values.image.anarchyRunner.repository }}:{{ .Chart.AppVersion }}
+          value: {{ .Values.image.anarchyRunner.repository }}:v{{ .Chart.AppVersion }}
         - name: RUNNER_IMAGE_PULL_POLICY
           value: {{ .Values.image.anarchyRunner.pullPolicy }}
-        image: {{ .Values.image.anarchyOperator.repository }}:{{ .Chart.AppVersion }}
+        image: {{ .Values.image.anarchyOperator.repository }}:v{{ .Chart.AppVersion }}
         imagePullPolicy: {{ .Values.image.anarchyOperator.pullPolicy }}
         resources:
           {{- toYaml .Values.resources | nindent 10 }}

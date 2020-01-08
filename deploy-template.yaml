@@ -20,14 +20,14 @@ parameters:
   description: Hostname for callback API route
   required: True
 - name: OPERATOR_IMAGE
-  value: quay.io/gpte-devops-automation/anarchy-operator:0.3.7
+  value: quay.io/redhat-cop/anarchy-operator:v0.4.0
   #value: docker-registry.default.svc:5000/anarchy-operator/anarchy-operator:latest
   #value: image-registry.openshift-image-registry.svc:5000/anarchy-operator/anarchy-operator:latest
 - name: OPERATOR_IMAGE_PULL_POLICY
   value: IfNotPresent
   #value: Always
 - name: RUNNER_IMAGE
-  value: quay.io/gpte-devops-automation/anarchy-runner:0.3.7
+  value: quay.io/redhat-cop/anarchy-runner:v0.4.0
   #value: docker-registry.default.svc:5000/anarchy-operator/anarchy-runner:latest
   #value: image-registry.openshift-image-registry.svc:5000/anarchy-operator/anarchy-runner:latest
 - name: RUNNER_IMAGE_PULL_POLICY
