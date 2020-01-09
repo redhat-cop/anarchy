@@ -13,10 +13,10 @@ parameters:
   value: anarchy-operator-test
 - name: ANARCHY_TEST_IMAGE
   value: quay.io/redhat-cop/anarchy-test-server:v0.4.0
-  #value: docker-registry.default.svc:5000/anarchy-operator-test/anarchy-operator-test-server:latest
-  #value: image-registry.openshift-image-registry.svc:5000/anarchy-operator-test/anarchy-operator-test-server:latest
+  #value: docker-registry.default.svc:5000/anarchy-operator-test/anarchy-test-server:latest
+  #value: image-registry.openshift-image-registry.svc:5000/anarchy-operator-test/anarchy-test-server:latest
 - name: ANARCHY_TEST_SERVICE_NAME
-  value: anarchy-operator-test-server
+  value: anarchy-test-server
 
 objects:
 - apiVersion: v1

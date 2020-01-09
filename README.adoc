@@ -52,8 +52,8 @@ image::docs/AnarchyCallbackDiagram.png[Anarchy Diagram,748,338]
 . Clone this repo to your local workstation and change directory:
 +
 ----
-git clone https://github.com/redhat-gpte-devopsautomation/anarchy-operator.git
-cd anarchy-operator
+git clone https://github.com/redhat-cop/anarchy.git
+cd anarchy
 ----
 
 . Process the `install-template.yaml` to create anarchy custom resource definitions and related cluster Roles:
@@ -99,8 +99,8 @@ Helm v3 support only.
 . Clone this repo to your local workstation and change directory:
 +
 ----
-git clone https://github.com/redhat-gpte-devopsautomation/anarchy-operator.git
-cd anarchy-operator
+git clone https://github.com/redhat-cop/anarchy.git
+cd anarchy
 ----
 
 . Create a namespace in which to deploy the Anarchy operator
@@ -130,13 +130,13 @@ oc project anarchy-operator
 . Create a Build Config using the provided template:
 +
 ----
-oc process -f build-template.yaml --local | oc apply -f -
+oc process -f build-template.yaml --local | oc apply -n anarchy-operator -f -
 ----
 
-. Build the anarchy-operator image:
+. Build the anarchy image:
 +
 ----
-oc start-build -wF anarchy-operator --from-dir=.
+oc start-build -wF anarchy --from-dir=.
 ----
 
 . Build the ansible-runner image:
@@ -149,7 +149,7 @@ oc start-build -wF anarchy-runner --from-dir=.
 +
 ----
 INGRESS_DOMAIN=$(oc get ingresses.config.openshift.io cluster -o jsonpath='{.spec.domain}')
-OPERATOR_IMAGE=$(oc get imagestream anarchy-operator -o jsonpath='{.status.tags[?(@.tag=="latest")].items[0].dockerImageReference}')
+OPERATOR_IMAGE=$(oc get imagestream anarchy -o jsonpath='{.status.tags[?(@.tag=="latest")].items[0].dockerImageReference}')
 RUNNER_IMAGE=$(oc get imagestream anarchy-runner -o jsonpath='{.status.tags[?(@.tag=="latest")].items[0].dockerImageReference}')
 oc process \
   -f deploy-template.yaml \
@@ -158,7 +158,7 @@ oc process \
   -p OPERATOR_IMAGE_PULL_POLICY=Always \
   -p RUNNER_IMAGE=$RUNNER_IMAGE \
   -p RUNNER_IMAGE_PULL_POLICY=Always \
-| oc apply -f -
+| oc apply -n anarchy-operator -f -
 ----
 
 == Testing

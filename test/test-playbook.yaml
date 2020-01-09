@@ -18,7 +18,7 @@
     k8s_facts:
       api_version: route.openshift.io/v1
       kind: Route
-      name: anarchy-operator-test-server
+      name: anarchy-test-server
       namespace: "{{ anarchy_operator_test_namespace }}"
     register: r_get_test_api_server_route
     failed_when: not r_get_test_api_server_route.resources
@@ -42,9 +42,9 @@
       --from-dir {{ playbook_dir }}/..
     when: build_anarchy_operator | bool
 
-  - name: Start anarchy-operator-test-server build
+  - name: Start anarchy-test-server build
     command: >-
-      {{ oc_cmd }} start-build anarchy-operator-test-server
+      {{ oc_cmd }} start-build anarchy-test-server
       -n {{ anarchy_operator_test_namespace | quote }}
       --from-dir {{ playbook_dir }}/..
     when: build_anarchy_operator_test | bool
@@ -93,31 +93,31 @@
 
   - when: build_anarchy_operator_test | bool
     block:
-    - name: Wait for anachry-operator-test-server build
+    - name: Wait for anachry-test-server build
       k8s_facts:
         api_version: build.openshift.io/v1
         kind: BuildConfig
-        name: anarchy-operator-test-server
+        name: anarchy-test-server
         namespace: "{{ anarchy_operator_test_namespace }}"
       register: anarchy_operator_test_buildconfig
 
-    - name: Wait for anarchy-operator-test-server build
+    - name: Wait for anarchy-test-server build
       k8s_facts:
         api_version: build.openshift.io/v1
         kind: Build
-        name: anarchy-operator-test-server-{{ anarchy_operator_test_buildconfig.resources[0].status.lastVersion }}
+        name: anarchy-test-server-{{ anarchy_operator_test_buildconfig.resources[0].status.lastVersion }}
         namespace: "{{ anarchy_operator_test_namespace }}"
       register: anarchy_operator_test_build
       until: anarchy_operator_test_build.resources[0].status.phase == 'Complete'
       retries: 30
       delay: 10
 
-    - name: Scale down anarchy-operator-test-server
-      command: oc scale deployment -n {{ anarchy_operator_test_namespace | quote }} anarchy-operator-test-server --replicas=0
+    - name: Scale down anarchy-test-server
+      command: oc scale deployment -n {{ anarchy_operator_test_namespace | quote }} anarchy-test-server --replicas=0
       #k8s_scale:
       #  api_version: extensions/v1beta1
       #  kind: Deployment
-      #  name: anarchy-operator-test-server
+      #  name: anarchy-test-server
       #  namespace: "{{ anarchy_operator_test_namespace }}"
       #  replicas: 0
 
@@ -125,12 +125,12 @@
       pause:
         seconds: 5
 
-    - name: Scale up anarchy-operator-test-server
-      command: oc scale deployment -n {{ anarchy_operator_test_namespace | quote }} anarchy-operator-test-server --replicas=1
+    - name: Scale up anarchy-test-server
+      command: oc scale deployment -n {{ anarchy_operator_test_namespace | quote }} anarchy-test-server --replicas=1
       #k8s_scale:
       #  api_version: extensions/v1beta1
       #  kind: Deployment
-      #  name: anarchy-operator-test-server
+      #  name: anarchy-test-server
       #  namespace: "{{ anarchy_operator_test_namespace }}"
       #  replicas: 1
       #  wait_timeout: 60

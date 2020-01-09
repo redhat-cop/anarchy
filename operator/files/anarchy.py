@@ -118,13 +118,13 @@ def handle_governor_event(event, **_):
 @kopf.on.create(runtime.operator_domain, 'v1', 'anarchysubjects')
 def handle_subject_create(body, **_):
     wait_for_init()
-    subject = AnarchySubject.get_from_resource(resource)
+    subject = AnarchySubject.get_from_resource(body)
     subject.handle_create(runtime)
 
 @kopf.on.update(runtime.operator_domain, 'v1', 'anarchysubjects')
 def handle_subject_update(body, **_):
     wait_for_init()
-    subject = AnarchySubject.get_from_resource(resource)
+    subject = AnarchySubject.get_from_resource(body)
     subject.handle_update(runtime)
 
 @kopf.on.event(runtime.operator_domain, 'v1', 'anarchysubjects')
