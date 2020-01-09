@@ -1,5 +1,5 @@
 ---
-anarchy_version: v0.4.0
+anarchy_version: v0.4.1
 
 k8s_resources:
 - namespace: k8s-gitops
