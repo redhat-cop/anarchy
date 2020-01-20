@@ -3,7 +3,7 @@ FROM registry.access.redhat.com/ubi8/ubi:latest
 ENV HELM_VERSION=3.0.0 \
     OCP_VERSION=4.2.9 \
     PYTHON_VERSION=3.7 \
-    PYTHON_RELEASE=3.7.5
+    PYTHON_RELEASE=3.7.6
 
 USER 0:0
 
@@ -31,6 +31,7 @@ RUN yum install -y \
  && ln -s pip${PYTHON_VERSION} pip3 \
  && ln -s pydoc${PYTHON_VERSION} pydoc3 \
  && pip3 install -r /anarchy-runner/requirements.txt --upgrade \
+ && sed -i -e 's|^\( *\)# If there are multiple matches, prefer non-List kinds|\1# Hotfix openshift template discovery\n\1results = [ result for result in results if result.group_version != "template.openshift.io/v1" or result.name != "processedtemplates" ]|' /usr/local/lib/python3.7/site-packages/openshift/dynamic/{client,discovery}.py \
  && touch \
       /anarchy-runner/ansible-runner/project/main.yml \
       /anarchy-runner/kubeconfig \

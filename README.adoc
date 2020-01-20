@@ -174,10 +174,10 @@ oc new-project anarchy-operator-test
 . Process and apply test server template
 +
 ----
-oc process -f test/server/deploy-template.yaml \
+oc process --local -f test/server/deploy-template.yaml \
   -p ANARCHY_NAMESPACE=anarchy-operator \
   -p ANARCHY_TEST_NAMESPACE=anarchy-operator-test \
-| oc apply -f -
+| oc apply -n anarchy-operator-test -f -
 ----
 
 . Run test playbook
