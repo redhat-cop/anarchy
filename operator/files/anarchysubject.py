@@ -387,25 +387,3 @@ class AnarchySubject(object):
 
     def run_queue_release(self):
         AnarchySubjectRunQueue.release(self.name)
-
-    def start_action(self, runtime, anarchy_action):
-        if self.current_anarchy_run:
-            operator_logger.info(
-                'Deferring AnarchyAction %s on AnarchySubject %s due to AnarchyRun processing',
-                anarchy_action.name, self.name
-            )
-            return False
-        governor = self.get_governor(runtime)
-        if governor:
-            operator_logger.debug(
-                'Starting AnarchyAction %s on AnarchySubject %s',
-                anarchy_action.name, self.name
-            )
-            governor.start_action(runtime, self, anarchy_action)
-            return True
-        else:
-            operator_logger.warning(
-                "Unable to find AnarchyGovernor %s for AnarchySubject %s!",
-                self.governor_name, self.name
-            )
-            return False
