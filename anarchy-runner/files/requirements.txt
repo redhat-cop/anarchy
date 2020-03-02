@@ -1,7 +1,7 @@
 ansible
 ansible-runner
+awscli
 jmespath
 jsonpatch
 kubernetes
 openshift
-awscli
