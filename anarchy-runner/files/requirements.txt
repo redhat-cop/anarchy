@@ -4,3 +4,4 @@ jmespath
 jsonpatch
 kubernetes
 openshift
+awscli
