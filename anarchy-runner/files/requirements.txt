@@ -1,6 +1,7 @@
 ansible
 ansible-runner
 awscli
+boto3
 jmespath
 jsonpatch
 kubernetes
