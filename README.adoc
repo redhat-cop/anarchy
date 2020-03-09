@@ -183,7 +183,7 @@ oc process -f test/server/deploy-template.yaml \
 . Run test playbook
 +
 ----
-ansible-playbook test/test-playbook.yaml
+ANSIBLE_CONFIG=test/ansible.cfg ansible-playbook test/test-playbook.yaml
 ----
 
 == Anarchy Design
