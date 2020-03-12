@@ -5,4 +5,5 @@ boto3
 jmespath
 jsonpatch
 kubernetes
+PyMySQL
 openshift
