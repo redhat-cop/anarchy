@@ -1,11 +1,11 @@
 import base64
 import copy
+import json
 import kubernetes
 import logging
 import os
 import queue
 import time
-import yaml
 
 from anarchyutil import deep_update
 
@@ -75,8 +75,8 @@ class AnarchyRuntime(object):
         # Attempt to evaluate secret data valuse as YAML
         for k, v in data.items():
             try:
-                data[k] = yaml.safe_load(v)
-            except yaml.parser.ParserError:
+                data[k] = json.loads(v)
+            except json.decoder.JSONDecodeError:
                 pass
         return data
 
