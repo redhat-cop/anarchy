@@ -1,0 +1,81 @@
+{{- if .Values.crds.create -}}
+apiVersion: apiextensions.k8s.io/v1beta1
+kind: CustomResourceDefinition
+metadata:
+  name: anarchyactions.{{ include "anarchy.operatorDomain" . }}
+spec:
+  group: {{ include "anarchy.operatorDomain" . }}
+  version: v1
+  scope: Namespaced
+  names:
+    plural: anarchyactions
+    singular: anarchyaction
+    kind: AnarchyAction
+    shortNames: []
+  subresources:
+    status: {}
+---
+apiVersion: apiextensions.k8s.io/v1beta1
+kind: CustomResourceDefinition
+metadata:
+  name: anarchygovernors.{{ include "anarchy.operatorDomain" . }}
+spec:
+  group: {{ include "anarchy.operatorDomain" . }}
+  version: v1
+  scope: Namespaced
+  names:
+    plural: anarchygovernors
+    singular: anarchygovernor
+    kind: AnarchyGovernor
+    shortNames: []
+  subresources:
+    status: {}
+---
+apiVersion: apiextensions.k8s.io/v1beta1
+kind: CustomResourceDefinition
+metadata:
+  name: anarchyrunners.{{ include "anarchy.operatorDomain" . }}
+spec:
+  group: {{ include "anarchy.operatorDomain" . }}
+  version: v1
+  scope: Namespaced
+  names:
+    plural: anarchyrunners
+    singular: anarchyrunner
+    kind: AnarchyRunner
+    shortNames: []
+  subresources:
+    status: {}
+---
+apiVersion: apiextensions.k8s.io/v1beta1
+kind: CustomResourceDefinition
+metadata:
+  name: anarchyruns.{{ include "anarchy.operatorDomain" . }}
+spec:
+  group: {{ include "anarchy.operatorDomain" . }}
+  version: v1
+  scope: Namespaced
+  names:
+    plural: anarchyruns
+    singular: anarchyrun
+    kind: AnarchyRun
+    shortNames: []
+  subresources:
+    status: {}
+---
+apiVersion: apiextensions.k8s.io/v1beta1
+kind: CustomResourceDefinition
+metadata:
+  name: anarchysubjects.{{ include "anarchy.operatorDomain" . }}
+spec:
+  group: {{ include "anarchy.operatorDomain" . }}
+  version: v1
+  scope: Namespaced
+  names:
+    plural: anarchysubjects
+    singular: anarchysubject
+    kind: AnarchySubject
+    shortNames: []
+  subresources:
+    status: {}
+{{- end -}}

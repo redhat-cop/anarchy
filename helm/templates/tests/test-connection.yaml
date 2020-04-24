@@ -1,0 +1,16 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: "{{ include "anarchy.name" . }}-test-connection"
+  namespace: {{ include "anarchy.namespaceName" . }}
+  labels:
+    {{- include "anarchy.labels" . | nindent 4 }}
+  annotations:
+    "helm.sh/hook": test-success
+spec:
+  containers:
+    - name: wget
+      image: busybox
+      command: ['wget']
+      args: ['{{ include "anarchy.name" . }}:{{ .Values.service.port }}']
+  restartPolicy: Never

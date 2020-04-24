@@ -1,0 +1,108 @@
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ include "anarchy.name" . }}
+  namespace: {{ include "anarchy.namespaceName" . }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: {{ include "anarchy.name" . }}
+subjects:
+- kind: ServiceAccount
+  name: {{ include "anarchy.name" . }}
+  namespace: {{ include "anarchy.namespaceName" . }}
+{{- if .Values.crds.create }}
+---
+kind: ClusterRole
+apiVersion: v1
+metadata:
+  name: {{ include "anarchy.name" . }}
+  labels:
+    rbac.authorization.k8s.io/aggregate-to-admin: "true"
+rules:
+- apiGroups:
+  - {{ include "anarchy.operatorDomain" . }}
+  resources:
+  - anarchygovernors
+  - anarchyrunners
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - {{ include "anarchy.operatorDomain" . }}
+  resources:
+  - anarchyactions
+  - anarchyactions/status
+  - anarchyrunners/status
+  - anarchyruns
+  - anarchyruns/status
+  - anarchysubjects
+  - anarchysubjects/status
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - apps
+  resources:
+  - deployments
+  - deployments/rollback
+  - deployments/scale
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+- apiGroups:
+  - ""
+  resources:
+  - pods
+  - secrets
+  - serviceaccounts
+  - services
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - ""
+  resources:
+  - events
+  verbs:
+  - create
+  - patch
+  - update
+---
+kind: ClusterRole
+apiVersion: v1
+metadata:
+  name: anarchy-operator-admin
+  labels:
+    rbac.authorization.k8s.io/aggregate-to-admin: "true"
+rules:
+- apiGroups:
+  - {{ include "anarchy.operatorDomain" . }}
+  resources:
+  - anarchygovernors
+  - anarchyrunners
+  verbs:
+  - create
+  - delete
+  - deletecollection
+  - get
+  - list
+  - patch
+  - update
+  - watch
+{{- end -}}

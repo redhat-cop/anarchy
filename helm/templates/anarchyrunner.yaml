@@ -1,0 +1,20 @@
+apiVersion: anarchy.gpte.redhat.com/v1
+kind: AnarchyRunner
+metadata:
+  name: default
+spec:
+  ansibleGalaxyRoles: []
+  minReplicas: 1
+  maxReplicas: 9
+  preTasks: []
+  postTasks: []
+  resources:
+    limits:
+      cpu: "1"
+      memory: 256Mi
+    requests:
+      cpu: 500m
+      memory: 256Mi
+  token: {{ randAlphaNum 16 }}
+  vars: {}
+  varSecrets: []

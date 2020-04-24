@@ -2,6 +2,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: {{ include "anarchy.name" . }}
+  namespace: {{ include "anarchy.namespaceName" . }}
   labels:
     {{- include "anarchy.labels" . | nindent 4 }}
 spec:
@@ -20,22 +21,31 @@ spec:
       imagePullSecrets:
         {{- toYaml . | nindent 8 }}
     {{- end }}
-      serviceAccountName: {{ include "anarchy.serviceAccountName" . }}
       containers:
       - name: manager
         env:
         - name: ANARCHY_SERVICE
           value: {{ include "anarchy.name" . }}
         - name: CALLBACK_BASE_URL
-          value: https://{{ .Values.anarchyHostname }}
+          value: https://{{ include "anarchy.hostname" . }}
         - name: RUNNER_IMAGE
-          value: {{ .Values.image.anarchyRunner.repository }}:v{{ .Chart.AppVersion }}
+          value: {{ include "anarchy.runner.image" . }}
         - name: RUNNER_IMAGE_PULL_POLICY
           value: {{ .Values.image.anarchyRunner.pullPolicy }}
-        image: {{ .Values.image.anarchyOperator.repository }}:v{{ .Chart.AppVersion }}
+        image: {{ include "anarchy.operator.image" . }}
         imagePullPolicy: {{ .Values.image.anarchyOperator.pullPolicy }}
+        {{- with .Values.image.anarchyOperator.livenessProbe }}
+        livenessProbe:
+					{{- toYaml . | nindent 10 }}
+        {{- end }}
         resources:
           {{- toYaml .Values.resources | nindent 10 }}
+        terminationMessagePath: /dev/termination-log
+        terminationMessagePolicy: File
+      restartPolicy: Always
+      securityContext: {}
+      serviceAccountName: {{ include "anarchy.serviceAccountName" . }}
+      terminationGracePeriodSeconds: 30
       {{- with .Values.nodeSelector }}
       nodeSelector:
         {{- toYaml . | nindent 8 }}

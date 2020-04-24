@@ -4,8 +4,9 @@ apiVersion: route.openshift.io/v1
 kind: Route
 metadata:
   name: {{ $name }}
+  namespace: {{ include "anarchy.namespaceName" . }}
 spec:
-  host: {{ .Values.openshift.route.host }}
+  host: {{ include "anarchy.hostname" . }}
   port:
     targetPort: api
   tls:

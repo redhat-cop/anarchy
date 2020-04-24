@@ -103,18 +103,13 @@ git clone https://github.com/redhat-cop/anarchy.git
 cd anarchy
 ----
 
-. Create a namespace in which to deploy the Anarchy operator
-+
-----
-kubectl create namespace anarchy-operator
-----
-
 . Install with Helm
 +
 ----
-helm install --namespace anarchy-operator anarchy helm/
+helm template helm | oc apply -f -
 ----
 +
+Support for Openshift Route is included in the Helm chart, but is disabled by default (use `--set openshift.enabled=true`)
 Support for Kubernetes ingress is included in the Helm chart, but is currently untested.
 
 == Building the Anarchy Operator and Runner

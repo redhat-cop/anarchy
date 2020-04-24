@@ -1,33 +1,67 @@
 ---
+namespace:
+  # Specifies whether a namespace should be created
+  create: true
+  # The name of the namespace to use.
+  # If not set and create is true, a name is generated using the name template
+  name:
+
+# Installing CustomResourceDefinitions requires elevated privileges (typically cluster-admin)
+crds:
+  create: true
+
+operator_domain:
+  # Specifies whether the operator domain should be generatedi (default: poolboy.gpte.redhat.com)
+  generate: true
+  # The name of the operator domain to use
+  # If not set and create is true, a name is generated using the operatorDomain template
+  name:
+
+replicaCount: 1
+
 image:
   anarchyOperator:
-    repository: quay.io/gpte-devops-automation/anarchy-operator
+    repository: quay.io/redhat-cop/anarchy
     pullPolicy: IfNotPresent
+    tagOverride: ""
+    livenessProbe:
+      httpGet:
+        path: /healthz
+        port: 8080
   anarchyRunner:
-    repository: quay.io/gpte-devops-automation/anarchy-operator
+    repository: quay.io/redhat-cop/anarchy-runner
     pullPolicy: IfNotPresent
-
-namespace: anarchy-operator
+    tagOverride: ""
 
 imagePullSecrets: []
-nameOverride: ""
+nameOverride: anarchy-operator
 
 serviceAccount:
   # Specifies whether a service account should be created
   create: true
+  # Annotations to add to the service account
+  annotations: {}
   # The name of the service account to use.
   # If not set and create is true, a name is generated using the name template
   name:
 
 service:
   type: ClusterIP
-  port: 80
-
+  port: 8000
+  ports:
+  - name: api
+    port: 5000
+    protocol: TCP
+    targetPort: 5000
+  - name: metrics
+    port: 8000
+    protocol: TCP
+    targetPort: 8000
 
 openshift:
   enabled: false
   route:
-    host: anarchy.apps.example.com
+    host:
 
 ingress:
   enabled: false
