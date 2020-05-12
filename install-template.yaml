@@ -141,6 +141,24 @@ objects:
     - patch
     - update
   - apiGroups:
+    - image.openshift.io
+    resources:
+    - imagestreams
+    verbs:
+    - get
+    - list
+    - watch
+  - apiGroups:
+    - route.openshift.io
+    resources:
+    - routes
+    verbs:
+    - create
+    - get
+    - list
+    - patch
+    - update
+  - apiGroups:
     - ""
     resources:
     - pods

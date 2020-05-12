@@ -15,21 +15,13 @@ parameters:
   description: Anarchy operator custom resource definition domain
   displayName: Anarchy operator CRD domain
   value: anarchy.gpte.redhat.com
-- name: OPERATOR_HOSTNAME
-  displayName: Operator Hostname
-  description: Hostname for callback API route
-  required: True
 - name: OPERATOR_IMAGE
-  value: quay.io/redhat-cop/anarchy:v0.4.1
-  #value: docker-registry.default.svc:5000/anarchy-operator/anarchy:latest
-  #value: image-registry.openshift-image-registry.svc:5000/anarchy-operator/anarchy:latest
+  value: quay.io/redhat-cop/anarchy:latest
 - name: OPERATOR_IMAGE_PULL_POLICY
   value: IfNotPresent
   #value: Always
 - name: RUNNER_IMAGE
-  value: quay.io/redhat-cop/anarchy-runner:v0.4.1
-  #value: docker-registry.default.svc:5000/anarchy-operator/anarchy-runner:latest
-  #value: image-registry.openshift-image-registry.svc:5000/anarchy-operator/anarchy-runner:latest
+  value: ''
 - name: RUNNER_IMAGE_PULL_POLICY
   value: IfNotPresent
   #value: Always
@@ -79,8 +71,6 @@ objects:
           env:
           - name: ANARCHY_SERVICE
             value: ${NAME}
-          - name: CALLBACK_BASE_URL
-            value: https://${OPERATOR_HOSTNAME}
           - name: RUNNER_IMAGE
             value: ${RUNNER_IMAGE}
           - name: RUNNER_IMAGE_PULL_POLICY
@@ -117,20 +107,6 @@ objects:
       name: ${NAME}
     sessionAffinity: None
     type: ClusterIP
-
-- apiVersion: route.openshift.io/v1
-  kind: Route
-  metadata:
-    name: ${NAME}
-  spec:
-    host: ${OPERATOR_HOSTNAME}
-    port:
-      targetPort: api
-    tls:
-      termination: edge
-    to:
-      kind: Service
-      name: ${NAME}
 
 - apiVersion: anarchy.gpte.redhat.com/v1
   kind: AnarchyRunner

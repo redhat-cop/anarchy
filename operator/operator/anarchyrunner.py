@@ -54,10 +54,6 @@ class AnarchyRunner(object):
         pass
 
     @property
-    def image(self):
-        return self.spec.get('image', os.environ.get('RUNNER_IMAGE', 'quay.io/gpte-devops-automation/anarchy-runner:latest'))
-
-    @property
     def image_pull_policy(self):
         return self.spec.get('imagePullPolicy', os.environ.get('RUNNER_IMAGE_PULL_POLICY', 'Always'))
 
@@ -72,6 +68,10 @@ class AnarchyRunner(object):
     @property
     def name(self):
         return self.metadata['name']
+
+    @property
+    def namespace(self):
+        return self.metadata['namespace']
 
     @property
     def resource_version(self):
@@ -115,6 +115,29 @@ class AnarchyRunner(object):
     @property
     def var_secrets(self):
         return self.spec.get('varSecrets', [])
+
+    def get_image(self, runtime):
+        '''
+        Return anarchy-runner image, checking in order of precedence:
+        - The AnarchyRunner spec.image
+        - Environment variable RUNNER_IMAGE
+        - OpenShift imagestream anarchy-runner with tag "latest"
+        - quay.io/redhat-cop/anarchy-runner:latest
+        '''
+        image = self.spec.get('image', os.environ.get('RUNNER_IMAGE', ''))
+        if image != '':
+            return image
+        try:
+            imagestream = runtime.custom_objects_api.get_namespaced_custom_object(
+                'image.openshift.io', 'v1', self.namespace, 'imagestreams', 'anarchy-runner'
+            )
+            tags = imagestream.get('status', {}).get('tags', [])
+            for tag in tags:
+                if tag['tag'] == 'latest' and len(tag['items']) > 0:
+                    return tag['items'][0]['dockerImageReference']
+        except kubernetes.client.rest.ApiException as e:
+            pass
+        return 'quay.io/redhat-cop/anarchy-runner:latest'
 
     def manage_runner_deployment(self, runtime):
         """Manage Deployment for AnarchyRunner pods"""
@@ -164,7 +187,7 @@ class AnarchyRunner(object):
                                'name': 'RUNNER_TOKEN',
                                'value': self.runner_token
                            }],
-                           'image': self.image,
+                           'image': self.get_image(runtime),
                            'imagePullPolicy': self.image_pull_policy,
                            'resources': self.resources
                        }]

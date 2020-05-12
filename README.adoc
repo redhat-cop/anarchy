@@ -70,17 +70,8 @@ oc new-project anarchy-operator
 
 . Process the template `deploy-template.yaml` to deploy the Anarchy operator into your namespace.
 +
-The template requires the parameter `OPERATOR_HOSTNAME`.
-This should be a hostname within the domain served by the ingress router.
-We recommend using the namespace name as the host name within this domain.
-For OpenShift 4, the router ingress domain can be retrived from the `ingresses.config.openshift.io` named `cluster`:
-+
 ----
-INGRESS_DOMAIN=$(oc get ingresses.config.openshift.io cluster -o jsonpath='{.spec.domain}')
-oc process \
-  -f deploy-template.yaml \
-  -p OPERATOR_HOSTNAME=anarchy-operator.$INGRESS_DOMAIN \
-| oc apply -n anarchy-operator -f -
+oc process -f deploy-template.yaml | oc apply -n anarchy-operator -f -
 ----
 
 . Check your to make sure the anarchy-operator pod is running and the default runner starts soon after:
@@ -148,17 +139,8 @@ oc start-build -wF anarchy-runner --from-dir=.
 . Deploy Anarchy images from build:
 +
 ----
-INGRESS_DOMAIN=$(oc get ingresses.config.openshift.io cluster -o jsonpath='{.spec.domain}')
 OPERATOR_IMAGE=$(oc get imagestream anarchy -o jsonpath='{.status.tags[?(@.tag=="latest")].items[0].dockerImageReference}')
-RUNNER_IMAGE=$(oc get imagestream anarchy-runner -o jsonpath='{.status.tags[?(@.tag=="latest")].items[0].dockerImageReference}')
-oc process \
-  -f deploy-template.yaml \
-  -p OPERATOR_HOSTNAME=anarchy-operator.$INGRESS_DOMAIN \
-  -p OPERATOR_IMAGE=$OPERATOR_IMAGE \
-  -p OPERATOR_IMAGE_PULL_POLICY=Always \
-  -p RUNNER_IMAGE=$RUNNER_IMAGE \
-  -p RUNNER_IMAGE_PULL_POLICY=Always \
-| oc apply -n anarchy-operator -f -
+oc process -f deploy-template.yaml -p OPERATOR_IMAGE=$OPERATOR_IMAGE | oc apply -n anarchy-operator -f -
 ----
 
 == Testing
