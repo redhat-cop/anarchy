@@ -253,8 +253,7 @@ class AnarchySubject(object):
 
     def delete(self, remove_finalizers, runtime):
         result = runtime.custom_objects_api.delete_namespaced_custom_object(
-            runtime.operator_domain, 'v1', runtime.operator_namespace,
-            'anarchysubjects', self.name, kubernetes.client.V1DeleteOptions()
+            runtime.operator_domain, 'v1', runtime.operator_namespace, 'anarchysubjects', self.name
         )
         if remove_finalizers:
             self.remove_finalizers(runtime)

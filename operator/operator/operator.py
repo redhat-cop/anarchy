@@ -350,8 +350,7 @@ def post_subject_action(subject_name):
         if action_resource['spec']['action'] in cancel_actions \
         and 'status' not in action_resource:
             runtime.custom_objects_api.delete_namespaced_custom_object(
-                runtime.operator_domain, 'v1', runtime.operator_namespace, 'anarchyactions',
-                action_resource['metadata']['name'], kubernetes.client.V1DeleteOptions()
+                runtime.operator_domain, 'v1', runtime.operator_namespace, 'anarchyactions', action_resource['metadata']['name']
             )
 
     if action_name:

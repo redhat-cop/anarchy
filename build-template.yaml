@@ -7,7 +7,9 @@ metadata:
   name: anarchy-build
 
 parameters:
-- name: FROM_IMAGE
+- name: KOPF_S2I_IMAGE
+  value: quay.io/jkupferer/python-kopf-s2i:v0.28
+- name: RUNNER_BASE_IMAGE
   value: registry.access.redhat.com/ubi8:latest
 - name: GIT_REPO
   value: https://github.com/redhat-cop/anarchy.git
@@ -49,11 +51,11 @@ objects:
         uri: ${GIT_REPO}
         ref: master
     strategy:
-      type: Docker
-      dockerStrategy:
+      type: Source
+      sourceStrategy:
         from:
           kind: DockerImage
-          name: ${FROM_IMAGE}
+          name: ${KOPF_S2I_IMAGE}
     triggers: []
 
 - apiVersion: v1
@@ -78,5 +80,5 @@ objects:
       dockerStrategy:
         from:
           kind: DockerImage
-          name: ${FROM_IMAGE}
+          name: ${RUNNER_BASE_IMAGE}
     triggers: []
