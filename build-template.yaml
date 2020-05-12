@@ -10,7 +10,7 @@ parameters:
 - name: KOPF_S2I_IMAGE
   value: quay.io/jkupferer/python-kopf-s2i:v0.28
 - name: RUNNER_BASE_IMAGE
-  value: registry.access.redhat.com/ubi8:latest
+  value: registry.access.redhat.com/ubi8/python-38:latest
 - name: GIT_REPO
   value: https://github.com/redhat-cop/anarchy.git
 - name: NAME

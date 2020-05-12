@@ -1,9 +1,7 @@
-FROM registry.access.redhat.com/ubi8/ubi:latest
+FROM registry.access.redhat.com/ubi8/python-38:latest
 
-ENV HELM_VERSION=3.0.0 \
-    OCP_VERSION=4.2.9 \
-    PYTHON_VERSION=3.7 \
-    PYTHON_RELEASE=3.7.5
+ENV HELM_VERSION=3.2.1 \
+    OCP_VERSION=4.3.19
 
 USER 0:0
 
@@ -18,18 +16,6 @@ RUN yum install -y \
       make \
       nss_wrapper \
  && yum clean all \
- && curl https://www.python.org/ftp/python/${PYTHON_RELEASE}/Python-${PYTHON_RELEASE}.tgz \
-      -o /usr/local/src/Python-${PYTHON_RELEASE}.tgz \
- && tar zxf /usr/local/src/Python-${PYTHON_RELEASE}.tgz -C /usr/local/src \
- && cd /usr/local/src/Python-${PYTHON_RELEASE} \
- && ./configure --enable-optimizations \
- && make altinstall \
- && cd /usr/local/bin \
- && rm /usr/local/src/Python-${PYTHON_RELEASE}.tgz \
- && ln -s idle${PYTHON_VERSION} idle3 \
- && ln -s python${PYTHON_VERSION} python3 \
- && ln -s pip${PYTHON_VERSION} pip3 \
- && ln -s pydoc${PYTHON_VERSION} pydoc3 \
  && pip3 install -r /anarchy-runner/requirements.txt --upgrade \
  && touch \
       /anarchy-runner/ansible-runner/project/main.yml \
