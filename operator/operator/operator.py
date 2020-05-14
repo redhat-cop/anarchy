@@ -1,6 +1,8 @@
 #!/usr/bin/env python
 
+from anarchyutil import random_string
 from datetime import datetime, timedelta, timezone
+
 import flask
 import gevent.pywsgi
 import kopf
@@ -41,6 +43,7 @@ def init():
     init_runners()
     init_governors()
     init_runs()
+    init_runners()
     init_complete = True
     operator_logger.debug("Completed init")
 
@@ -90,6 +93,48 @@ def init_runs():
                     AnarchyRunner.runners[runner_name].runner_pods[pod_name] = anarchy_run
                 else:
                     anarchy_run.handle_lost_runner(pod_name, runtime)
+
+def init_runners():
+    """
+    Create default AnarchyRunner if it does not exist.
+    """
+    try:
+        runner = runtime.custom_objects_api.get_namespaced_custom_object(
+            runtime.operator_domain, 'v1', runtime.operator_namespace, 'anarchyrunners', 'default'
+        )
+    except kubernetes.client.rest.ApiException as e:
+        if e.status == 404:
+            runtime.custom_objects_api.create_namespaced_custom_object(
+                runtime.operator_domain, 'v1', runtime.operator_namespace, 'anarchyrunners',
+                {
+                    'apiVersion': runtime.operator_domain + '/v1',
+                    'kind': 'AnarchyRunner',
+                    'metadata': { 'name': 'default' },
+                    'spec': {
+                        'ansibleGalaxyRoles': [],
+                        'minReplicas': 1,
+                        'maxReplicas': 9,
+                        'preTasks': [],
+                        'postTasks': [],
+                        'resources': {
+                            'limits': {
+                                'cpu': '1',
+                                'memory': '256Mi',
+                            },
+                            'requests': {
+                                'cpu': '500m',
+                                'memory': '256Mi',
+                            },
+                        },
+                        'token': random_string(50),
+                        'vars': {},
+                        'varSecrets': [],
+                    }
+                }
+            )
+        else:
+            raise
+
 
 def wait_for_init():
     while not init_complete:

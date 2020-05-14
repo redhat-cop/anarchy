@@ -58,6 +58,10 @@ class AnarchyRunner(object):
         return self.spec.get('imagePullPolicy', os.environ.get('RUNNER_IMAGE_PULL_POLICY', 'Always'))
 
     @property
+    def kind(self):
+        return 'AnarchyRunner'
+
+    @property
     def max_replicas(self):
         return self.spec.get('maxReplicas', self.min_replicas)
 
@@ -102,11 +106,19 @@ class AnarchyRunner(object):
 
     @property
     def runner_token(self):
+        '''
+        Return runner token, used to authenticate callbacks.
+        Default to use object uid if token is not set.
+        '''
         return self.spec.get('token', self.metadata['uid'])
 
     @property
     def service_account_name(self):
         return self.spec.get('serviceAccountName', 'anarchy-runner-' + self.name)
+
+    @property
+    def uid(self):
+        return self.metadata['uid']
 
     @property
     def vars(self):
@@ -150,7 +162,14 @@ class AnarchyRunner(object):
             'metadata': {
                 'name': deployment_name,
                 'namespace': deployment_namespace,
-                'labels': { runtime.runner_label: self.name }
+                'labels': { runtime.runner_label: self.name },
+                'ownerReferences': [{
+                    'apiVersion': runtime.operator_domain + '/v1',
+                    'controller': True,
+                    'kind': 'AnarchyRunner',
+                    'name': self.name,
+                    'uid': self.uid,
+                }]
             },
             'spec': {
                 'selector': {

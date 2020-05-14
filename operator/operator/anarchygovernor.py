@@ -3,7 +3,6 @@ import jinja2
 import json
 import logging
 import os
-import random
 import six
 
 operator_logger = logging.getLogger('operator')

@@ -1,7 +1,6 @@
 from datetime import datetime, timedelta
 import kubernetes
 import logging
-import random
 import threading
 
 from anarchyrunner import AnarchyRunner

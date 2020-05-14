@@ -114,6 +114,7 @@ objects:
     resources:
     - anarchyactions
     - anarchyactions/status
+    - anarchyrunners
     - anarchyrunners/status
     - anarchyruns
     - anarchyruns/status
