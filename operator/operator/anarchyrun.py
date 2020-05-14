@@ -73,7 +73,7 @@ class AnarchyRun(object):
 
     @property
     def governor_name(self):
-        return self.spec['governor']['metadata']['name']
+        return self.spec['governor']['name']
 
     @property
     def run_post_datetime(self):
@@ -92,7 +92,7 @@ class AnarchyRun(object):
 
     @property
     def subject_name(self):
-        return self.spec['subject']['metadata']['name']
+        return self.spec['subject']['name']
 
     @property
     def uid(self):

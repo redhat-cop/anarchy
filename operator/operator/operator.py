@@ -222,7 +222,10 @@ def get_run():
 
     anarchy_runner.runner_pods[runner_pod] = anarchy_run
     anarchy_run.set_runner(anarchy_runner.name + '.' + runner_pod, runtime)
-    return flask.jsonify(anarchy_run.to_dict(runtime))
+    resp = anarchy_run.to_dict(runtime)
+    resp['subject'] = anarchy_subject.to_dict(runtime)
+    resp['governor'] = anarchy_subject.get_governor(runtime).to_dict(runtime)
+    return flask.jsonify(resp)
 
 @api.route('/run/<string:run_name>', methods=['POST'])
 def post_run(run_name):

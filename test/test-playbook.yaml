@@ -241,12 +241,6 @@
         anarchy-operator --replicas=1
       when: restart_anarchy_operator | bool
 
-    - name: Scale up anarchy-runner
-      command: >-
-        oc scale deployment -n {{ anarchy_operator_namespace | quote }}
-        anarchy-runner --replicas={{ anarchy_runner_replicas }}
-      when: restart_anarchy_runner | bool
-
     - name: Pause for anarchy-operator start-up
       pause:
         seconds: 40

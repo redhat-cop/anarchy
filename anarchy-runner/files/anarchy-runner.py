@@ -118,10 +118,17 @@ class AnarchyRunner(object):
             self.sleep()
             return
 
+        # Extract governor and subject from AnarchyRun and set vars within
+        # run spec into governor and subject for DWIM behavior.
+        anarchy_governor = anarchy_run.pop('governor')
+        anarchy_governor.update(anarchy_run['spec']['governor'])
+        anarchy_subject = anarchy_run.pop('subject')
+        anarchy_subject.update(anarchy_run['spec']['subject'])
+
         run_name = anarchy_run['metadata']['name']
         self.setup_ansible_galaxy_requirements(anarchy_run)
         self.clean_runner_dir()
-        self.write_runner_vars(anarchy_run)
+        self.write_runner_vars(anarchy_run, anarchy_subject, anarchy_governor)
         self.write_runner_playbook(anarchy_run)
         logging.info('starting ansible runner')
         ansible_run = ansible_runner.interface.init_runner(
@@ -176,19 +183,17 @@ class AnarchyRunner(object):
             connection = 'local',
             gather_facts = False,
             pre_tasks = run_spec.get('preTasks', []),
-            roles = (['anarchy_runner'] + run_spec.get('roles', [])),
+            roles = run_spec.get('roles', []),
             tasks = run_spec.get('tasks', []),
             post_tasks = run_spec.get('postTasks', [])
         )]
         open(playbook_file, mode='w').write(json.dumps(plays))
 
-    def write_runner_vars(self, anarchy_run):
-        anarchy_governor = anarchy_run['spec']['governor']
-        anarchy_subject = anarchy_run['spec']['subject']
+    def write_runner_vars(self, anarchy_run, anarchy_subject, anarchy_governor):
         extravars = copy.deepcopy(anarchy_run['spec'].get('vars', {}))
         extravars.update({
             'anarchy_governor': anarchy_governor,
-            'anarchy_governor_name': anarchy_governor['name'],
+            'anarchy_governor_name': anarchy_run['spec']['governor']['name'],
             'anarchy_namespace': self.anarchy_namespace,
             'anarchy_operator_domain': self.domain,
             'anarchy_run': anarchy_run,
@@ -198,8 +203,8 @@ class AnarchyRunner(object):
             'anarchy_runner_name': self.runner_name,
             'anarchy_runner_token': self.runner_token,
             'anarchy_subject': anarchy_subject,
-            'anarchy_subject_name': anarchy_subject['name'],
-            'anarchy_url': self.anarchy_url
+            'anarchy_subject_name': anarchy_run['spec']['subject']['name'],
+            'anarchy_url': self.anarchy_url,
         })
         anarchy_action = anarchy_run['spec'].get('action', None)
         if anarchy_action:
