@@ -1,6 +1,8 @@
 #!/usr/bin/env python
 
+from anarchyutil import random_string
 from datetime import datetime, timedelta, timezone
+
 import flask
 import gevent.pywsgi
 import kopf
@@ -41,6 +43,7 @@ def init():
     init_runners()
     init_governors()
     init_runs()
+    init_runners()
     init_complete = True
     operator_logger.debug("Completed init")
 
@@ -90,6 +93,48 @@ def init_runs():
                     AnarchyRunner.runners[runner_name].runner_pods[pod_name] = anarchy_run
                 else:
                     anarchy_run.handle_lost_runner(pod_name, runtime)
+
+def init_runners():
+    """
+    Create default AnarchyRunner if it does not exist.
+    """
+    try:
+        runner = runtime.custom_objects_api.get_namespaced_custom_object(
+            runtime.operator_domain, 'v1', runtime.operator_namespace, 'anarchyrunners', 'default'
+        )
+    except kubernetes.client.rest.ApiException as e:
+        if e.status == 404:
+            runtime.custom_objects_api.create_namespaced_custom_object(
+                runtime.operator_domain, 'v1', runtime.operator_namespace, 'anarchyrunners',
+                {
+                    'apiVersion': runtime.operator_domain + '/v1',
+                    'kind': 'AnarchyRunner',
+                    'metadata': { 'name': 'default' },
+                    'spec': {
+                        'ansibleGalaxyRoles': [],
+                        'minReplicas': 1,
+                        'maxReplicas': 9,
+                        'preTasks': [],
+                        'postTasks': [],
+                        'resources': {
+                            'limits': {
+                                'cpu': '1',
+                                'memory': '256Mi',
+                            },
+                            'requests': {
+                                'cpu': '500m',
+                                'memory': '256Mi',
+                            },
+                        },
+                        'token': random_string(50),
+                        'vars': {},
+                        'varSecrets': [],
+                    }
+                }
+            )
+        else:
+            raise
+
 
 def wait_for_init():
     while not init_complete:
@@ -222,7 +267,10 @@ def get_run():
 
     anarchy_runner.runner_pods[runner_pod] = anarchy_run
     anarchy_run.set_runner(anarchy_runner.name + '.' + runner_pod, runtime)
-    return flask.jsonify(anarchy_run.to_dict(runtime))
+    resp = anarchy_run.to_dict(runtime)
+    resp['subject'] = anarchy_subject.to_dict(runtime)
+    resp['governor'] = anarchy_subject.get_governor(runtime).to_dict(runtime)
+    return flask.jsonify(resp)
 
 @api.route('/run/<string:run_name>', methods=['POST'])
 def post_run(run_name):
@@ -350,8 +398,7 @@ def post_subject_action(subject_name):
         if action_resource['spec']['action'] in cancel_actions \
         and 'status' not in action_resource:
             runtime.custom_objects_api.delete_namespaced_custom_object(
-                runtime.operator_domain, 'v1', runtime.operator_namespace, 'anarchyactions',
-                action_resource['metadata']['name'], kubernetes.client.V1DeleteOptions()
+                runtime.operator_domain, 'v1', runtime.operator_namespace, 'anarchyactions', action_resource['metadata']['name']
             )
 
     if action_name:

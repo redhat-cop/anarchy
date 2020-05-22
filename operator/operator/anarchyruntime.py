@@ -21,6 +21,7 @@ class AnarchyRuntime(object):
         self.__init_namespace(operator_namespace)
         self.__init_kube_apis()
         self.anarchy_service = os.environ.get('ANARCHY_SERVICE', 'anarchy-operator')
+        self.__init_callback_base_url()
         self.anarchy_runners = {}
         self.last_lost_runner_check = time.time()
         self.runner_label = self.operator_domain + '/runner'
@@ -58,11 +59,49 @@ class AnarchyRuntime(object):
         else:
             self.operator_namespace = 'anarchy-operator'
 
-    def action_callback_url(self, action_name):
-        return '{}/action/{}'.format(
-            os.environ['CALLBACK_BASE_URL'], action_name
-        )
+    def __init_callback_base_url(self):
+        url = os.environ.get('CALLBACK_BASE_URL', '')
+        if url and len(url) > 8:
+            self.callback_base_url = url
+            return
+        try:
+            route = self.custom_objects_api.get_namespaced_custom_object(
+                'route.openshift.io', 'v1', self.operator_namespace, 'routes', self.anarchy_service
+            )
+            spec = route.get('spec', {})
+            if spec.get('tls', None):
+                self.callback_base_url = 'https://' + spec['host']
+            else:
+                self.callback_base_url = 'http://' + spec['host']
+        except kubernetes.client.rest.ApiException as e:
+            if e.status == 404:
+                route = self.custom_objects_api.create_namespaced_custom_object(
+                    'route.openshift.io', 'v1', self.operator_namespace, 'routes',
+                    {
+                        'apiVersion': 'route.openshift.io/v1',
+                        'kind': 'Route',
+                        'metadata': {
+                            'name': self.anarchy_service,
+                            'namespace': self.operator_namespace,
+                        },
+                        'spec': {
+                            'port': { 'targetPort': 'api' },
+                            'tls': { 'termination': 'edge' },
+                            'to': {
+                                'kind': 'Service',
+                                'name': self.anarchy_service
+                            }
+                        }
+                    }
+                )
+                self.callback_base_url = 'https://' + route['spec']['host']
+            else:
+                self.callback_base_url = None
 
+    def action_callback_url(self, action_name):
+        if not self.callback_base_url:
+            raise Exception('Unable to set action callback URL. Please set CALLBACK_BASE_URL environment variable.')
+        return '{}/action/{}'.format(self.callback_base_url, action_name)
 
     def get_secret_data(self, secret_name, secret_namespace=None):
         if not secret_namespace:

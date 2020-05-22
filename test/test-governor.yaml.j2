@@ -23,14 +23,9 @@ spec:
     poolboy_resource_handle_namespace: >-
       {{ anarchy_subject.metadata.annotations['poolboy.gpte.redhat.com/resource-handle-namespace'] | default('') }}
     job_vars:
-      aws_access_key_id: "{{ aws_access_key_id }}"
-      aws_secret_access_key: "{{ aws_secret_access_key }}"
-      check_late_variable_binding: "{% raw %}{{ this_variable_not_defined }}{% {% endraw %}endraw{% raw %} %}"
+      check_late_variable_binding: "{{ this_variable_not_defined }}"
       cloud_provider: ec2
       __meta__:
-        callback:
-          token: "{{ anarchy_action_callback_token }}"
-          url: "{{ anarchy_action_callback_url }}"
         tower:
           organization: test
 
@@ -38,6 +33,7 @@ spec:
   - name: test-api-creds
     var: babylon_tower
   - name: test-aws-creds
+    var: job_vars
 
   subjectEventHandlers:
     create:
@@ -106,15 +102,19 @@ spec:
           body:
             extra_vars:
               job_vars: >-
-                {{ anarchy_subject.vars.job_vars | default({})
-                 | combine(anarchy_governor.vars.job_vars, recursive=True)
+                {{ vars.anarchy_subject.vars.job_vars | default({})
+                 | combine(vars.anarchy_governor.vars.job_vars, recursive=True)
                  | combine({
-                     'ACTION': 'provision',
-                     '__meta__': {
-                       'deployer': {'entry_point': 'ansible/main.yml'},
-                       'tower': {'action': 'provision'}
+                   'ACTION': 'provision',
+                   '__meta__': {
+                     'deployer': {'entry_point': 'ansible/main.yml'},
+                     'tower': {'action': 'provision'},
+                     'callback': {
+                       'token': anarchy_action_callback_token,
+                       'url': anarchy_action_callback_url
                      }
-                   }, recursive=True)
+                   }
+                 }, recursive=True)
                 }}
         ignore_errors: true
         register: r_api_response
@@ -163,15 +163,19 @@ spec:
           body:
             extra_vars:
               job_vars: >-
-                {{ anarchy_subject.vars.job_vars | default({})
-                 | combine(anarchy_governor.vars.job_vars, recursive=True)
+                {{ vars.anarchy_subject.vars.job_vars | default({})
+                 | combine(vars.anarchy_governor.vars.job_vars, recursive=True)
                  | combine({
-                     'ACTION': 'stop',
-                     '__meta__': {
-                       'deployer': {'entry_point': 'ansible/lifecycle.yml'},
-                       'tower': {'action': 'stop'}
+                   'ACTION': 'stop',
+                   '__meta__': {
+                     'deployer': {'entry_point': 'ansible/lifecycle.yml'},
+                     'tower': {'action': 'stop'},
+                     'callback': {
+                       'token': anarchy_action_callback_token,
+                       'url': anarchy_action_callback_url
                      }
-                   }, recursive=True)
+                   }
+                 }, recursive=True)
                 }}
         ignore_errors: true
         register: r_api_response
@@ -243,15 +247,19 @@ spec:
           body:
             extra_vars:
               job_vars: >-
-                {{ anarchy_subject.vars.job_vars | default({})
-                 | combine(anarchy_governor.vars.job_vars, recursive=True)
+                {{ vars.anarchy_subject.vars.job_vars | default({})
+                 | combine(vars.anarchy_governor.vars.job_vars, recursive=True)
                  | combine({
-                     'ACTION': 'start',
-                     '__meta__': {
-                       'deployer': {'entry_point': 'ansible/lifecycle.yml'},
-                       'tower': {'action': 'start'}
+                   'ACTION': 'start',
+                   '__meta__': {
+                     'deployer': {'entry_point': 'ansible/lifecycle.yml'},
+                     'tower': {'action': 'start'},
+                     'callback': {
+                       'token': anarchy_action_callback_token,
+                       'url': anarchy_action_callback_url
                      }
-                   }, recursive=True)
+                   }
+                 }, recursive=True)
                 }}
         ignore_errors: true
         register: r_api_response
@@ -296,15 +304,19 @@ spec:
           body:
             extra_vars:
               job_vars: >-
-                {{ anarchy_subject.vars.job_vars | default({})
-                 | combine(anarchy_governor.vars.job_vars, recursive=True)
+                {{ vars.anarchy_subject.vars.job_vars | default({})
+                 | combine(vars.anarchy_governor.vars.job_vars, recursive=True)
                  | combine({
-                     'ACTION': 'destroy',
-                     '__meta__': {
-                       'deployer': {'entry_point': 'ansible/destroy.yml'},
-                       'tower': {'action': 'destroy'}
+                   'ACTION': 'destroy',
+                   '__meta__': {
+                     'deployer': {'entry_point': 'ansible/destroy.yml'},
+                     'tower': {'action': 'destroy'},
+                     'callback': {
+                       'token': anarchy_action_callback_token,
+                       'url': anarchy_action_callback_url
                      }
-                   }, recursive=True)
+                   }
+                 }, recursive=True)
                 }}
         ignore_errors: true
         register: r_api_response

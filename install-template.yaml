@@ -114,6 +114,7 @@ objects:
     resources:
     - anarchyactions
     - anarchyactions/status
+    - anarchyrunners
     - anarchyrunners/status
     - anarchyruns
     - anarchyruns/status
@@ -136,6 +137,24 @@ objects:
     verbs:
     - create
     - delete
+    - get
+    - list
+    - patch
+    - update
+  - apiGroups:
+    - image.openshift.io
+    resources:
+    - imagestreams
+    verbs:
+    - get
+    - list
+    - watch
+  - apiGroups:
+    - route.openshift.io
+    resources:
+    - routes
+    verbs:
+    - create
     - get
     - list
     - patch

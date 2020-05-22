@@ -1,6 +1,6 @@
 #!/usr/bin/python
 
-# Copyright: (c) 2018, Terry Jones <terry.jones@example.org>
+# Copyright: (c) 2019, Johnathan Kupferer <jkupfere@redhat.com>
 # GNU General Public License v3.0+ (see COPYING or https://www.gnu.org/licenses/gpl-3.0.txt)
 
 import os
@@ -13,25 +13,26 @@ class ActionModule(ActionBase):
     def run(self, tmp=None, task_vars=None, **_):
         result = super(ActionModule, self).run(tmp, task_vars)
         module_args = self._task.args.copy()
-        anarchy_subject = task_vars['anarchy_subject']
+        anarchy_subject_name = task_vars['anarchy_subject_name']
         anarchy_url = task_vars['anarchy_url']
         anarchy_run_pod_name = task_vars['anarchy_run_pod_name']
         anarchy_runner_name = task_vars['anarchy_runner_name']
         anarchy_runner_token = task_vars['anarchy_runner_token']
 
-        remove_finalizers = module_args['remove_finalizers']
-        if isinstance(remove_finalizers, str):
-            if re.match('[TtYy]'):
-                remove_finalizers = True
-            else:
-                remove_finalizers = False
+        patch = {}
+        if 'metadata' in module_args:
+            patch['metadata'] = module_args['metadata']
+        if 'spec' in module_args:
+            patch['spec'] = module_args['spec']
+        if 'status' in module_args:
+            patch['status'] = module_args['status']
 
-        response = requests.delete(
-            anarchy_url + '/run/subject/' + anarchy_subject['name'],
+        response = requests.patch(
+            anarchy_url + '/run/subject/' + anarchy_subject_name,
             headers={'Authorization': 'Bearer {}:{}:{}'.format(
                 anarchy_runner_name, anarchy_run_pod_name, anarchy_runner_token
             )},
-            json=dict(remove_finalizers=remove_finalizers)
+            json=dict(patch=patch)
         )
         result['subject'] = response.json()['result']
         result['failed'] = not response.json()['success']

@@ -34,7 +34,7 @@ class ActionModule(ActionBase):
     def run(self, tmp=None, task_vars=None, **_):
         result = super(ActionModule, self).run(tmp, task_vars)
         module_args = self._task.args.copy()
-        anarchy_subject = task_vars['anarchy_subject']
+        anarchy_subject_name = task_vars['anarchy_subject_name']
         anarchy_url = task_vars['anarchy_url']
         anarchy_run_pod_name = task_vars['anarchy_run_pod_name']
         anarchy_runner_name = task_vars['anarchy_runner_name']
@@ -61,7 +61,7 @@ class ActionModule(ActionBase):
             return result
 
         response = requests.post(
-            anarchy_url + '/run/subject/' + anarchy_subject['name'] + '/actions',
+            anarchy_url + '/run/subject/' + anarchy_subject_name + '/actions',
             headers={'Authorization': 'Bearer {}:{}:{}'.format(
                 anarchy_runner_name, anarchy_run_pod_name, anarchy_runner_token
             )},

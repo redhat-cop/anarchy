@@ -1,3 +1,6 @@
+import random
+import string
+
 def deep_update(target, update):
     if isinstance(target, dict):
         deep_update_dict(target, update)
@@ -34,3 +37,6 @@ def deep_update_list(target, update):
                 target[i] = v
         else:
             target.append(v)
+
+def random_string(length=8, character_set=string.ascii_lowercase + string.digits):
+    return ''.join(random.choice(character_set) for i in range(length))

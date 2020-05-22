@@ -122,8 +122,16 @@ class AnarchyAction(object):
         return True if self.status else False
 
     @property
+    def kind(self):
+        return 'AnarchyAction'
+
+    @property
     def name(self):
         return self.metadata['name']
+
+    @property
+    def namespace(self):
+        return self.metadata['namespace']
 
     @property
     def subject_name(self):

@@ -177,10 +177,6 @@ class AnarchySubject(object):
             'subjects must define governor'
 
     @property
-    def name(self):
-        return self.metadata['name']
-
-    @property
     def delete_started(self):
         return self.status and 'deleteHandlersStarted' in self.status
 
@@ -191,6 +187,18 @@ class AnarchySubject(object):
     @property
     def is_pending_delete(self):
         return 'deletionTimestamp' in self.metadata
+
+    @property
+    def kind(self):
+        return 'AnarchySubject'
+
+    @property
+    def name(self):
+        return self.metadata['name']
+
+    @property
+    def namespace(self):
+        return self.metadata['namespace']
 
     @property
     def parameters(self):
@@ -215,6 +223,15 @@ class AnarchySubject(object):
     @property
     def var_secrets(self):
         return self.spec.get('varSecrets', [])
+
+    def to_dict(self, runtime):
+        return dict(
+            apiVersion = runtime.operator_domain + '/v1',
+            kind = 'AnarchySubject',
+            metadata=self.metadata,
+            spec=self.spec,
+            status=self.status
+        )
 
     def add_finalizer(self, runtime):
         finalizers = self.metadata.get('finalizers', [])
@@ -253,8 +270,7 @@ class AnarchySubject(object):
 
     def delete(self, remove_finalizers, runtime):
         result = runtime.custom_objects_api.delete_namespaced_custom_object(
-            runtime.operator_domain, 'v1', runtime.operator_namespace,
-            'anarchysubjects', self.name, kubernetes.client.V1DeleteOptions()
+            runtime.operator_domain, 'v1', runtime.operator_namespace, 'anarchysubjects', self.name
         )
         if remove_finalizers:
             self.remove_finalizers(runtime)

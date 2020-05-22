@@ -3,7 +3,6 @@ import jinja2
 import json
 import logging
 import os
-import random
 import six
 
 operator_logger = logging.getLogger('operator')
@@ -132,8 +131,16 @@ class AnarchyGovernor(object):
         return self.spec.get('callbackNameParameter', 'event')
 
     @property
+    def kind(self):
+        return 'AnarchyGovernor'
+
+    @property
     def name(self):
         return self.metadata['name']
+
+    @property
+    def namespace(self):
+        return self.metadata['namespace']
 
     @property
     def parameters(self):
@@ -188,15 +195,13 @@ class AnarchyGovernor(object):
         for context_item in context:
             name, obj = context_item
             context_vars = runtime.get_vars(obj)
-            context_spec = {
-                'name': obj.name,
-                'vars': context_vars
-            }
-            for attr in ('metadata', 'status'):
+            context_spec = { 'vars': context_vars }
+            if hasattr(obj, 'uid'):
+                context_spec['apiVersion'] = runtime.operator_domain + '/v1'
+                context_spec['uid'] = obj.uid
+            for attr in ('kind', 'name', 'namespace'):
                 if hasattr(obj, attr):
                     context_spec[attr] = getattr(obj, attr)
-            if hasattr(obj, 'spec') and name != 'governor':
-                context_spec['spec'] = obj.spec
             run_spec[name] = context_spec
             collected_run_vars.update(context_vars)
         collected_run_vars.update(run_vars)
@@ -242,4 +247,12 @@ class AnarchyGovernor(object):
                 },
                 'spec': run_spec
             }
+        )
+
+    def to_dict(self, runtime):
+        return dict(
+            apiVersion = runtime.operator_domain + '/v1',
+            kind = 'AnarchyGovernor',
+            metadata=self.metadata,
+            spec=self.spec
         )

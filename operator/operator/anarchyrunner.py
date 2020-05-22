@@ -54,12 +54,12 @@ class AnarchyRunner(object):
         pass
 
     @property
-    def image(self):
-        return self.spec.get('image', os.environ.get('RUNNER_IMAGE', 'quay.io/gpte-devops-automation/anarchy-runner:latest'))
-
-    @property
     def image_pull_policy(self):
         return self.spec.get('imagePullPolicy', os.environ.get('RUNNER_IMAGE_PULL_POLICY', 'Always'))
+
+    @property
+    def kind(self):
+        return 'AnarchyRunner'
 
     @property
     def max_replicas(self):
@@ -72,6 +72,10 @@ class AnarchyRunner(object):
     @property
     def name(self):
         return self.metadata['name']
+
+    @property
+    def namespace(self):
+        return self.metadata['namespace']
 
     @property
     def resource_version(self):
@@ -102,11 +106,19 @@ class AnarchyRunner(object):
 
     @property
     def runner_token(self):
+        '''
+        Return runner token, used to authenticate callbacks.
+        Default to use object uid if token is not set.
+        '''
         return self.spec.get('token', self.metadata['uid'])
 
     @property
     def service_account_name(self):
         return self.spec.get('serviceAccountName', 'anarchy-runner-' + self.name)
+
+    @property
+    def uid(self):
+        return self.metadata['uid']
 
     @property
     def vars(self):
@@ -115,6 +127,29 @@ class AnarchyRunner(object):
     @property
     def var_secrets(self):
         return self.spec.get('varSecrets', [])
+
+    def get_image(self, runtime):
+        '''
+        Return anarchy-runner image, checking in order of precedence:
+        - The AnarchyRunner spec.image
+        - Environment variable RUNNER_IMAGE
+        - OpenShift imagestream anarchy-runner with tag "latest"
+        - quay.io/redhat-cop/anarchy-runner:latest
+        '''
+        image = self.spec.get('image', os.environ.get('RUNNER_IMAGE', ''))
+        if image != '':
+            return image
+        try:
+            imagestream = runtime.custom_objects_api.get_namespaced_custom_object(
+                'image.openshift.io', 'v1', self.namespace, 'imagestreams', 'anarchy-runner'
+            )
+            tags = imagestream.get('status', {}).get('tags', [])
+            for tag in tags:
+                if tag['tag'] == 'latest' and len(tag['items']) > 0:
+                    return tag['items'][0]['dockerImageReference']
+        except kubernetes.client.rest.ApiException as e:
+            pass
+        return 'quay.io/redhat-cop/anarchy-runner:latest'
 
     def manage_runner_deployment(self, runtime):
         """Manage Deployment for AnarchyRunner pods"""
@@ -127,7 +162,14 @@ class AnarchyRunner(object):
             'metadata': {
                 'name': deployment_name,
                 'namespace': deployment_namespace,
-                'labels': { runtime.runner_label: self.name }
+                'labels': { runtime.runner_label: self.name },
+                'ownerReferences': [{
+                    'apiVersion': runtime.operator_domain + '/v1',
+                    'controller': True,
+                    'kind': 'AnarchyRunner',
+                    'name': self.name,
+                    'uid': self.uid,
+                }]
             },
             'spec': {
                 'selector': {
@@ -164,7 +206,7 @@ class AnarchyRunner(object):
                                'name': 'RUNNER_TOKEN',
                                'value': self.runner_token
                            }],
-                           'image': self.image,
+                           'image': self.get_image(runtime),
                            'imagePullPolicy': self.image_pull_policy,
                            'resources': self.resources
                        }]
