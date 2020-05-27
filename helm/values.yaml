@@ -1,13 +1,11 @@
 ---
 image:
-  anarchyOperator:
-    repository: quay.io/gpte-devops-automation/anarchy-operator
-    pullPolicy: IfNotPresent
-  anarchyRunner:
-    repository: quay.io/gpte-devops-automation/anarchy-operator
-    pullPolicy: IfNotPresent
+  repository: quay.io/redhat-cop/anarchy
+  pullPolicy: IfNotPresent
 
-namespace: anarchy-operator
+envVars: {}
+
+namespace: anarchy
 
 imagePullSecrets: []
 nameOverride: ""
@@ -21,13 +19,9 @@ serviceAccount:
 
 service:
   type: ClusterIP
-  port: 80
-
-
-openshift:
-  enabled: false
-  route:
-    host: anarchy.apps.example.com
+  port:
+    api: 5000
+    metrics: 8000
 
 ingress:
   enabled: false
@@ -42,16 +36,6 @@ ingress:
     - anarchy.apps.example.com
 
 resources: {}
-  # We usually recommend not to specify default resources and to leave this as a conscious
-  # choice for the user. This also increases chances charts run on environments with little
-  # resources, such as Minikube. If you do want to specify resources, uncomment the following
-  # lines, adjust them as necessary, and remove the curly braces after 'resources:'.
-  # limits:
-  #   cpu: 100m
-  #   memory: 128Mi
-  # requests:
-  #   cpu: 100m
-  #   memory: 128Mi
 
 nodeSelector: {}
 

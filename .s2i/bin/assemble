@@ -1,0 +1,32 @@
+#!/bin/bash
+
+set -x
+set -eo pipefail
+shopt -s dotglob
+
+mkdir -p /opt/app-root/src || :
+cp --preserve=mode --recursive /tmp/src/anarchy-runner /opt/app-root/
+
+touch \
+  /opt/app-root/anarchy-runner/ansible-runner/project/main.yml \
+  /opt/app-root/anarchy-runner/kubeconfig \
+  /opt/app-root/anarchy-runner/passwd \
+  /opt/app-root/anarchy-runner/group
+
+chmod ug=rw,o= \
+  /opt/app-root/anarchy-runner/ansible-runner/project/main.yml \
+  /opt/app-root/anarchy-runner/kubeconfig \
+  /opt/app-root/anarchy-runner/passwd \
+  /opt/app-root/anarchy-runner/group
+
+mkdir -p \
+  /opt/app-root/anarchy-runner/.ansible \
+  /opt/app-root/anarchy-runner/ansible-runner/artifacts \
+  /opt/app-root/anarchy-runner/ansible-runner/env
+
+chmod ug=rwx,o= \
+  /opt/app-root/anarchy-runner/.ansible \
+  /opt/app-root/anarchy-runner/ansible-runner/artifacts \
+  /opt/app-root/anarchy-runner/ansible-runner/env \
+
+exec /usr/libexec/s2i/assemble

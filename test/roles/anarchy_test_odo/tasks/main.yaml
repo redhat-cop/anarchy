@@ -1,0 +1,43 @@
+---
+- name: Get current project
+  command: oc project -q
+  register: r_get_current_project
+  changed_when: false
+
+- name: Set anarchy_namespace
+  set_fact:
+    anarchy_namespace: "{{ r_get_current_project.stdout }}"
+
+- name: Get odo anarchy-app DeploymentConfig
+  k8s_info:
+    api_version: apps.openshift.io/v1
+    kind: DeploymentConfig
+    name: anarchy-app
+    namespace: "{{ anarchy_namespace }}"
+  register: r_get_odo_dc
+  failed_when: r_get_odo_dc.resources | length != 1
+
+- name: Set anarchy_odo_deployment_config
+  set_fact:
+    anarchy_odo_deployment_config: "{{ r_get_odo_dc.resources[0] }}"
+
+- name: Get odo anarchy-app Pod
+  k8s_info:
+    api_version: v1
+    kind: Pod
+    namespace: "{{ anarchy_namespace }}"
+    # For explanation of to_json | from_json json_query work-around: https://github.com/ansible/ansible/issues/27299
+    label_selectors: >-
+      {{ anarchy_odo_deployment_config.spec.selector | to_json | from_json | dict2items | json_query("[].join('=',[@.key, @.value])") }}
+  register: r_get_odo_pod
+  failed_when: r_get_odo_pod.resources | length != 1
+
+- name: Set anarchy_odo_pod, anarchy_odo_pod_ip, anarchy_callback_base_url
+  set_fact:
+    anarchy_odo_pod: "{{ _pod }}"
+    anarchy_odo_pod_ip: "{{ _pod.status.podIP }}"
+    anarchy_callback_base_url: "http://{{ _pod.status.podIP }}:5000"
+  vars:
+    _pod: "{{ r_get_odo_pod.resources[0] }}"
+
+- debug: var=anarchy_odo_pod_ip

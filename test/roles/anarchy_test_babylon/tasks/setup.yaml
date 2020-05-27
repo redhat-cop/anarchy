@@ -1,0 +1,97 @@
+---
+- name: Set anarchy_test_babylon_user, anarchy_test_babylon_password, anarchy_test_babylon_aws_vars
+  set_fact:
+    anarchy_test_babylon_user: babylon
+    anarchy_test_babylon_password: "{{ lookup('password', '/dev/null length=15') }}"
+    anarchy_test_babylon_aws_vars:
+      aws_access_key_id: th3k3y
+      aws_secret_access_key: th34cc355
+
+- name: Create anarchy-test-babylon-aws-creds Secret
+  k8s:
+    apply: true
+    definition:
+      apiVersion: v1
+      kind: Secret
+      metadata:
+        name: anarchy-test-babylon-aws-creds
+        namespace: "{{ anarchy_namespace }}"
+      type: Opaque
+      data:
+        aws_access_key_id: "{{ anarchy_test_babylon_aws_vars.aws_access_key_id | b64encode }}"
+        aws_secret_access_key: "{{ anarchy_test_babylon_aws_vars.aws_secret_access_key | b64encode }}"
+
+- name: Get anarchy-test-server ImageStream
+  k8s_info:
+    api_version: image.openshift.io/v1
+    kind: ImageStream
+    name: anarchy-test-server
+    namespace: "{{ anarchy_namespace }}"
+  register: r_get_anarchy_test_server_imagestream
+
+- name: Set anarchy_test_babylon_server_image
+  set_fact:
+    anarchy_test_babylon_server_image: >-
+      {{ r_get_anarchy_test_server_imagestream
+       | json_query(_image_json_query)
+       | default(anarchy_test_babylon_server_image, true)
+      }}
+  vars:
+    _image_json_query:  >-
+      resources[0].status.tags[?tag=='latest'].items[0].dockerImageReference|[0]
+
+- name: Create anarchy-test-babylon-server resources
+  k8s:
+    apply: true
+    definition: "{{ lookup('template', _template) }}"
+  loop:
+  - test-server.deployment.yaml.j2
+  - test-server.service.yaml.j2
+  - test-server.route.yaml.j2
+  loop_control:
+    loop_var: _template
+
+- name: Get anarchy-test-babylon-server pod
+  k8s_info:
+    api_version: v1
+    kind: Pod
+    namespace: "{{ anarchy_namespace }}"
+    label_selectors:
+    - name=anarchy-test-babylon-server
+  register: r_get_anarchy_test_babylon_server_pod
+  failed_when: >-
+    r_get_anarchy_test_babylon_server_pod.resources | default([]) | length != 1 or
+    r_get_anarchy_test_babylon_server_pod.resources[0].status.phase != 'Running' or
+    r_get_anarchy_test_babylon_server_pod.resources[0].status.conditions | json_query("[?type=='Ready'].status|[0]") != 'True'
+  until: r_get_anarchy_test_babylon_server_pod is success
+  retries: 10
+  delay: 5
+
+- name: Get anarchy-test-babylon-server Route
+  k8s_info:
+    api_version: route.openshift.io/v1
+    kind: Route
+    name: anarchy-test-babylon-server
+    namespace: "{{ anarchy_namespace }}"
+  register: r_get_anarchy_test_babylon_server_route
+  failed_when: r_get_anarchy_test_babylon_server_route.resources | default([]) | length != 1
+
+- name: Create anarchy-test-babylon-api-creds Secret
+  k8s:
+    apply: true
+    definition:
+      apiVersion: v1
+      kind: Secret
+      metadata:
+        name: anarchy-test-babylon-api-creds
+        namespace: "{{ anarchy_namespace }}"
+      type: Opaque
+      data:
+        hostname: "{{ r_get_anarchy_test_babylon_server_route.resources[0].spec.host | b64encode}}"
+        user: "{{ anarchy_test_babylon_user | b64encode }}"
+        password: "{{ anarchy_test_babylon_password | b64encode }}"
+  
+- name: Create test AnarchyGovernor
+  k8s:
+    state: present
+    definition: "{{ lookup('template', 'governor.yaml.j2') | from_yaml }}"

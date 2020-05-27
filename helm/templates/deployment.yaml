@@ -26,14 +26,20 @@ spec:
         env:
         - name: ANARCHY_SERVICE
           value: {{ include "anarchy.name" . }}
+        {{- if .Values.ingress.enabled }}
         - name: CALLBACK_BASE_URL
-          value: https://{{ .Values.anarchyHostname }}
-        - name: RUNNER_IMAGE
-          value: {{ .Values.image.anarchyRunner.repository }}:v{{ .Chart.AppVersion }}
-        - name: RUNNER_IMAGE_PULL_POLICY
-          value: {{ .Values.image.anarchyRunner.pullPolicy }}
-        image: {{ .Values.image.anarchyOperator.repository }}:v{{ .Chart.AppVersion }}
-        imagePullPolicy: {{ .Values.image.anarchyOperator.pullPolicy }}
+          value: https://{{ (index .Values.ingress.hosts 0).host }}
+        {{- end }}
+        {{- range $k, $v := .Values.envVars }}
+        - name: {{ $k }}
+          value: {{ $v }}
+        {{- end }}
+        {{- if .Values.image.repository | contains ":" }}
+        image: {{ .Values.image.repository }}
+        {{- else }}
+        image: {{ .Values.image.repository }}:v{{ .Chart.AppVersion }}
+        {{- end }}
+        imagePullPolicy: {{ .Values.image.pullPolicy }}
         resources:
           {{- toYaml .Values.resources | nindent 10 }}
       {{- with .Values.nodeSelector }}

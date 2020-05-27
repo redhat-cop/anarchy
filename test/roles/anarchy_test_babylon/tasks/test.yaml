@@ -1,0 +1,116 @@
+---
+- name: Create AnarchySubject test-babylon-1
+  k8s:
+    apply: true
+    state: present
+    definition: "{{ lookup('template', 'subject.yaml.j2') | from_yaml }}"
+  vars:
+    _name: test-babylon-1
+    _vars:
+      desired_state: started
+      job_vars:
+        test_subject_var: test-1
+
+- name: Check test-babylon-1 provision action
+  k8s_info:
+    api_version: anarchy.gpte.redhat.com/v1
+    kind: AnarchyAction
+    label_selectors:
+    - anarchy.gpte.redhat.com/action=provision
+    - anarchy.gpte.redhat.com/subject=test-babylon-1
+  register: r_test_1_provision
+  until:
+  - r_test_1_provision.resources | default([]) | length == 1
+  - r_test_1_provision.resources[0].spec.action == 'provision'
+  - r_test_1_provision.resources[0].status is defined
+  - r_test_1_provision.resources[0].status.callbackEvents is defined
+  - r_test_1_provision.resources[0].status.callbackEvents | length == 2
+  - r_test_1_provision.resources[0].status.callbackEvents[0].name == 'started'
+  - r_test_1_provision.resources[0].status.callbackEvents[1].name == 'complete'
+  retries: 20
+  delay: 5
+
+- name: Confirm test-babylon-1 subject state
+  k8s_info:
+    api_version: anarchy.gpte.redhat.com/v1
+    kind: AnarchySubject
+    name: test-babylon-1
+    namespace: "{{ anarchy_namespace }}"
+  register: r_test_1_subject
+  until:
+  - r_test_1_subject.resources[0].metadata.labels.state == 'started'
+  - r_test_1_subject.resources[0].spec.vars.current_state == 'started'
+  retries: 5
+  delay: 5
+
+- name: Stop test-babylon-1 subject
+  k8s:
+    api_version: anarchy.gpte.redhat.com/v1
+    kind: AnarchySubject
+    name: test-babylon-1
+    namespace: "{{ anarchy_namespace }}"
+    merge_type: merge
+    definition:
+      spec:
+        vars:
+          desired_state: stopped
+
+- name: Confirm test-babylon-1 subject stopped
+  k8s_info:
+    api_version: anarchy.gpte.redhat.com/v1
+    kind: AnarchySubject
+    name: test-babylon-1
+    namespace: "{{ anarchy_namespace }}"
+  register: r_test_1_subject
+  until:
+  - r_test_1_subject.resources[0].metadata.labels.state == 'stopped'
+  - r_test_1_subject.resources[0].spec.vars.current_state == 'stopped'
+  retries: 20
+  delay: 5
+
+- name: Start test-babylon-1 subject
+  k8s:
+    api_version: anarchy.gpte.redhat.com/v1
+    kind: AnarchySubject
+    name: test-babylon-1
+    namespace: "{{ anarchy_namespace }}"
+    merge_type: merge
+    definition:
+      spec:
+        vars:
+          desired_state: started
+
+- name: Confirm test-babylon-1 subject started
+  k8s_info:
+    api_version: anarchy.gpte.redhat.com/v1
+    kind: AnarchySubject
+    name: test-babylon-1
+    namespace: "{{ anarchy_namespace }}"
+  register: r_test_1_subject
+  until:
+  - r_test_1_subject.resources[0].metadata.labels.state == 'started'
+  - r_test_1_subject.resources[0].spec.vars.current_state == 'started'
+  retries: 20
+  delay: 5
+
+- when: anarchy_test_delete_subjects | bool
+  block:
+  - name: Delete test-babylon-1 subject
+    k8s:
+      state: absent
+      api_version: anarchy.gpte.redhat.com/v1
+      kind: AnarchySubject
+      name: test-babylon-1
+      namespace: "{{ anarchy_namespace }}"
+
+  - name: Verify AnarchySubject delete for test-babylon-1
+    k8s_info:
+      api_version: anarchy.gpte.redhat.com/v1
+      kind: AnarchySubject
+      name: test-babylon-1
+      namespace: "{{ anarchy_namespace }}"
+    register: r_get_test_babylon_1_subject
+    failed_when: r_get_test_babylon_1_subject.resources | default([]) | length != 0
+    until: r_get_test_babylon_1_subject is success
+    retries: 20
+    delay: 5

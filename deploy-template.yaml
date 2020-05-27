@@ -3,34 +3,27 @@ apiVersion: template.openshift.io/v1
 kind: Template
 metadata:
   annotations:
-    description: anarchy-operator deploy
-  name: anarchy-operator-deploy
+    description: Anarchy deploy
+  name: anarchy-deploy
 
 parameters:
 - name: NAME
   description: Name for Anarchy resources
   displayName: Name
-  value: anarchy-operator
-- name: OPERATOR_DOMAIN
+  value: anarchy
+- name: ANARCHY_DOMAIN
   description: Anarchy operator custom resource definition domain
   displayName: Anarchy operator CRD domain
   value: anarchy.gpte.redhat.com
-- name: OPERATOR_IMAGE
+- name: ANARCHY_IMAGE
   value: quay.io/redhat-cop/anarchy:latest
-- name: OPERATOR_IMAGE_PULL_POLICY
+- name: ANARCHY_IMAGE_PULL_POLICY
   value: IfNotPresent
-  #value: Always
 - name: RUNNER_IMAGE
   value: ''
 - name: RUNNER_IMAGE_PULL_POLICY
   value: IfNotPresent
   #value: Always
-- name: DEFAULT_RUNNER_TOKEN
-  description: Token use to validate anarchy runner to anarchy operator
-  displayName: Default Runner Token
-  from: '[a-zA-Z0-9]{16}'
-  generate: expression
-  required: true
 
 objects:
 - apiVersion: v1
@@ -45,7 +38,7 @@ objects:
   roleRef:
     apiGroup: rbac.authorization.k8s.io
     kind: ClusterRole
-    name: anarchy-operator
+    name: anarchy
   subjects:
   - kind: ServiceAccount
     name: ${NAME}
@@ -69,14 +62,16 @@ objects:
         containers:
         - name: manager
           env:
+          - name: ANARCHY_DOMAIN
+            value: ${ANARCHY_DOMAIN}
           - name: ANARCHY_SERVICE
             value: ${NAME}
           - name: RUNNER_IMAGE
             value: ${RUNNER_IMAGE}
           - name: RUNNER_IMAGE_PULL_POLICY
             value: ${RUNNER_IMAGE_PULL_POLICY}
-          image: ${OPERATOR_IMAGE}
-          imagePullPolicy: ${OPERATOR_IMAGE_PULL_POLICY}
+          image: ${ANARCHY_IMAGE}
+          imagePullPolicy: ${ANARCHY_IMAGE_PULL_POLICY}
           livenessProbe:
             httpGet:
               path: /healthz

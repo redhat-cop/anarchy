@@ -1,0 +1,21 @@
+---
+- hosts: localhost
+  gather_facts: false
+  vars:
+    anarchy_test_oc_cmd: oc
+    anarchy_tests:
+    - simple
+    - babylon
+  roles:
+  - anarchy_test_setup
+  - anarchy_test_cleanup
+  tasks:
+  - name: Run tests
+    include_role:
+      name: "{{ _anarchy_test_role }}"
+    loop: "{{ anarchy_tests }}"
+    loop_control:
+      loop_var: _anarchy_test
+    vars:
+      _anarchy_test_role: anarchy_test_{{ _anarchy_test }}
+      anarchy_test_action: cleanup

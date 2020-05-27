@@ -1,0 +1,30 @@
+---
+- name: Delete AnarchyGovernor test-babylon
+  k8s:
+    state: absent
+    api_version: anarchy.gpte.redhat.com/v1
+    kind: AnarchyGovernor
+    name: test-babylon
+    namespace: "{{ anarchy_namespace }}"
+
+- name: Delete anarchy-test-babylon-server resources
+  k8s:
+    state: absent
+    definition: "{{ lookup('template', _template) }}"
+  loop:
+  - test-server.deployment.yaml.j2
+  - test-server.service.yaml.j2
+  - test-server.route.yaml.j2
+  loop_control:
+    loop_var: _template
+
+- name: Delete anarchy-test-babylon-* Secrets
+  k8s:
+    api_version: v1
+    kind: Secret
+    name: "{{ item }}"
+    namespace: "{{ anarchy_namespace }}"
+    state: absent
+  loop:
+  - anarchy-test-babylon-api-creds
+  - anarchy-test-babylon-aws-creds
