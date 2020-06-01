@@ -1,0 +1,33 @@
+---
+name: publish
+on:
+  push:
+    branches-ignore:
+    - '*'
+    tags:
+    - 'v[0-9]*'
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout source
+      uses: actions/checkout@master
+
+    - name: Get the version
+      id: get_version
+      run: |
+        # Version is based on a semantic version tag
+        VERSION=${GITHUB_REF#refs/tags/}
+        # Publish to latest, minor, and patch tags
+        TAGS=('latest' "${VERSION}" "${VERSION%.*}")
+        # Set IMAGE_TAGS output for use in next step
+        ( IFS=$','; echo "::set-output name=IMAGE_TAGS::${TAGS[*]}" )
+
+    - name: Build and publish image
+      uses: docker/build-push-action@v1
+      with:
+        registry: ${{ secrets.REGISTRY_URI }}
+        repository: ${{ secrets.REGISTRY_REPOSITORY }}/anarchy
+        username: ${{ secrets.QUAY_USERNAME }}
+        password: ${{ secrets.QUAY_PASSWORD }}
+        tags: "${{ steps.image_tags.outputs.IMAGE_TAGS }}"
