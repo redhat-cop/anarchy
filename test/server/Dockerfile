@@ -2,7 +2,7 @@ FROM registry.access.redhat.com/ubi8/python-38:latest
 
 USER 0
 
-FROM quay.io/jkupferer/python-kopf-s2i:latest
+FROM quay.io/redhat-cop/python-kopf-s2i:latest
 
 USER root
 
