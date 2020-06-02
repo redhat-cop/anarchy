@@ -1,7 +1,6 @@
 ---
 anarchy_test_babylon_anarchy_governor_repo: https://github.com/redhat-gpte-devopsautomation/babylon_anarchy_governor.git
 anarchy_test_babylon_anarchy_governor_version: v0.0.7
-anarchy_test_babylon_server_image: quay.io/redhat-cop/anarchy-test-server:v0.5.1
 #anarchy_test_babylon_schedule_destroy_after_provision:
 #anarchy_test_babylon_schedule_stop_after_provision:
 #anarchy_test_babylon_schedule_stop_after_start:
