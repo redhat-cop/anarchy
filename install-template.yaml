@@ -1,0 +1,936 @@
+apiVersion: template.openshift.io/v1
+kind: Template
+metadata:
+  annotations:
+    description: Anarchy Install
+  name: anarchy-install
+objects:
+- apiVersion: v1
+  kind: ClusterRole
+  metadata:
+    labels:
+      rbac.authorization.k8s.io/aggregate-to-admin: 'true'
+    name: anarchy-admin
+  rules:
+  - apiGroups:
+    - ${ANARCHY_DOMAIN}
+    resources:
+    - anarchygovernors
+    - anarchyrunners
+    verbs:
+    - create
+    - delete
+    - deletecollection
+    - get
+    - list
+    - patch
+    - update
+    - watch
+- apiVersion: v1
+  kind: ClusterRole
+  metadata:
+    labels:
+      rbac.authorization.k8s.io/aggregate-to-admin: 'true'
+    name: anarchy
+  rules:
+  - apiGroups:
+    - ${ANARCHY_DOMAIN}
+    resources:
+    - anarchygovernors
+    - anarchyrunners
+    verbs:
+    - get
+    - list
+    - watch
+  - apiGroups:
+    - ${ANARCHY_DOMAIN}
+    resources:
+    - anarchyactions
+    - anarchyactions/status
+    - anarchyrunners
+    - anarchyrunners/status
+    - anarchyruns
+    - anarchyruns/status
+    - anarchysubjects
+    - anarchysubjects/status
+    verbs:
+    - create
+    - delete
+    - get
+    - list
+    - patch
+    - update
+    - watch
+  - apiGroups:
+    - apps
+    resources:
+    - deployments
+    - deployments/rollback
+    - deployments/scale
+    verbs:
+    - create
+    - delete
+    - get
+    - list
+    - patch
+    - update
+  - apiGroups:
+    - image.openshift.io
+    resources:
+    - imagestreams
+    verbs:
+    - get
+    - list
+    - watch
+  - apiGroups:
+    - route.openshift.io
+    resources:
+    - routes
+    verbs:
+    - create
+    - get
+    - list
+    - patch
+    - update
+  - apiGroups:
+    - ''
+    resources:
+    - pods
+    - secrets
+    - serviceaccounts
+    - services
+    verbs:
+    - create
+    - delete
+    - get
+    - list
+    - patch
+    - update
+    - watch
+  - apiGroups:
+    - ''
+    resources:
+    - events
+    verbs:
+    - create
+    - patch
+    - update
+- apiVersion: apiextensions.k8s.io/v1beta1
+  kind: CustomResourceDefinition
+  metadata:
+    name: anarchyactions.${ANARCHY_DOMAIN}
+  spec:
+    group: ${ANARCHY_DOMAIN}
+    names:
+      kind: AnarchyAction
+      plural: anarchyactions
+      shortNames: []
+      singular: anarchyaction
+    scope: Namespaced
+    subresources:
+      status: {}
+    validation:
+      openAPIV3Schema:
+        description: AnarchySubjects track state Anarchy. Subjects represent something
+          that is managed. When Anarchy ansible processing runs it always runs for
+          a subject and can update the subject during the run to reflect state changes.
+        properties:
+          apiVersion:
+            type: string
+          kind:
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: Definition of the AnarchyAction.
+            properties:
+              action:
+                description: Name of action from AnarchyGovernor used to process AnsibleRun
+                type: string
+              after:
+                description: Datetime string in for format "YYYY-MM-DDThh:mm:ssZ".
+                  AnarchyRun will be created for the AnarchyAction after this time.
+                type: string
+              callbackToken:
+                description: Random string used to validate callbacks
+                type: string
+              governorRef:
+                description: Reference to controlling AnarchyGovernor
+                properties:
+                  apiVersion:
+                    type: string
+                  kind:
+                    type: string
+                  name:
+                    type: string
+                  namespace:
+                    type: string
+                  uid:
+                    type: string
+                required:
+                - name
+                type: object
+              subjectRef:
+                description: Reference to owning AnarchySubject
+                properties:
+                  apiVersion:
+                    type: string
+                  kind:
+                    type: string
+                  name:
+                    type: string
+                  namespace:
+                    type: string
+                  uid:
+                    type: string
+                required:
+                - name
+                type: object
+            required:
+            - action
+            - subjectRef
+            type: object
+        required:
+        - apiVersion
+        - kind
+        - metadata
+        - spec
+        type: object
+    version: v1
+- apiVersion: apiextensions.k8s.io/v1beta1
+  kind: CustomResourceDefinition
+  metadata:
+    name: anarchygovernors.${ANARCHY_DOMAIN}
+  spec:
+    group: ${ANARCHY_DOMAIN}
+    names:
+      kind: AnarchyGovernor
+      plural: anarchygovernors
+      shortNames: []
+      singular: anarchygovernor
+    scope: Namespaced
+    validation:
+      openAPIV3Schema:
+        description: AnarchyGovernors define how to manage AnarchySubjects. The governor
+          may define how to respond to new subjects being created or existing subjects
+          being updated or deleted. AnarchyGovernors also define how to process AnarchyActions
+          and handle callbacks related to those actions.
+        properties:
+          apiVersion:
+            type: string
+          kind:
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: Definition of how the AnarchyGovernor should manage AnarchySubjects
+              and AnarchyActions.
+            properties:
+              actions:
+                additionalProperties:
+                  properties:
+                    callbackHandlers:
+                      additionalProperties:
+                        properties:
+                          postTasks:
+                            description: Ansible "post_tasks" for the dynamic ansible
+                              play used to run the action callback.
+                            items:
+                              type: object
+                            type: array
+                          preTasks:
+                            description: Ansible "pre_tasks" for the dynamic ansible
+                              play used to run the action callback.
+                            items:
+                              type: object
+                            type: array
+                          roles:
+                            description: Ansible "roles" for the dynamic ansible play
+                              used to run the action callback.
+                            items:
+                              oneOf:
+                              - type: string
+                              - type: object
+                            type: array
+                          tasks:
+                            description: Ansible "tasks" for the dynamic ansible play
+                              used to run the action callback.
+                            items:
+                              type: object
+                            type: array
+                          varSecrets:
+                            description: List of secrets to use to set variables in
+                              the dynamic ansible play for the action callback.
+                            items:
+                              description: Secret used to set variables in the dynamic
+                                ansible play for the action callback. Secret values
+                                are merged into values from "vars".
+                              properties:
+                                name:
+                                  description: Secret name
+                                  type: string
+                                namespace:
+                                  description: Optional secret namespace. If omitted
+                                    then the operator namespace is used.
+                                  type: string
+                                var:
+                                  description: Optional variable name to set. If not
+                                    provided, then each data key from the secret is
+                                    treated as a separate variable.
+                              required:
+                              - name
+                              type: object
+                            type: array
+                          vars:
+                            description: Ansible "vars" for the dynamic ansible play
+                              used to run the action callback.
+                            type: object
+                        type: object
+                      description: Configuration for how to handle callback events
+                        for the action callback. Key is callback event name.
+                      type: object
+                    callbackNameParameter:
+                      description: Parameter in callback data used to name the event
+                        the callback is for.
+                      type: string
+                    postTasks:
+                      description: Ansible "post_tasks" for the dynamic ansible play
+                        used to run this action.
+                      items:
+                        type: object
+                      type: array
+                    preTasks:
+                      description: Ansible "pre_tasks" for the dynamic ansible play
+                        used to run this action.
+                      items:
+                        type: object
+                      type: array
+                    roles:
+                      description: Ansible "roles" for the dynamic ansible play used
+                        to run this action.
+                      items:
+                        oneOf:
+                        - type: string
+                        - type: object
+                      type: array
+                    tasks:
+                      description: Ansible "tasks" for the dynamic ansible play used
+                        to run this action.
+                      items:
+                        type: object
+                      type: array
+                    varSecrets:
+                      description: List of secrets to use to set variables in the
+                        dynamic ansible play for this action.
+                      items:
+                        description: Secret used to set variables in the dynamic ansible
+                          play for the action. Secret values are merged into values
+                          from "vars".
+                        properties:
+                          name:
+                            description: Secret name
+                            type: string
+                          namespace:
+                            description: Optional secret namespace. If omitted then
+                              the operator namespace is used.
+                            type: string
+                          var:
+                            description: Optional variable name to set. If not provided,
+                              then each data key from the secret is treated as a separate
+                              variable.
+                        required:
+                        - name
+                        type: object
+                      type: array
+                    vars:
+                      description: Ansible "vars" for the dynamic ansible play used
+                        to run this action.
+                      type: object
+                  type: object
+                description: Actions are used to describe available types of AnarchyActions.
+                  These are scheduled activities that will be processed by AnarchyRuns.
+                  Key is action name.
+                type: object
+              ansibleGalaxyRequirements:
+                description: List of Ansible Galaxy requirements in requirements format
+                  with keys "roles" and "collections".
+                properties:
+                  collections:
+                    items:
+                      type: object
+                    type: array
+                  roles:
+                    items:
+                      type: object
+                    type: array
+                type: object
+              runner:
+                description: AnsibleRunner that should process AnsibleRuns for this
+                  governor.
+                type: string
+              subjectEventHandlers:
+                description: Actions are used to describe available types of AnarchyActions.
+                  These are scheduled activities that will be processed by AnarchyRuns.
+                properties:
+                  create:
+                    description: Description of how to handle creation of AnarchySubjects
+                      for this governor.
+                    postTasks:
+                      description: Ansible "post_tasks" for the dynamic ansible play
+                        used to run the event handler.
+                      items:
+                        type: object
+                      type: array
+                    preTasks:
+                      description: Ansible "pre_tasks" for the dynamic ansible play
+                        used to run the event handler.
+                      items:
+                        type: object
+                      type: array
+                    roles:
+                      description: Ansible "roles" for the dynamic ansible play used
+                        to run the event handler.
+                      items:
+                        oneOf:
+                        - type: string
+                        - type: object
+                      type: array
+                    tasks:
+                      description: Ansible "tasks" for the dynamic ansible play used
+                        to run the event handler.
+                      items:
+                        type: object
+                      type: array
+                    type: object
+                    varSecrets:
+                      description: List of secrets to use to set variables in the
+                        dynamic ansible play for the event handler.
+                      items:
+                        description: Secret used to set variables in the dynamic ansible
+                          play for the event handler. Secret values are merged into
+                          values from "vars".
+                        properties:
+                          name:
+                            description: Secret name
+                            type: string
+                          namespace:
+                            description: Optional secret namespace. If omitted then
+                              the operator namespace is used.
+                            type: string
+                          var:
+                            description: Optional variable name to set. If not provided,
+                              then each data key from the secret is treated as a separate
+                              variable.
+                        required:
+                        - name
+                        type: object
+                      type: array
+                    vars:
+                      description: Ansible "vars" for the dynamic ansible play used
+                        to run the event handler.
+                      type: object
+                  delete:
+                    description: Description of how to handle deletion of AnarchySubjects
+                      for this governor. If defined, then finalizers will be added
+                      to the AnarchySubject which must be removed by Ansible processing.
+                    postTasks:
+                      description: Ansible "post_tasks" for the dynamic ansible play
+                        used to run the event handler.
+                      items:
+                        type: object
+                      type: array
+                    preTasks:
+                      description: Ansible "pre_tasks" for the dynamic ansible play
+                        used to run the event handler.
+                      items:
+                        type: object
+                      type: array
+                    roles:
+                      description: Ansible "roles" for the dynamic ansible play used
+                        to run the event handler.
+                      items:
+                        oneOf:
+                        - type: string
+                        - type: object
+                      type: array
+                    tasks:
+                      description: Ansible "tasks" for the dynamic ansible play used
+                        to run the event handler.
+                      items:
+                        type: object
+                      type: array
+                    varSecrets:
+                      description: List of secrets to use to set variables in the
+                        dynamic ansible play for the event handler.
+                      items:
+                        description: Secret used to set variables in the dynamic ansible
+                          play for the event handler. Secret values are merged into
+                          values from "vars".
+                        properties:
+                          name:
+                            description: Secret name
+                            type: string
+                          namespace:
+                            description: Optional secret namespace. If omitted then
+                              the operator namespace is used.
+                            type: string
+                          var:
+                            description: Optional variable name to set. If not provided,
+                              then each data key from the secret is treated as a separate
+                              variable.
+                        required:
+                        - name
+                        type: object
+                      type: array
+                    vars:
+                      description: Ansible "vars" for the dynamic ansible play used
+                        to run the event handler.
+                      type: object
+                  update:
+                    description: Description of how to handle update of AnarchySubjects
+                      for this governor.
+                    postTasks:
+                      description: Ansible "post_tasks" for the dynamic ansible play
+                        used to run the event handler.
+                      items:
+                        type: object
+                      type: array
+                    preTasks:
+                      description: Ansible "pre_tasks" for the dynamic ansible play
+                        used to run the event handler.
+                      items:
+                        type: object
+                      type: array
+                    roles:
+                      description: Ansible "roles" for the dynamic ansible play used
+                        to run the event handler.
+                      items:
+                        oneOf:
+                        - type: string
+                        - type: object
+                      type: array
+                    tasks:
+                      description: Ansible "tasks" for the dynamic ansible play used
+                        to run the event handler.
+                      items:
+                        type: object
+                      type: array
+                    varSecrets:
+                      description: List of secrets to use to set variables in the
+                        dynamic ansible play for the event handler.
+                      items:
+                        description: Secret used to set variables in the dynamic ansible
+                          play for the event handler. Secret values are merged into
+                          values from "vars".
+                        properties:
+                          name:
+                            description: Secret name
+                            type: string
+                          namespace:
+                            description: Optional secret namespace. If omitted then
+                              the operator namespace is used.
+                            type: string
+                          var:
+                            description: Optional variable name to set. If not provided,
+                              then each data key from the secret is treated as a separate
+                              variable.
+                        required:
+                        - name
+                        type: object
+                      type: array
+                    vars:
+                      description: Ansible "vars" for the dynamic ansible play used
+                        to run the event handler.
+                      type: object
+                type: object
+              varSecrets:
+                description: List of secrets to use to set variables in the dynamic
+                  ansible play for the event handler.
+                items:
+                  description: Secret used to set variables in the dynamic ansible
+                    play for the event handler. Secret values are merged into values
+                    from "vars".
+                  properties:
+                    name:
+                      description: Secret name
+                      type: string
+                    namespace:
+                      description: Optional secret namespace. If omitted then the
+                        operator namespace is used.
+                      type: string
+                    var:
+                      description: Optional variable name to set. If not provided,
+                        then each data key from the secret is treated as a separate
+                        variable.
+                  required:
+                  - name
+                  type: object
+                type: array
+              vars:
+                description: Ansible "vars" for the dynamic ansible play used to run
+                  the event handler.
+                type: object
+            type: object
+        required:
+        - apiVersion
+        - kind
+        - metadata
+        - spec
+        type: object
+    version: v1
+- apiVersion: apiextensions.k8s.io/v1beta1
+  kind: CustomResourceDefinition
+  metadata:
+    name: anarchyrunners.${ANARCHY_DOMAIN}
+  spec:
+    group: ${ANARCHY_DOMAIN}
+    names:
+      kind: AnarchyRunner
+      plural: anarchyrunners
+      shortNames: []
+      singular: anarchyrunner
+    scope: Namespaced
+    subresources:
+      status: {}
+    validation:
+      openAPIV3Schema:
+        description: AnarchyRunners define Ansible runners used to process actions
+          and handle events.
+        properties:
+          maxReplicas:
+            description: Maximum number of replicas for dynamic scaling of the AnarchyRunner
+              pool.
+            minimum: 0
+            type: integer
+          minReplicas:
+            description: Minimum number of replicas for dynamic scaling of the AnarchyRunner
+              pool.
+            minimum: 0
+            type: integer
+          podTemplate:
+            description: Pod template used to define AnarchyRunner pods.
+            type: object
+          token:
+            description: Token used to validate communication with pods in the AnarchyRunner
+              pool.
+            type: string
+        type: object
+    version: v1
+- apiVersion: apiextensions.k8s.io/v1beta1
+  kind: CustomResourceDefinition
+  metadata:
+    name: anarchyruns.${ANARCHY_DOMAIN}
+  spec:
+    group: ${ANARCHY_DOMAIN}
+    names:
+      kind: AnarchyRun
+      plural: anarchyruns
+      shortNames: []
+      singular: anarchyrun
+    scope: Namespaced
+    validation:
+      openAPIV3Schema:
+        description: AnarchyRuns represent Ansible processing that is queued to occur
+          or has occurred. AnarchyRuns process events for AnarchySubjects such as
+          subject create, update, or delete as well as processing scheduled AnarchyActions.
+        properties:
+          apiVersion:
+            type: string
+          kind:
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: Specification for how to process the Ansible run.
+            properties:
+              action:
+                description: Reference to the AnarchyAction related to this AnarchyRun.
+                  Only present if the run was scheluded to process an action.
+                properties:
+                  apiVersion:
+                    type: string
+                  kind:
+                    type: string
+                  name:
+                    type: string
+                  namespace:
+                    type: string
+                  uid:
+                    type: string
+                type: object
+              actionConfig:
+                description: Action configuration from the AnarchyGovernor.
+                properties:
+                  name:
+                    description: Action name from the AnarchyGovernor spec.
+                    type: string
+                  vars:
+                    description: Processed variables for the action.
+                    type: object
+                type: object
+              ansibleGalaxyRequirements:
+                description: List of Ansible Galaxy requirements from the AnarchyGovernor,
+                  frozen in time from when this action was scheduled.
+                properties:
+                  collections:
+                    items:
+                      type: object
+                    type: array
+                  roles:
+                    items:
+                      type: object
+                    type: array
+                type: object
+              governor:
+                description: Reference to the AnarchyGovernor related to this AnarchyRun.
+                properties:
+                  apiVersion:
+                    type: string
+                  kind:
+                    type: string
+                  name:
+                    type: string
+                  namespace:
+                    type: string
+                  uid:
+                    type: string
+                  vars:
+                    description: Processed vars and varSecrets for the governor.
+                    type: object
+                type: object
+              handler:
+                description: Event or callback handler information.
+                properties:
+                  name:
+                    description: Event or callback handler name.
+                    type: string
+                  vars:
+                    description: Processed variables for the handler.
+                    type: object
+                type: object
+              postTasks:
+                description: Ansible "post_tasks" for the dynamic ansible play.
+                items:
+                  type: object
+                type: array
+              preTasks:
+                description: Ansible "pre_tasks" for the dynamic ansible play.
+                items:
+                  type: object
+                type: array
+              result:
+                description: Result of Ansible playbook run.
+                properties:
+                  plays:
+                    description: List of plays executed in the dynamic playbook.
+                    items:
+                      description: Ansible play information.
+                      properties:
+                        id:
+                          type: string
+                        name:
+                          description: Play name
+                          type: string
+                        start:
+                          description: Play start timestamp.
+                          type: string
+                        stats:
+                          additionalProperties:
+                            properties:
+                              changed:
+                                type: integer
+                              failures:
+                                type: integer
+                              ignored:
+                                type: integer
+                              ok:
+                                type: integer
+                              rescued:
+                                type: integer
+                              skipped:
+                                type: integer
+                              unreachable:
+                                type: integer
+                            type: object
+                          description: Playbook run statistics. Key is inventory hostname.
+                            Normally only "localhost" will be present unless "add_host"
+                            calls were used to create new host entries.
+                          type: object
+                        tasks:
+                          description: Record of individual tasks executed within
+                            play.
+                          items:
+                            properties:
+                              action:
+                                type: string
+                              end:
+                                description: Task end timestamp.
+                                type: string
+                              hosts:
+                                additionalProperties:
+                                  description: Task execution information for this
+                                    host.
+                                  properties:
+                                    items:
+                                      description: Task items information for tasks
+                                        with loops
+                                      items:
+                                        description: Task item information for tasks
+                                          with loops
+                                        properties:
+                                          label:
+                                            type: string
+                                          ok:
+                                            type: boolean
+                                          result:
+                                            description: Result of task item execution
+                                            type: object
+                                        type: object
+                                      type: array
+                                    ok:
+                                      description: Whether the task was successful
+                                        for tasks without loops.
+                                      type: boolean
+                                    result:
+                                      description: Result of task execution for tasks
+                                        without loops.
+                                      type: object
+                                  type: object
+                                description: Per-host task execution information.
+                                type: object
+                              id:
+                                type: string
+                              name:
+                                type: string
+                              start:
+                                description: Task end timestamp.
+                                type: string
+                            type: object
+                          type: array
+                      type: object
+                    type: array
+                  rc:
+                    type: integer
+                  status:
+                    type: string
+                type: object
+              roles:
+                description: Ansible "roles" for the dynamic ansible play.
+                items:
+                  type: object
+                type: array
+              runPostTimestamp:
+                description: Timestamp of when the run result was received from the
+                  runner.
+                type: string
+              runner:
+                description: Runner pod name
+                type: string
+              subject:
+                description: Reference to the AnarchySubject related to this AnarchyRun.
+                properties:
+                  apiVersion:
+                    type: string
+                  kind:
+                    type: string
+                  name:
+                    type: string
+                  namespace:
+                    type: string
+                  uid:
+                    type: string
+                  vars:
+                    description: Processed vars and varSecrets for the subject.
+                    type: object
+                type: object
+              tasks:
+                description: Ansible "tasks" for the dynamic ansible play.
+                items:
+                  type: object
+                type: array
+              vars:
+                description: Collected processed vars from governor, subject, event
+                  handler, and action combinding vars and varSecrets values.
+                type: object
+            type: object
+        required:
+        - apiVersion
+        - kind
+        - metadata
+        - spec
+        type: object
+    version: v1
+- apiVersion: apiextensions.k8s.io/v1beta1
+  kind: CustomResourceDefinition
+  metadata:
+    name: anarchysubjects.${ANARCHY_DOMAIN}
+  spec:
+    group: ${ANARCHY_DOMAIN}
+    names:
+      kind: AnarchySubject
+      plural: anarchysubjects
+      shortNames: []
+      singular: anarchysubject
+    scope: Namespaced
+    subresources:
+      status: {}
+    validation:
+      openAPIV3Schema:
+        description: AnarchySubjects track state Anarchy. Subjects represent something
+          that is managed. When Anarchy ansible processing runs it always runs for
+          a subject and can update the subject during the run to reflect state changes.
+        properties:
+          apiVersion:
+            type: string
+          kind:
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: Definition of how the AnarchySubject.
+            properties:
+              governor:
+                description: Name of AnarchyGovernor that defines how to manage this
+                  subject.
+                type: string
+              varSecrets:
+                description: List of secrets to use to set variables in the dynamic
+                  ansible play for the subject.
+                items:
+                  description: Secret used to set variables in the dynamic ansible
+                    play for the event handler. Secret values are merged into values
+                    from "vars".
+                  properties:
+                    name:
+                      description: Secret name
+                      type: string
+                    namespace:
+                      description: Optional secret namespace. If omitted then the
+                        operator namespace is used.
+                      type: string
+                    var:
+                      description: Optional variable name to set. If not provided,
+                        then each data key from the secret is treated as a separate
+                        variable.
+                  required:
+                  - name
+                  type: object
+                type: array
+              vars:
+                description: Variables for the subject. These are used as Ansible
+                  variables during runs and may also be updated by ansible runs.
+                type: object
+            type: object
+        required:
+        - apiVersion
+        - kind
+        - metadata
+        - spec
+        type: object
+    version: v1
+parameters:
+- description: Anarchy operator custom resource definition domain
+  displayName: Anarchy operator CRD domain
+  name: ANARCHY_DOMAIN
+  value: anarchy.gpte.redhat.com
+
