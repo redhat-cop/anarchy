@@ -21,13 +21,49 @@
         aws_access_key_id: "{{ anarchy_test_babylon_aws_vars.aws_access_key_id | b64encode }}"
         aws_secret_access_key: "{{ anarchy_test_babylon_aws_vars.aws_secret_access_key | b64encode }}"
 
-- name: Get anarchy-test-server ImageStream
-  k8s_info:
-    api_version: image.openshift.io/v1
-    kind: ImageStream
-    name: anarchy-test-server
-    namespace: "{{ anarchy_namespace }}"
-  register: r_get_anarchy_test_server_imagestream
+- name: Create anarchy-test-babylon-server ImageStream
+  k8s:
+    apply: true
+    definition: "{{ lookup('template', 'test-server.imagestream.yaml.j2') }}"
+  register: r_anarchy_test_server_imagestream
+
+- name: Set fact anarchy_test_babylon_server_image
+  set_fact:
+    anarchy_test_babylon_server_image: >-
+      {{ r_anarchy_test_server_imagestream | json_query(_image_json_query) }}
+  vars:
+    _image_json_query:  >-
+      result.status.tags[?tag=='latest'].items[0].dockerImageReference|[0]
+
+- when: anarchy_test_babylon_server_image == ''
+  block:
+  - name: Create anarchy-test-babylon-server BuildConfig
+    k8s:
+      apply: true
+      definition: "{{ lookup('template', 'test-server.buildconfig.yaml.j2') | from_yaml }}"
+
+  - name: Start anarchy-test-babylon-server build
+    command: >-
+      oc start-build anarchy-test-babylon-server
+      -n {{ anarchy_namespace | quote }}
+      --from-dir={{ (playbook_dir ~ '/server') | quote }}
+      --follow
+
+  - name: Get anarchy-test-babylon-server ImageStream
+    k8s_info:
+      api_version: image.openshift.io/v1
+      kind: ImageStream
+      name: anarchy-test-babylon-server
+      namespace: "{{ anarchy_namespace }}"
+    register: r_get_anarchy_test_server_imagestream
+
+  - name: Set fact anarchy_babylon_test_server_image
+    set_fact:
+      anarchy_babylon_test_server_image: >-
+        {{ r_get_anarchy_test_server_imagestream | json_query(_image_json_query) }}
+    vars:
+      _image_json_query:  >-
+        resources[0].status.tags[?tag=='latest'].items[0].dockerImageReference|[0]
 
 - name: Set anarchy_test_babylon_server_image
   set_fact:

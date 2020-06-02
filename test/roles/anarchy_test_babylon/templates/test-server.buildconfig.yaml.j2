@@ -1,0 +1,23 @@
+---
+apiVersion: build.openshift.io/v1
+kind: BuildConfig
+metadata:
+  name: anarchy-test-babylon-server
+  namespace: {{ anarchy_namespace | to_json }}
+spec:
+  output:
+    to:
+      kind: ImageStreamTag
+      name: anarchy-test-babylon-server:latest
+  postCommit: {}
+  resources: {}
+  runPolicy: Serial
+  source:
+    type: Binary
+  strategy:
+    type: Docker
+    dockerStrategy:
+      from:
+        kind: DockerImage
+        name: registry.access.redhat.com/ubi8/python-38:latest
+  triggers: []
