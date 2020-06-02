@@ -22,7 +22,6 @@ Human application operators may have experince with builds, but often do not hav
 Anarchy democratizes the potential of the Operator pattern by putting the operator logic in the operator configuration. Users write their own logic in Ansible, which requires little more programming experience than using a command line. Through configuration, the Ansible code is directly controlled at runtime to automate anything you can do in the cluster.
 Anarchy makes your cluster truly self-governing.
 
-
 == Anarchy in Action
 
 TODO - Add example anarchy operator for managing an application with a Helm chart.
@@ -49,123 +48,54 @@ image::docs/AnarchyCallbackDiagram.png[Anarchy Diagram,748,338]
 
 === OpenShift
 
-. Clone this repo to your local workstation and change directory:
-+
-----
-git clone https://github.com/redhat-cop/anarchy.git
-cd anarchy
-----
+Create CustomResourceDefinitions and ClusterRoles defined in the `install/` directory:
 
-. Process the `install-template.yaml` to create anarchy custom resource definitions and related cluster Roles:
-+
-----
-oc process -f install-template.yaml | oc apply -f -
-----
+---------------------
+oc apply -Rf install/
+---------------------
 
-. Create a new project namespace to deploy the Anarchy operator:
-+
-----
-oc new-project anarchy-operator
-----
+Create a new project namespace to deploy Anarchy:
 
-. Process the template `deploy-template.yaml` to deploy the Anarchy operator into your namespace.
-+
-----
-oc process -f deploy-template.yaml | oc apply -n anarchy-operator -f -
-----
+----------------------
+oc new-project anarchy
+----------------------
 
-. Check your to make sure the anarchy-operator pod is running and the default runner starts soon after:
-+
-----
+Process the template `deploy-template.yaml` to deploy the Anarchy operator into your namespace.
+
+--------------------------------------------------------------------------------
+oc process -f https://raw.githubusercontent.com/redhat-cop/anarchy/master/deploy-template.yaml | oc apply -f -
+--------------------------------------------------------------------------------
+
+Check your to make sure the anarchy-operator pod is running and the default runner starts soon after:
+
+-------------------------------------------------------------------------
 $ oc get pods
 NAME                                     READY   STATUS    RESTARTS   AGE
-anarchy-operator-5f7d7898d7-f6dww        1/1     Running   0          11m
+anarchy-5f7d7898d7-f6dww                 1/1     Running   0          11m
 anarchy-runner-default-9767c79b6-vt6b4   1/1     Running   0          12m
-----
+-------------------------------------------------------------------------
 
 === Using Helm
 
 Helm v3 support only.
 
-. Clone this repo to your local workstation and change directory:
-+
+Clone this repo to your local workstation and change directory:
+
 ----
 git clone https://github.com/redhat-cop/anarchy.git
 cd anarchy
 ----
 
-. Create a namespace in which to deploy the Anarchy operator
-+
+Create a namespace in which to deploy the Anarchy operator
+
 ----
-kubectl create namespace anarchy-operator
+kubectl create namespace anarchy
 ----
 
-. Install with Helm
-+
-----
-helm install --namespace anarchy-operator anarchy helm/
-----
-+
-Support for Kubernetes ingress is included in the Helm chart, but is currently untested.
+Install with Helm
 
-== Building the Anarchy Operator and Runner
-
-=== OpenShift
-
-. Set current project namespace to Anarchy operator namespace:
-+
 ----
-oc project anarchy-operator
-----
-
-. Create a Build Config using the provided template:
-+
-----
-oc process -f build-template.yaml --local | oc apply -n anarchy-operator -f -
-----
-
-. Build the anarchy image:
-+
-----
-oc start-build -wF anarchy --from-dir=.
-----
-
-. Build the ansible-runner image:
-+
-----
-oc start-build -wF anarchy-runner --from-dir=.
-----
-
-. Deploy Anarchy images from build:
-+
-----
-OPERATOR_IMAGE=$(oc get imagestream anarchy -o jsonpath='{.status.tags[?(@.tag=="latest")].items[0].dockerImageReference}')
-oc process -f deploy-template.yaml -p OPERATOR_IMAGE=$OPERATOR_IMAGE | oc apply -n anarchy-operator -f -
-----
-
-== Testing
-
-=== OpenShift
-
-. Create test namespace
-+
-----
-oc new-project anarchy-operator-test
-----
-
-. Process and apply test server template
-+
-----
-oc process -f test/server/deploy-template.yaml \
-  -p ANARCHY_NAMESPACE=anarchy-operator \
-  -p ANARCHY_TEST_NAMESPACE=anarchy-operator-test \
-| oc apply -f -
-----
-
-. Run test playbook
-+
-----
-ANSIBLE_CONFIG=test/ansible.cfg ansible-playbook test/test-playbook.yaml
+helm install --namespace anarchy anarchy helm/
 ----
 
 == Anarchy Design

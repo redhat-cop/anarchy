@@ -9,15 +9,12 @@ metadata:
 parameters:
 - name: GIT_REPO
   value: https://github.com/redhat-gpte-devopsautomation/anarchy-operator.git
-- name: NAMESPACE
-  value: anarchy-operator-test
 
 objects:
 - apiVersion: image.openshift.io/v1
   kind: ImageStream
   metadata:
     name: anarchy-test-server
-    namespace: ${NAMESPACE}
   spec:
     lookupPolicy:
       local: false
@@ -26,7 +23,6 @@ objects:
   kind: BuildConfig
   metadata:
     name: anarchy-test-server
-    namespace: ${NAMESPACE}
   spec:
     output:
       to:
@@ -45,5 +41,5 @@ objects:
       dockerStrategy:
         from:
           kind: DockerImage
-          name: registry.access.redhat.com/ubi8/python-36:latest
+          name: registry.access.redhat.com/ubi8/python-38:latest
     triggers: []

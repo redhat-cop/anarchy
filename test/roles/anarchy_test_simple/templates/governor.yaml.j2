@@ -1,0 +1,58 @@
+---
+apiVersion: anarchy.gpte.redhat.com/v1
+kind: AnarchyGovernor
+metadata:
+  name: test-simple
+  namespace: {{ anarchy_namespace | to_json }}
+  labels:
+    anarchy.gpte.redhat.com/test: simple
+{% raw %}
+spec:
+  ansibleGalaxyRequirements:
+    collections: []
+    roles: []
+
+  runner: default
+
+  vars:
+    a_var_subject_should_override: false
+    a_var_from_governor: foo
+
+  varSecrets: []
+
+  subjectEventHandlers:
+    create:
+      tasks:
+      - name: Schedule Configure
+        anarchy_schedule_action:
+          action: configure
+
+    update:
+      tasks:
+      - name: Schedule Configure
+        anarchy_schedule_action:
+          action: configure
+
+    delete:
+      tasks:
+      - name: Schedule Destroy
+        anarchy_schedule_action:
+          action: destroy
+           
+  actions:
+    configure:
+      tasks:
+      - name: Print message
+        debug:
+          msg: Running configure for {{ anarchy_subject_name }}
+
+    destroy:
+      tasks:
+      - name: Print message
+        debug:
+          msg: Running destroy for {{ anarchy_subject_name }}
+
+      - name: Complete anarchy subject delete by removing finalizers
+        anarchy_subject_delete:
+          remove_finalizers: true
+{% endraw %}

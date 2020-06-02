@@ -9,8 +9,6 @@ metadata:
 parameters:
 - name: KOPF_S2I_IMAGE
   value: quay.io/redhat-cop/python-kopf-s2i:v0.28
-- name: RUNNER_BASE_IMAGE
-  value: registry.access.redhat.com/ubi8/python-38:latest
 - name: GIT_REPO
   value: https://github.com/redhat-cop/anarchy.git
 - name: NAME
@@ -21,14 +19,6 @@ objects:
   kind: ImageStream
   metadata:
     name: ${NAME}
-  spec:
-    lookupPolicy:
-      local: false
-
-- apiVersion: image.openshift.io/v1
-  kind: ImageStream
-  metadata:
-    name: ${NAME}-runner
   spec:
     lookupPolicy:
       local: false
@@ -46,7 +36,6 @@ objects:
     resources: {}
     runPolicy: Serial
     source:
-      contextDir: operator
       git:
         uri: ${GIT_REPO}
         ref: master
@@ -57,30 +46,4 @@ objects:
         from:
           kind: DockerImage
           name: ${KOPF_S2I_IMAGE}
-    triggers: []
-
-- apiVersion: v1
-  kind: BuildConfig
-  metadata:
-    name: ${NAME}-runner
-  spec:
-    output:
-      to:
-        kind: ImageStreamTag
-        name: ${NAME}-runner:latest
-    postCommit: {}
-    resources: {}
-    runPolicy: Serial
-    source:
-      contextDir: anarchy-runner
-      git:
-        uri: ${GIT_REPO}
-        ref: master
-    strategy:
-      type: Docker
-      dockerStrategy:
-        forcePull: true
-        from:
-          kind: DockerImage
-          name: ${RUNNER_BASE_IMAGE}
     triggers: []

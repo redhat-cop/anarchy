@@ -1,0 +1,7 @@
+-------
+oc process -f build-template.yaml | oc apply -f -
+-------
+
+-------
+oc start-build anarchy-test-server --from-dir=../.. --follow
+-------

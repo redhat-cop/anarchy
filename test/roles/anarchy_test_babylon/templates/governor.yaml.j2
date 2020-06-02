@@ -1,0 +1,89 @@
+---
+# Based on AgnosticV generated AnarchyGovernor
+# https://github.com/redhat-gpte-devopsautomation/agnosticv-operator/blob/master/roles/agnosticv/templates/governor.yaml.j2
+apiVersion: anarchy.gpte.redhat.com/v1
+kind: AnarchyGovernor
+metadata:
+  name: test-babylon
+  namespace: {{ anarchy_namespace | to_json }}
+  labels:
+    anarchy.gpte.redhat.com/test: babylon
+spec:
+  ansibleGalaxyRequirements:
+    roles:
+    - name: babylon_anarchy_governor
+      src: {{ ('git+' ~ anarchy_test_babylon_anarchy_governor_repo) | to_json }}
+      version: {{ anarchy_test_babylon_anarchy_governor_version | to_json }}
+  vars:
+    # Flags to modify scheduled action behavior
+    schedule_destroy_after_provision: {{ anarchy_test_babylon_schedule_destroy_after_provision | default('disabled') | to_json }}
+    schedule_stop_after_provision: {{ anarchy_test_babylon_schedule_stop_after_provision | default('disabled') | to_json }}
+    schedule_stop_after_start: {{ anarchy_test_babylon_schedule_stop_after_start | default('disabled') | to_json }}
+
+    # Job variables to pass to Ansible Tower job runner (dark tower)
+    job_vars:
+      __meta__:
+        tower:
+          organization: {{ anarchy_test_babylon_account | to_json }}
+      job_var_from_governor: governor
+      job_var_from_governor_and_subject: governor
+
+  varSecrets:
+  - name: anarchy-test-babylon-api-creds
+    var: babylon_tower
+  - name: anarchy-test-babylon-aws-creds
+    var: job_vars
+
+  subjectEventHandlers:
+    create:
+      roles:
+      - role: babylon_anarchy_governor
+    update:
+      roles:
+      - role: babylon_anarchy_governor
+    delete:
+      roles:
+      - role: babylon_anarchy_governor
+
+  actions:
+    # anarchy_action_name
+    provision:
+      roles:
+      - role: babylon_anarchy_governor
+      callbackHandlers:
+        started:
+          roles:
+          - role: babylon_anarchy_governor
+        complete:
+          roles:
+          - role: babylon_anarchy_governor
+    stop:
+      roles:
+      - role: babylon_anarchy_governor
+      callbackHandlers:
+        started:
+          roles:
+          - role: babylon_anarchy_governor
+        complete:
+          roles:
+          - role: babylon_anarchy_governor
+    start:
+      roles:
+      - role: babylon_anarchy_governor
+      callbackHandlers:
+        started:
+          roles:
+          - role: babylon_anarchy_governor
+        complete:
+          roles:
+          - role: babylon_anarchy_governor
+    destroy:
+      roles:
+      - role: babylon_anarchy_governor
+      callbackHandlers:
+        started:
+          roles:
+          - role: babylon_anarchy_governor
+        complete:
+          roles:
+          - role: babylon_anarchy_governor

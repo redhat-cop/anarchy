@@ -1,0 +1,65 @@
+---
+- name: Get test AnarchySubjects
+  k8s_info:
+    api_version: anarchy.gpte.redhat.com/v1
+    kind: AnarchySubject
+    namespace: "{{ anarchy_namespace }}"
+    label_selectors:
+    - anarchy.gpte.redhat.com/test
+  register: r_get_test_subjects
+
+- name: Remove finalizers from AnarchySubjects
+  k8s:
+    api_version: anarchy.gpte.redhat.com/v1
+    kind: AnarchySubject
+    name: "{{ _subject.metadata.name }}"
+    namespace: "{{ _subject.metadata.namespace }}"
+    merge_type: merge
+    definition:
+      metadata:
+        finalizers: []
+  loop: "{{ r_get_test_subjects.resources | default([]) }}"
+  loop_control:
+    label: "{{ _subject.metadata.name }}"
+    loop_var: _subject
+
+- name: Delete test AnarchySubjects
+  k8s:
+    api_version: anarchy.gpte.redhat.com/v1
+    kind: AnarchySubject
+    name: "{{ _subject.metadata.name }}"
+    namespace: "{{ _subject.metadata.namespace }}"
+    state: absent
+  loop: "{{ r_get_test_subjects.resources | default([]) }}"
+  loop_control:
+    label: "{{ _subject.metadata.name }}"
+    loop_var: _subject
+
+- name: Get test AnarchyGovernors
+  k8s_info:
+    api_version: anarchy.gpte.redhat.com/v1
+    kind: AnarchyGovernor
+    namespace: "{{ anarchy_namespace }}"
+    label_selectors:
+    - anarchy.gpte.redhat.com/test
+  register: r_get_test_governors
+
+- name: Delete test AnarchyGovernors
+  k8s:
+    api_version: anarchy.gpte.redhat.com/v1
+    kind: AnarchyGovernor
+    name: "{{ _governor.metadata.name }}"
+    namespace: "{{ _governor.metadata.namespace }}"
+    state: absent
+  loop: "{{ r_get_test_governors.resources | default([]) }}"
+  loop_control:
+    label: "{{ _governor.metadata.name }}"
+    loop_var: _governor
+
+- name: Clean up for specific tests
+  loop: "{{ anarchy_tests }}"
+  loop_control:
+    loop_var: _role_name
+  include_role:
+    name: "anarchy_test_{{ _role_name }}"
+    tasks_from: cleanup.yaml

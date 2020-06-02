@@ -1,0 +1,22 @@
+---
+- name: Get current project
+  command: oc project -q
+  register: r_get_current_project
+  changed_when: false
+
+- name: Set anarchy_namespace
+  set_fact:
+    anarchy_namespace: "{{ r_get_current_project.stdout }}"
+
+- name: Get Route for anarchy
+  k8s_info:
+    api_version: route.openshift.io/v1
+    kind: Route
+    name: anarchy
+    namespace: "{{ anarchy_namespace }}"
+  register: r_get_route
+  failed_when: r_get_route.resources | length != 1
+
+- name: Set anarchy_odo_pod, anarchy_odo_pod_ip, anarchy_callback_base_url
+  set_fact:
+    anarchy_callback_base_url: "https://{{ r_get_route.resources[0].spec.host }}"

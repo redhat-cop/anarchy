@@ -1,0 +1,24 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: anarchy-test-babylon-server
+  namespace: {{ anarchy_namespace | to_json }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      name: anarchy-test-babylon-server
+  strategy:
+    type: Recreate
+  template:
+    metadata:
+      labels:
+        name: anarchy-test-babylon-server
+    spec:
+      containers:
+      - name: server
+        image: {{ anarchy_test_babylon_server_image | to_json }}
+        imagePullPolicy: Always
+      restartPolicy: Always
+      terminationGracePeriodSeconds: 30

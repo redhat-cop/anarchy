@@ -1,0 +1,13 @@
+---
+apiVersion: anarchy.gpte.redhat.com/v1
+kind: AnarchySubject
+metadata:
+  name: {{ _name | to_json }}
+  namespace: {{ anarchy_namespace | to_json }}
+  labels:
+    anarchy.gpte.redhat.com/test: simple
+spec:
+  governor: test-simple
+  vars:
+    a_var_from_subject: {{ _a_var_from_subject | to_json }}
+    a_var_subject_should_override: true

@@ -1,0 +1,241 @@
+---
+- name: Get AnarchySubject test-simple-1
+  k8s_info:
+    api_version: anarchy.gpte.redhat.com/v1
+    kind: AnarchySubject
+    namespace: "{{ anarchy_namespace }}"
+    name: test-simple-1
+  register: r_get_test_simple_1
+  failed_when: r_get_test_simple_1.resources | default([]) | length != 1
+
+- name: Get AnarchyRun for create test-simple-1
+  k8s_info:
+    api_version: anarchy.gpte.redhat.com/v1
+    kind: AnarchyRun
+    namespace: "{{ anarchy_namespace }}"
+    label_selectors:
+    - anarchy.gpte.redhat.com/event=create
+    - anarchy.gpte.redhat.com/runner=successful
+    - anarchy.gpte.redhat.com/subject=test-simple-1
+  register: r_get_test_simple_1_create_run
+  failed_when: r_get_test_simple_1_create_run.resources | default([]) | length != 1
+  until: r_get_test_simple_1_create_run is success
+  retries: 10
+  delay: 5
+
+- name: Validate AnarchyRun for create test-simple-1
+  assert:
+    that:
+    - _run.metadata.ownerReferences == _expected_owner_references
+    - _run.spec.vars == _expected_vars
+  vars:
+    _run: "{{ r_get_test_simple_1_create_run.resources[0] }}"
+    _subject: "{{ r_get_test_simple_1.resources[0] }}"
+    _expected_owner_references:
+    - apiVersion: anarchy.gpte.redhat.com/v1
+      controller: true
+      kind: AnarchySubject
+      name: test-simple-1
+      uid: "{{ _subject.metadata.uid }}"
+    _expected_vars:
+      a_var_from_governor: foo
+      a_var_from_subject: 23
+      a_var_subject_should_override: true
+      anarchy_event_name: create
+
+- name: Get AnarchyAction scheduled by AnarchyRun for create of test-simple-1
+  k8s_info:
+    api_version: anarchy.gpte.redhat.com/v1
+    kind: AnarchyAction
+    namespace: "{{ anarchy_namespace }}"
+    name: "{{ _action.metadata.name }}"
+  vars:
+    _run: >-
+      {{ r_get_test_simple_1_create_run.resources[0] }}
+    _action: >-
+      {{ _run | json_query(_action_json_query) }}
+    _action_json_query: >-
+      spec.result.ansibleRun.plays[0].tasks[?action=='anarchy_schedule_action'].hosts.localhost.result.action|[0]
+  register: r_get_test_simple_1_configure_action
+  failed_when: r_get_test_simple_1_configure_action.resources | length != 1
+  until: r_get_test_simple_1_configure_action is success
+  retries: 10
+  delay: 5
+
+- name: Get AnarchyRun for configure test-simple-1
+  k8s_info:
+    api_version: anarchy.gpte.redhat.com/v1
+    kind: AnarchyRun
+    namespace: "{{ anarchy_namespace }}"
+    label_selectors:
+    - anarchy.gpte.redhat.com/runner=successful
+    - anarchy.gpte.redhat.com/subject=test-simple-1
+    - anarchy.gpte.redhat.com/action={{ _action.metadata.name }}
+  vars:
+    _action: "{{ r_get_test_simple_1_configure_action.resources[0] }}"
+  register: r_get_test_simple_1_configure_run
+  failed_when: r_get_test_simple_1_configure_run.resources | default([]) | length != 1
+  until: r_get_test_simple_1_configure_run is success
+  retries: 10
+  delay: 5
+
+- name: Validate AnarchyRun for configure test-simple-1 after create
+  assert:
+    that:
+    - _run.metadata.ownerReferences == _expected_owner_references
+    - _run.spec.vars == _expected_vars
+    fail_msg: |
+      AnarchyRun {{ _run.metadata.name }} not defined as expected:
+
+      {{ _run | to_nice_yaml }}
+
+      Expected metadata.ownerReferences:
+
+      {{ _expected_owner_references | to_nice_yaml }}
+
+      Expected spec.vars:
+
+      {{ _expected_vars | to_nice_yaml }}
+  vars:
+    _action: "{{ r_get_test_simple_1_configure_action.resources[0] }}"
+    _run: "{{ r_get_test_simple_1_configure_run.resources[0] }}"
+    _expected_owner_references:
+    - apiVersion: anarchy.gpte.redhat.com/v1
+      controller: true
+      kind: AnarchyAction
+      name: "{{ _action.metadata.name }}"
+      uid: "{{ _action.metadata.uid }}"
+    _expected_vars:
+      a_var_from_governor: foo
+      a_var_from_subject: 23
+      a_var_subject_should_override: true
+      anarchy_action_callback_name_parameter: event
+      anarchy_action_callback_token: "{{ _action.spec.callbackToken }}"
+      anarchy_action_callback_url: "{{ anarchy_callback_base_url }}/action/{{ _action.metadata.name }}"
+      anarchy_action_name: "{{ _action.metadata.name }}"
+
+- name: Update AnarchySubject test-simple-1
+  k8s:
+    apply: true
+    state: present
+    definition: "{{ lookup('template', 'subject.yaml.j2') | from_yaml }}"
+  vars:
+    _name: test-simple-1
+    _a_var_from_subject: 42
+
+- name: Get AnarchyRun for update test-simple-1
+  k8s_info:
+    api_version: anarchy.gpte.redhat.com/v1
+    kind: AnarchyRun
+    namespace: "{{ anarchy_namespace }}"
+    label_selectors:
+    - anarchy.gpte.redhat.com/event=update
+    - anarchy.gpte.redhat.com/runner=successful
+    - anarchy.gpte.redhat.com/subject=test-simple-1
+  register: r_get_test_simple_1_update_run
+  failed_when: r_get_test_simple_1_update_run.resources | default([]) | length != 1
+  until: r_get_test_simple_1_update_run is success
+  retries: 10
+  delay: 5
+
+- name: Validate AnarchyRun for update test-simple-1
+  assert:
+    that:
+    - _run.metadata.ownerReferences == _expected_owner_references
+    - _run.spec.vars == _expected_vars
+  vars:
+    _run: "{{ r_get_test_simple_1_update_run.resources[0] }}"
+    _subject: "{{ r_get_test_simple_1.resources[0] }}"
+    _expected_owner_references:
+    - apiVersion: anarchy.gpte.redhat.com/v1
+      controller: true
+      kind: AnarchySubject
+      name: test-simple-1
+      uid: "{{ _subject.metadata.uid }}"
+    _expected_vars:
+      a_var_from_governor: foo
+      a_var_from_subject: 42
+      a_var_subject_should_override: true
+      anarchy_event_name: update
+
+- name: Get AnarchyAction scheduled by AnarchyRun for update of test-simple-1
+  k8s_info:
+    api_version: anarchy.gpte.redhat.com/v1
+    kind: AnarchyAction
+    namespace: "{{ anarchy_namespace }}"
+    name: "{{ _action.metadata.name }}"
+  vars:
+    _run: >-
+      {{ r_get_test_simple_1_update_run.resources[0] }}
+    _action: >-
+      {{ _run | json_query(_action_json_query) }}
+    _action_json_query: >-
+      spec.result.ansibleRun.plays[0].tasks[?action=='anarchy_schedule_action'].hosts.localhost.result.action|[0]
+  register: r_get_test_simple_1_configure_action
+  failed_when: r_get_test_simple_1_configure_action.resources | length != 1
+  until: r_get_test_simple_1_configure_action is success
+  retries: 10
+  delay: 5
+
+- name: Get AnarchyRun for configure test-simple-1
+  k8s_info:
+    api_version: anarchy.gpte.redhat.com/v1
+    kind: AnarchyRun
+    namespace: "{{ anarchy_namespace }}"
+    label_selectors:
+    - anarchy.gpte.redhat.com/runner=successful
+    - anarchy.gpte.redhat.com/subject=test-simple-1
+    - anarchy.gpte.redhat.com/action={{ _action.metadata.name }}
+  vars:
+    _action: "{{ r_get_test_simple_1_configure_action.resources[0] }}"
+  register: r_get_test_simple_1_configure_run
+  failed_when: r_get_test_simple_1_configure_run.resources | default([]) | length != 1
+  until: r_get_test_simple_1_configure_run is success
+  retries: 10
+  delay: 5
+
+- name: Validate AnarchyRun for configure test-simple-1 after update
+  assert:
+    that:
+    - _run.metadata.ownerReferences == _expected_owner_references
+    - _run.spec.vars == _expected_vars
+  vars:
+    _action: "{{ r_get_test_simple_1_configure_action.resources[0] }}"
+    _run: "{{ r_get_test_simple_1_configure_run.resources[0] }}"
+    _expected_owner_references:
+    - apiVersion: anarchy.gpte.redhat.com/v1
+      controller: true
+      kind: AnarchyAction
+      name: "{{ _action.metadata.name }}"
+      uid: "{{ _action.metadata.uid }}"
+    _expected_vars:
+      a_var_from_governor: foo
+      a_var_from_subject: 42
+      a_var_subject_should_override: true
+      anarchy_action_callback_name_parameter: event
+      anarchy_action_callback_token: "{{ _action.spec.callbackToken }}"
+      anarchy_action_callback_url: "{{ anarchy_callback_base_url }}/action/{{ _action.metadata.name }}"
+      anarchy_action_name: "{{ _action.metadata.name }}"
+
+- when: anarchy_test_delete_subjects | bool
+  block:
+  - name: Delete AnarchySubject test-simple-1
+    k8s:
+      state: absent
+      api_version: anarchy.gpte.redhat.com/v1
+      kind: AnarchySubject
+      name: test-simple-1
+      namespace: "{{ anarchy_namespace }}"
+
+  - name: Verify AnarchySubject delete for test-simple-1
+    k8s_info:
+      state: absent
+      api_version: anarchy.gpte.redhat.com/v1
+      kind: AnarchySubject
+      name: test-simple-1
+      namespace: "{{ anarchy_namespace }}"
+    register: r_get_test_simple_1_subject
+    failed_when: r_get_test_simple_1_subject.resources | default([]) | length != 0
+    until: r_get_test_simple_1_subject is success
+    retries: 10
+    delay: 5
