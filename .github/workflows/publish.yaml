@@ -30,4 +30,4 @@ jobs:
         repository: ${{ secrets.REGISTRY_REPOSITORY }}/anarchy
         username: ${{ secrets.REGISTRY_USERNAME }}
         password: ${{ secrets.REGISTRY_PASSWORD }}
-        tags: "${{ steps.image_tags.outputs.IMAGE_TAGS }}"
+        tags: "${{ steps.get_version.outputs.IMAGE_TAGS }}"
