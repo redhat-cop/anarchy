@@ -28,6 +28,6 @@ jobs:
       with:
         registry: ${{ secrets.REGISTRY_URI }}
         repository: ${{ secrets.REGISTRY_REPOSITORY }}/anarchy
-        username: ${{ secrets.QUAY_USERNAME }}
-        password: ${{ secrets.QUAY_PASSWORD }}
+        username: ${{ secrets.REGISTRY_USERNAME }}
+        password: ${{ secrets.REGISTRY_PASSWORD }}
         tags: "${{ steps.image_tags.outputs.IMAGE_TAGS }}"
