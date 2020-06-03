@@ -199,6 +199,8 @@ def handle_action_event(event, **_):
         if event['type'] == 'DELETED':
             AnarchyAction.cache_remove(action)
         elif event['type'] in ['ADDED', 'MODIFIED', None]:
+            if not action.has_owner:
+                action.set_owner(runtime)
             if not action.has_started:
                 AnarchyAction.cache_put(action)
         else:

@@ -118,6 +118,10 @@ class AnarchyAction(object):
         return self.spec['governorRef']['name']
 
     @property
+    def has_owner(self):
+        return True if self.metadata.get('ownerReferences') else False
+
+    @property
     def has_started(self):
         return True if self.status else False
 
@@ -205,6 +209,32 @@ class AnarchyAction(object):
         }
 
         governor.run_ansible(runtime, handler, run_vars, context, subject, self, callback_name)
+
+    def set_owner(self, runtime):
+        subject = self.get_subject(runtime)
+        if not subject:
+            raise kopf.TemporaryError('Cannot find subject'... )
+        governor = subject.get_governor(runtime)
+        if not governor:
+            raise kopf.TemporaryError('Cannot find governor'... )
+        runtime.custom_objects_api.patch_namespaced_custom_object(
+            runtime.operator_domain, 'v1', runtime.operator_namespace, 'anarchyactions',
+            self.name,
+            {
+                "metadata": {
+                    "ownerReferences" ...
+                },
+                "spec": {
+                    "governorRef": {
+                        "uid": governor.uid
+                    },
+                    "subjectRef": {
+                        "uid": subject.uid
+                    }
+                }
+            }
+        )
+        
 
     def start(self, runtime):
         subject = self.get_subject(runtime)
