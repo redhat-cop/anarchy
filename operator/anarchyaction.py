@@ -4,6 +4,7 @@ import kubernetes
 import logging
 import os
 import time
+import kopf
 
 from anarchygovernor import AnarchyGovernor
 from anarchysubject import AnarchySubject
@@ -119,7 +120,7 @@ class AnarchyAction(object):
 
     @property
     def has_owner(self):
-        return True if self.metadata.get('ownerReferences') else False
+        return True if self.metadata['ownerReferences'] else False
 
     @property
     def has_started(self):
@@ -213,23 +214,35 @@ class AnarchyAction(object):
     def set_owner(self, runtime):
         subject = self.get_subject(runtime)
         if not subject:
-            raise kopf.TemporaryError('Cannot find subject'... )
+            raise kopf.TemporaryError('Cannot find subject')
         governor = subject.get_governor(runtime)
         if not governor:
-            raise kopf.TemporaryError('Cannot find governor'... )
+            raise kopf.TemporaryError('Cannot find governor')
         runtime.custom_objects_api.patch_namespaced_custom_object(
             runtime.operator_domain, 'v1', runtime.operator_namespace, 'anarchyactions',
             self.name,
             {
-                "metadata": {
-                    "ownerReferences" ...
+                'metadata': {
+                    'ownerReferences': [{
+                        'apiVersion': 'anarchy.gpte.redhat.com/v1',
+                        'controller': 'true',
+                        'kind': 'AnarchySubject',
+                        'name': subject.name,
+                        'uid': subject.uid
+                    }]
                 },
-                "spec": {
-                    "governorRef": {
-                        "uid": governor.uid
+                'spec': {
+                    'governorRef': {
+                        'apiVersion': 'anarchy.gpte.redhat.com/v1',
+                        'kind': 'AnarchyGovernor',
+                        'name': governor.name,
+                        'uid': governor.uid
                     },
-                    "subjectRef": {
-                        "uid": subject.uid
+                    'subjectRef': {
+                        'apiVersion': 'anarchy.gpte.redhat.com/v1',
+                        'kind': 'AnarchySubject',
+                        'name': subject.name,
+                        'uid': subject.uid
                     }
                 }
             }
