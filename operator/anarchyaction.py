@@ -120,7 +120,7 @@ class AnarchyAction(object):
 
     @property
     def has_owner(self):
-        return True if self.metadata['ownerReferences'] else False
+        return True if self.metadata.get('ownerReferences')else False
 
     @property
     def has_started(self):
