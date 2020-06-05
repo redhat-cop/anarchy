@@ -225,7 +225,7 @@ class AnarchyAction(object):
                 'metadata': {
                     'ownerReferences': [{
                         'apiVersion': 'anarchy.gpte.redhat.com/v1',
-                        'controller': 'true',
+                        'controller': True,
                         'kind': 'AnarchySubject',
                         'name': subject.name,
                         'uid': subject.uid
