@@ -46,7 +46,7 @@
     command: >-
       oc start-build anarchy-test-babylon-server
       -n {{ anarchy_namespace | quote }}
-      --from-dir={{ (playbook_dir ~ '/server') | quote }}
+      --from-dir={{ anarchy_test_babylon_server_path | quote }}
       --follow
 
   - name: Get anarchy-test-babylon-server ImageStream

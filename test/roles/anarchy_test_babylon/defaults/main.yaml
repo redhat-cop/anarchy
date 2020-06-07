@@ -5,5 +5,6 @@ anarchy_test_babylon_anarchy_governor_version: v0.0.7
 #anarchy_test_babylon_schedule_stop_after_provision:
 #anarchy_test_babylon_schedule_stop_after_start:
 anarchy_test_babylon_account: default
+anarchy_test_babylon_server_path: "{{ playbook_dir }}/server"
 anarchy_test_cleanup: true
 anarchy_test_delete_subjects: true
