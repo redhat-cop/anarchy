@@ -26,6 +26,7 @@ class AnarchyRuntime(object):
         self.running_all_in_one = '' != os.environ.get('ODO_S2I_SCRIPTS_URL', '')
         if self.running_all_in_one:
             self.anarchy_service_name = os.environ.get('ANARCHY_SERVICE', socket.gethostbyname(os.environ.get('HOSTNAME')))
+            self.anarchy_service = self.pod
         else:
             self.anarchy_service_name = os.environ.get('ANARCHY_SERVICE', 'anarchy')
             self.anarchy_service = self.core_v1_api.read_namespaced_service(self.anarchy_service_name, self.operator_namespace)

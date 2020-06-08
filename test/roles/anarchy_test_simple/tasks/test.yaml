@@ -1,4 +1,13 @@
 ---
+- name: Create AnarchySubject test-simple-1
+  k8s:
+    apply: true
+    state: present
+    definition: "{{ lookup('template', 'subject.yaml.j2') | from_yaml }}"
+  vars:
+    _name: test-simple-1
+    _a_var_from_subject: 23
+
 - name: Get AnarchySubject test-simple-1
   k8s_info:
     api_version: anarchy.gpte.redhat.com/v1
@@ -216,6 +225,31 @@
       anarchy_action_callback_token: "{{ _action.spec.callbackToken }}"
       anarchy_action_callback_url: "{{ anarchy_callback_base_url }}/action/{{ _action.metadata.name }}"
       anarchy_action_name: "{{ _action.metadata.name }}"
+
+
+- name: Create AnarchyAction without ownerReferences
+  k8s:
+    apply: true
+    state: present
+    definition: "{{ lookup('template', 'action.yaml.j2') | from_yaml }}"
+  vars:
+    _name: action-without-owner-references-test
+
+- name: Verify AnarchyAction Without ownerReferences is set
+  k8s_info:
+    api_version: anarchy.gpte.redhat.com/v1
+    kind: AnarchyAction
+    namespace: "{{ anarchy_namespace }}"
+    name: action-without-owner-references-test
+  register: r_get_test_simple_configure_action
+  vars:
+    _action: "{{ r_get_test_simple_configure_action.resources[0] }}"
+  failed_when: >-
+    r_get_test_simple_configure_action.resources | default([]) | length != 1 or
+    _action.metadata.ownerReferences | default([]) | length != 1
+  until: r_get_test_simple_configure_action is success
+  retries: 10
+  delay: 5
 
 - when: anarchy_test_delete_subjects | bool
   block:

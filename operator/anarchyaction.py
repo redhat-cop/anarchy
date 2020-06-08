@@ -218,10 +218,10 @@ class AnarchyAction(object):
         '''
         subject = self.get_subject(runtime)
         if not subject:
-            raise kopf.TemporaryError('Cannot find subject of the action %s', self.action)
+            raise kopf.TemporaryError('Cannot find subject of the action "%s"', self.action)
         governor = subject.get_governor(runtime)
         if not governor:
-            raise kopf.TemporaryError('Cannot find governor of the action %s', self.action)
+            raise kopf.TemporaryError('Cannot find governor of the action "%s"', self.action)
         runtime.custom_objects_api.patch_namespaced_custom_object(
             runtime.operator_domain, 'v1', runtime.operator_namespace, 'anarchyactions',
             self.name,

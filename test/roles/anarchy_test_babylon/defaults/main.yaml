@@ -7,3 +7,4 @@ anarchy_test_babylon_anarchy_governor_version: v0.0.7
 anarchy_test_babylon_account: default
 anarchy_test_cleanup: true
 anarchy_test_delete_subjects: true
+anarchy_test_babylon_server_image: ''

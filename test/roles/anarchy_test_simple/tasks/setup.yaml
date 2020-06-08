@@ -4,12 +4,3 @@
     apply: true
     state: present
     definition: "{{ lookup('template', 'governor.yaml.j2') | from_yaml }}"
-
-- name: Create AnarchySubject test-simple-1
-  k8s:
-    apply: true
-    state: present
-    definition: "{{ lookup('template', 'subject.yaml.j2') | from_yaml }}"
-  vars:
-    _name: test-simple-1
-    _a_var_from_subject: 23
