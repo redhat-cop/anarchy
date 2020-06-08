@@ -61,7 +61,7 @@ odo push --force-build
 ansible-playbook test/odo-playbook.yaml
 ----
 
-== Building the Anarchy Operator and Runner
+== Building an Anarchy Container Image
 
 === OpenShift
 
@@ -92,10 +92,10 @@ helm install --namespace $(oc project -q) anarchy helm/ \
 --set=image.repository=$(oc get imagestream anarchy -o jsonpath='{.status.tags[?(@.tag=="latest")].items[0].dockerImageReference}')
 --------------------------------------------------------------------------------
 
-Note: Use `helm upgrade` if already deployed.
+NOTE: Use `helm upgrade` if already deployed.
 
-. Run test playbook
-+
+Run test playbook
+
 -----------------------------------
 ansible-playbook test/playbook.yaml
 -----------------------------------
