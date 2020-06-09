@@ -4,6 +4,7 @@ import kubernetes
 import logging
 import os
 import time
+import kopf
 
 from anarchygovernor import AnarchyGovernor
 from anarchysubject import AnarchySubject
@@ -118,6 +119,10 @@ class AnarchyAction(object):
         return self.spec['governorRef']['name']
 
     @property
+    def has_owner(self):
+        return True if self.metadata.get('ownerReferences')else False
+
+    @property
     def has_started(self):
         return True if self.status else False
 
@@ -205,6 +210,48 @@ class AnarchyAction(object):
         }
 
         governor.run_ansible(runtime, handler, run_vars, context, subject, self, callback_name)
+
+    def set_owner(self, runtime):
+        '''
+        Anarchy when using on.event when an anarchyaction is added and modified
+        we will verify that an ownerReferences exist and created it.
+        '''
+        subject = self.get_subject(runtime)
+        if not subject:
+            raise kopf.TemporaryError('Cannot find subject of the action "%s"', self.action)
+        governor = subject.get_governor(runtime)
+        if not governor:
+            raise kopf.TemporaryError('Cannot find governor of the action "%s"', self.action)
+        runtime.custom_objects_api.patch_namespaced_custom_object(
+            runtime.operator_domain, 'v1', runtime.operator_namespace, 'anarchyactions',
+            self.name,
+            {
+                'metadata': {
+                    'ownerReferences': [{
+                        'apiVersion': 'anarchy.gpte.redhat.com/v1',
+                        'controller': True,
+                        'kind': 'AnarchySubject',
+                        'name': subject.name,
+                        'uid': subject.uid
+                    }]
+                },
+                'spec': {
+                    'governorRef': {
+                        'apiVersion': 'anarchy.gpte.redhat.com/v1',
+                        'kind': 'AnarchyGovernor',
+                        'name': governor.name,
+                        'uid': governor.uid
+                    },
+                    'subjectRef': {
+                        'apiVersion': 'anarchy.gpte.redhat.com/v1',
+                        'kind': 'AnarchySubject',
+                        'name': subject.name,
+                        'uid': subject.uid
+                    }
+                }
+            }
+        )
+        
 
     def start(self, runtime):
         subject = self.get_subject(runtime)

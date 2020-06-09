@@ -1,0 +1,22 @@
+---
+apiVersion: anarchy.gpte.redhat.com/v1
+kind: AnarchyAction
+metadata:
+  labels:
+     anarchy.gpte.redhat.com/action: configure
+     anarchy.gpte.redhat.com/governor: test-simple
+     anarchy.gpte.redhat.com/subject: test-simple-1
+  name: {{ _name | to_json }}
+  namespace:  {{ anarchy_namespace | to_json }}
+spec:
+  action: configure
+  governorRef:
+    apiVersion: anarchy.gpte.redhat.com/v1
+    kind: AnarchyGovernor
+    name:  test-simple
+    namespace: {{ anarchy_namespace | to_json }}
+  subjectRef:
+    apiVersion: anarchy.gpte.redhat.com/v1
+    kind: AnarchySubject
+    name: test-simple-1
+    namespace: {{ anarchy_namespace | to_json }}

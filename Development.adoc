@@ -16,7 +16,7 @@ The `odo` developer CLI can be installed as described in the OpenShift documenta
 
 https://docs.openshift.com/container-platform/latest/cli_reference/developer_cli_odo/installing-odo.html[Installing odo]
 
-To run Anarchy with `odo`, first create the `python-kopf` ImageStream definition in the `opneshift` namespace using the Red Hat Community of Practice containers-quickstarts repository.
+To run Anarchy with `odo`, first create the `python-kopf` ImageStream definition in the `openshift` namespace using the Red Hat Community of Practice containers-quickstarts repository.
 
 --------------------------------------------------------------------------------
 oc apply -f https://raw.githubusercontent.com/redhat-cop/containers-quickstarts/master/build-s2i-python-kopf/imagestream.yaml

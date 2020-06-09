@@ -16,7 +16,7 @@ elif len(sys.argv) == 3:
     subject_name = sys.argv[2]
     namespace = kubernetes.config.list_kube_config_contexts()[1]['context']['namespace']
 else:
-    sys.stderr.write("Usuage: {0} <action> <subject> [namespace]\n".format(sys.argv[0]))
+    sys.stderr.write("Usage: {0} <action> <subject> [namespace]\n".format(sys.argv[0]))
     sys.exit(1)
 
 anarchy_subject = custom_objects_api.get_namespaced_custom_object(
@@ -40,11 +40,11 @@ anarchy_action = custom_objects_api.create_namespaced_custom_object(
             },
             "namespace": namespace,
             "ownerReferences": [{
-              "apiVersion": "anarchy.gpte.redhat.com/v1",
-              "controller": True,
-              "kind": "AnarchySubject",
-              "name": subject_name,
-              "uid": anarchy_subject['metadata']['uid']
+                "apiVersion": "anarchy.gpte.redhat.com/v1",
+                "controller": True,
+                "kind": "AnarchySubject",
+                "name": subject_name,
+                "uid": anarchy_subject['metadata']['uid']
             }],
         },
         "spec": {
