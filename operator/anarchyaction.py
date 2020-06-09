@@ -227,8 +227,13 @@ class AnarchyAction(object):
             self.name,
             {
                 'metadata': {
+                    'labels': {
+                        runtime.operator_domain + '/action': self.action,
+                        runtime.operator_domain + '/governor': governor.name,
+                        runtime.operator_domain + '/subject': subject.name,
+                    },
                     'ownerReferences': [{
-                        'apiVersion': 'anarchy.gpte.redhat.com/v1',
+                        'apiVersion': runtime.operator_domain + '/v1',
                         'controller': True,
                         'kind': 'AnarchySubject',
                         'name': subject.name,
@@ -237,15 +242,17 @@ class AnarchyAction(object):
                 },
                 'spec': {
                     'governorRef': {
-                        'apiVersion': 'anarchy.gpte.redhat.com/v1',
+                        'apiVersion': runtime.operator_domain + '/v1',
                         'kind': 'AnarchyGovernor',
                         'name': governor.name,
+                        'namespace': governor.namespace,
                         'uid': governor.uid
                     },
                     'subjectRef': {
-                        'apiVersion': 'anarchy.gpte.redhat.com/v1',
+                        'apiVersion': runtime.operator_domain + '/v1',
                         'kind': 'AnarchySubject',
                         'name': subject.name,
+                        'namespace': subject.namespace,
                         'uid': subject.uid
                     }
                 }
