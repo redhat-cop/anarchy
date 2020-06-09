@@ -33,37 +33,14 @@ anarchy_action = custom_objects_api.create_namespaced_custom_object(
         "kind": "AnarchyAction",
         "metadata": {
             "generateName": "{0}-{1}-".format(subject_name, action),
-            "labels": {
-                "anarchy.gpte.redhat.com/action": action,
-                "anarchy.gpte.redhat.com/governor": anarchy_subject['spec']['governor'],
-                "anarchy.gpte.redhat.com/subject": subject_name
-            },
             "namespace": namespace,
-            "ownerReferences": [{
-                "apiVersion": "anarchy.gpte.redhat.com/v1",
-                "controller": True,
-                "kind": "AnarchySubject",
-                "name": subject_name,
-                "uid": anarchy_subject['metadata']['uid']
-            }],
         },
         "spec": {
             "action": action,
             #"after": "2020-04-08T18:18:13Z",
             #"callbackToken": "...",
-            "governorRef": {
-                "apiVersion": "anarchy.gpte.redhat.com/v1",
-                "kind": "AnarchyGovernor",
-                "name": anarchy_governor['metadata']['name'],
-                "namespace": namespace,
-                "uid": anarchy_governor['metadata']['uid']
-            },
             "subjectRef": {
-                "apiVersion": "anarchy.gpte.redhat.com/v1",
-                "kind": "AnarchySubject",
                 "name": subject_name,
-                "namespace": namespace,
-                "uid": anarchy_subject['metadata']['uid']
             }
         }
     }

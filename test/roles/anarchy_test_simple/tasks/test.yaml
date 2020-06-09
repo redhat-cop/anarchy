@@ -234,6 +234,8 @@
     definition: "{{ lookup('template', 'action.yaml.j2') | from_yaml }}"
   vars:
     _name: action-without-owner-references-test
+    _action: configure
+    _subject_name: test-simple-1
 
 - name: Verify AnarchyAction Without ownerReferences is set
   k8s_info:
@@ -250,6 +252,18 @@
   until: r_get_test_simple_configure_action is success
   retries: 10
   delay: 5
+
+- name: Validate References for action-without-owner-references-test
+  assert:
+    that:
+    - _action.metadata.labels['anarchy.gpte.redhat.com/action'] == 'configure'
+    - _action.metadata.labels['anarchy.gpte.redhat.com/governor'] == 'test-simple'
+    - _action.metadata.labels['anarchy.gpte.redhat.com/subject'] == 'test-simple-1'
+    - _action.spec.governorRef.name == 'test-simple'
+    - _action.spec.governorRef.namespace == anarchy_namespace
+    - _action.spec.subjectRef.namespace == anarchy_namespace
+  vars:
+    _action: "{{ r_get_test_simple_configure_action.resources[0] }}"
 
 - when: anarchy_test_delete_subjects | bool
   block:
