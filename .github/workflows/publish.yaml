@@ -23,9 +23,14 @@ jobs:
         # Set IMAGE_TAGS output for use in next step
         ( IFS=$','; echo "::set-output name=IMAGE_TAGS::${TAGS[*]}" )
         # Read version from helm/Chart.yaml
-        HELM_CHART_VERSION=$(sed -nr 's/^version: (.*)/\1/p' helm/Chart.yaml)
+        HELM_CHART_VERSION=$(sed -nr 's/^appVersion: (.*)/\1/p' helm/Chart.yaml)
         if [[ "v${HELM_CHART_VERSION}" != "${VERSION}" ]]; then
-          echo "Helm chart version to not match tag!"
+          echo "Helm chart version does not match tag!"
+          exit 1
+        fi
+        DEPLOY_TEMPLATE_VERSION=$(sed -nr '/^- name: ANARCHY_IMAGE$/ {n;s/^  value:.*://p}' deploy-template.yaml)
+        if [[ "${DEPLOY_TEMPLATE_VERSION}" != "${VERSION}" ]]; then
+          echo "deploy-template image version does not match tag!"
           exit 1
         fi
 
