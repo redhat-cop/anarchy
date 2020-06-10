@@ -76,6 +76,10 @@ spec:
                   type: array
                   items:
                     type: object
+            pythonRequirements:
+              description: >-
+                Python requirements from the AnarchyGovernor, frozen in time from when this action was scheduled.
+              type: string
             governor:
               description: >-
                 Reference to the AnarchyGovernor related to this AnarchyRun.

@@ -11,6 +11,7 @@ import requests
 import shutil
 import subprocess
 import time
+import venv
 import yaml
 
 import logging
@@ -131,6 +132,7 @@ class AnarchyRunner(object):
         anarchy_subject.update(anarchy_run['spec']['subject'])
 
         run_name = anarchy_run['metadata']['name']
+        virtual_env = self.setup_python_venv(anarchy_run)
         self.setup_ansible_galaxy_requirements(anarchy_run)
         self.clean_runner_dir()
         self.write_runner_vars(anarchy_run, anarchy_subject, anarchy_governor)
@@ -141,6 +143,10 @@ class AnarchyRunner(object):
             private_data_dir = self.runner_dir
         )
         ansible_run.config.env['ANSIBLE_STDOUT_CALLBACK'] = 'anarchy'
+        if virtual_env:
+            ansible_run.config.env['PATH'] = '{}/bin:{}'.format(virtual_env, os.environ['PATH'])
+            ansible_run.config.env['VIRTUAL_ENV'] = virtual_env
+            ansible_run.config.command[0] = virtual_env + '/bin/ansible-playbook'
         ansible_run.run()
         self.post_result(anarchy_run, {
             'rc': ansible_run.rc,
@@ -149,6 +155,33 @@ class AnarchyRunner(object):
                 open(self.ansible_private_dir + '/anarchy-result.yaml').read()
             )
         })
+
+    def setup_python_venv(self, anarchy_run):
+        requirements = anarchy_run['spec'].get('pythonRequirements', None)
+        if not requirements:
+            return None
+        requirements_md5 = hashlib.md5(requirements.encode('utf-8')).hexdigest()
+        virtual_env = self.ansible_private_dir + '/pythonvenv-' + requirements_md5
+        requirements_file = virtual_env + '/requirements.txt'
+        if not os.path.exists(virtual_env):
+            venv.EnvBuilder(system_site_packages=True, with_pip=True).create(virtual_env)
+            with open(requirements_file, 'w') as fh:
+                fh.write(requirements)
+            env = os.environ.copy()
+            env['VIRTUAL_ENV'] = virtual_env
+            env['PATH'] = '{}/bin:{}'.format(virtual_env, env['PATH'])
+            subprocess.run(
+                [virtual_env + '/bin/pip3', 'install', '-r', requirements_file],
+                check=True, env=env
+            )
+            if not os.path.exists(virtual_env + '/bin/ansible-playbook'):
+                with open(virtual_env + '/bin/ansible-playbook', 'w') as ofh:
+                    ofh.write("#!{}/bin/python\n".format(virtual_env))
+                    with open(shutil.which('ansible-playbook')) as ifh:
+                        ofh.write(ifh.read())
+                os.chmod(virtual_env + '/bin/ansible-playbook', 0o755)
+
+        return virtual_env
 
     def setup_ansible_galaxy_requirements(self, anarchy_run):
         requirements = anarchy_run['spec'].get('ansibleGalaxyRequirements', None)
@@ -172,9 +205,9 @@ class AnarchyRunner(object):
         os.symlink(requirements_dir + '/collections', ansible_collections_dir)
         os.symlink(requirements_dir + '/roles', ansible_roles_dir)
         if requirements and 'collections' in requirements:
-            subprocess.run(['ansible-galaxy', 'collection', 'install', '-r', requirements_file])
+            subprocess.run(['ansible-galaxy', 'collection', 'install', '-r', requirements_file], check=True)
         if requirements:
-            subprocess.run(['ansible-galaxy', 'role', 'install', '-r', requirements_file])
+            subprocess.run(['ansible-galaxy', 'role', 'install', '-r', requirements_file], check=True)
 
     def sleep(self):
         time.sleep(self.polling_interval)

@@ -54,6 +54,11 @@ spec:
                   type: array
                   items:
                     type: object
+            pythonRequirements:
+              description: >-
+                Python requirements to install with pip into virtual environment. Format should be
+                python requirements.txt style such as produced by "pip freeze".
+              type: string
             actions:
               description: >-
                 Actions are used to describe available types of AnarchyActions. These are scheduled

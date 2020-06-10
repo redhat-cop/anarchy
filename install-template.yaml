@@ -118,88 +118,6 @@ objects:
 - apiVersion: apiextensions.k8s.io/v1beta1
   kind: CustomResourceDefinition
   metadata:
-    name: anarchyactions.${ANARCHY_DOMAIN}
-  spec:
-    group: ${ANARCHY_DOMAIN}
-    names:
-      kind: AnarchyAction
-      plural: anarchyactions
-      shortNames: []
-      singular: anarchyaction
-    scope: Namespaced
-    subresources:
-      status: {}
-    validation:
-      openAPIV3Schema:
-        description: AnarchySubjects track state Anarchy. Subjects represent something
-          that is managed. When Anarchy ansible processing runs it always runs for
-          a subject and can update the subject during the run to reflect state changes.
-        properties:
-          apiVersion:
-            type: string
-          kind:
-            type: string
-          metadata:
-            type: object
-          spec:
-            description: Definition of the AnarchyAction.
-            properties:
-              action:
-                description: Name of action from AnarchyGovernor used to process AnsibleRun
-                type: string
-              after:
-                description: Datetime string in for format "YYYY-MM-DDThh:mm:ssZ".
-                  AnarchyRun will be created for the AnarchyAction after this time.
-                type: string
-              callbackToken:
-                description: Random string used to validate callbacks
-                type: string
-              governorRef:
-                description: Reference to controlling AnarchyGovernor
-                properties:
-                  apiVersion:
-                    type: string
-                  kind:
-                    type: string
-                  name:
-                    type: string
-                  namespace:
-                    type: string
-                  uid:
-                    type: string
-                required:
-                - name
-                type: object
-              subjectRef:
-                description: Reference to owning AnarchySubject
-                properties:
-                  apiVersion:
-                    type: string
-                  kind:
-                    type: string
-                  name:
-                    type: string
-                  namespace:
-                    type: string
-                  uid:
-                    type: string
-                required:
-                - name
-                type: object
-            required:
-            - action
-            - subjectRef
-            type: object
-        required:
-        - apiVersion
-        - kind
-        - metadata
-        - spec
-        type: object
-    version: v1
-- apiVersion: apiextensions.k8s.io/v1beta1
-  kind: CustomResourceDefinition
-  metadata:
     name: anarchygovernors.${ANARCHY_DOMAIN}
   spec:
     group: ${ANARCHY_DOMAIN}
@@ -364,6 +282,11 @@ objects:
                       type: object
                     type: array
                 type: object
+              pythonRequirements:
+                description: Python requirements to install with pip into virtual
+                  environment. Format should be python requirements.txt style such
+                  as produced by "pip freeze".
+                type: string
               runner:
                 description: AnsibleRunner that should process AnsibleRuns for this
                   governor.
@@ -581,39 +504,151 @@ objects:
 - apiVersion: apiextensions.k8s.io/v1beta1
   kind: CustomResourceDefinition
   metadata:
-    name: anarchyrunners.${ANARCHY_DOMAIN}
+    name: anarchyactions.${ANARCHY_DOMAIN}
   spec:
     group: ${ANARCHY_DOMAIN}
     names:
-      kind: AnarchyRunner
-      plural: anarchyrunners
+      kind: AnarchyAction
+      plural: anarchyactions
       shortNames: []
-      singular: anarchyrunner
+      singular: anarchyaction
     scope: Namespaced
     subresources:
       status: {}
     validation:
       openAPIV3Schema:
-        description: AnarchyRunners define Ansible runners used to process actions
-          and handle events.
+        description: AnarchySubjects track state Anarchy. Subjects represent something
+          that is managed. When Anarchy ansible processing runs it always runs for
+          a subject and can update the subject during the run to reflect state changes.
         properties:
-          maxReplicas:
-            description: Maximum number of replicas for dynamic scaling of the AnarchyRunner
-              pool.
-            minimum: 0
-            type: integer
-          minReplicas:
-            description: Minimum number of replicas for dynamic scaling of the AnarchyRunner
-              pool.
-            minimum: 0
-            type: integer
-          podTemplate:
-            description: Pod template used to define AnarchyRunner pods.
-            type: object
-          token:
-            description: Token used to validate communication with pods in the AnarchyRunner
-              pool.
+          apiVersion:
             type: string
+          kind:
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: Definition of the AnarchyAction.
+            properties:
+              action:
+                description: Name of action from AnarchyGovernor used to process AnsibleRun
+                type: string
+              after:
+                description: Datetime string in for format "YYYY-MM-DDThh:mm:ssZ".
+                  AnarchyRun will be created for the AnarchyAction after this time.
+                type: string
+              callbackToken:
+                description: Random string used to validate callbacks
+                type: string
+              governorRef:
+                description: Reference to controlling AnarchyGovernor
+                properties:
+                  apiVersion:
+                    type: string
+                  kind:
+                    type: string
+                  name:
+                    type: string
+                  namespace:
+                    type: string
+                  uid:
+                    type: string
+                required:
+                - name
+                type: object
+              subjectRef:
+                description: Reference to owning AnarchySubject
+                properties:
+                  apiVersion:
+                    type: string
+                  kind:
+                    type: string
+                  name:
+                    type: string
+                  namespace:
+                    type: string
+                  uid:
+                    type: string
+                required:
+                - name
+                type: object
+            required:
+            - action
+            - subjectRef
+            type: object
+        required:
+        - apiVersion
+        - kind
+        - metadata
+        - spec
+        type: object
+    version: v1
+- apiVersion: apiextensions.k8s.io/v1beta1
+  kind: CustomResourceDefinition
+  metadata:
+    name: anarchysubjects.${ANARCHY_DOMAIN}
+  spec:
+    group: ${ANARCHY_DOMAIN}
+    names:
+      kind: AnarchySubject
+      plural: anarchysubjects
+      shortNames: []
+      singular: anarchysubject
+    scope: Namespaced
+    subresources:
+      status: {}
+    validation:
+      openAPIV3Schema:
+        description: AnarchySubjects track state Anarchy. Subjects represent something
+          that is managed. When Anarchy ansible processing runs it always runs for
+          a subject and can update the subject during the run to reflect state changes.
+        properties:
+          apiVersion:
+            type: string
+          kind:
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: Definition of how the AnarchySubject.
+            properties:
+              governor:
+                description: Name of AnarchyGovernor that defines how to manage this
+                  subject.
+                type: string
+              varSecrets:
+                description: List of secrets to use to set variables in the dynamic
+                  ansible play for the subject.
+                items:
+                  description: Secret used to set variables in the dynamic ansible
+                    play for the event handler. Secret values are merged into values
+                    from "vars".
+                  properties:
+                    name:
+                      description: Secret name
+                      type: string
+                    namespace:
+                      description: Optional secret namespace. If omitted then the
+                        operator namespace is used.
+                      type: string
+                    var:
+                      description: Optional variable name to set. If not provided,
+                        then each data key from the secret is treated as a separate
+                        variable.
+                  required:
+                  - name
+                  type: object
+                type: array
+              vars:
+                description: Variables for the subject. These are used as Ansible
+                  variables during runs and may also be updated by ansible runs.
+                type: object
+            type: object
+        required:
+        - apiVersion
+        - kind
+        - metadata
+        - spec
         type: object
     version: v1
 - apiVersion: apiextensions.k8s.io/v1beta1
@@ -718,6 +753,10 @@ objects:
                 items:
                   type: object
                 type: array
+              pythonRequirements:
+                description: Python requirements from the AnarchyGovernor, frozen
+                  in time from when this action was scheduled.
+                type: string
               result:
                 description: Result of Ansible playbook run.
                 properties:
@@ -863,69 +902,39 @@ objects:
 - apiVersion: apiextensions.k8s.io/v1beta1
   kind: CustomResourceDefinition
   metadata:
-    name: anarchysubjects.${ANARCHY_DOMAIN}
+    name: anarchyrunners.${ANARCHY_DOMAIN}
   spec:
     group: ${ANARCHY_DOMAIN}
     names:
-      kind: AnarchySubject
-      plural: anarchysubjects
+      kind: AnarchyRunner
+      plural: anarchyrunners
       shortNames: []
-      singular: anarchysubject
+      singular: anarchyrunner
     scope: Namespaced
     subresources:
       status: {}
     validation:
       openAPIV3Schema:
-        description: AnarchySubjects track state Anarchy. Subjects represent something
-          that is managed. When Anarchy ansible processing runs it always runs for
-          a subject and can update the subject during the run to reflect state changes.
+        description: AnarchyRunners define Ansible runners used to process actions
+          and handle events.
         properties:
-          apiVersion:
-            type: string
-          kind:
-            type: string
-          metadata:
+          maxReplicas:
+            description: Maximum number of replicas for dynamic scaling of the AnarchyRunner
+              pool.
+            minimum: 0
+            type: integer
+          minReplicas:
+            description: Minimum number of replicas for dynamic scaling of the AnarchyRunner
+              pool.
+            minimum: 0
+            type: integer
+          podTemplate:
+            description: Pod template used to define AnarchyRunner pods.
             type: object
-          spec:
-            description: Definition of how the AnarchySubject.
-            properties:
-              governor:
-                description: Name of AnarchyGovernor that defines how to manage this
-                  subject.
-                type: string
-              varSecrets:
-                description: List of secrets to use to set variables in the dynamic
-                  ansible play for the subject.
-                items:
-                  description: Secret used to set variables in the dynamic ansible
-                    play for the event handler. Secret values are merged into values
-                    from "vars".
-                  properties:
-                    name:
-                      description: Secret name
-                      type: string
-                    namespace:
-                      description: Optional secret namespace. If omitted then the
-                        operator namespace is used.
-                      type: string
-                    var:
-                      description: Optional variable name to set. If not provided,
-                        then each data key from the secret is treated as a separate
-                        variable.
-                  required:
-                  - name
-                  type: object
-                type: array
-              vars:
-                description: Variables for the subject. These are used as Ansible
-                  variables during runs and may also be updated by ansible runs.
-                type: object
-            type: object
-        required:
-        - apiVersion
-        - kind
-        - metadata
-        - spec
+          token:
+            description: Token used to validate communication with pods in the AnarchyRunner
+              pool.
+            type: string
         type: object
     version: v1
 parameters:

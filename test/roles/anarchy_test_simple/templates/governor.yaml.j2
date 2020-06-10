@@ -12,6 +12,9 @@ spec:
     collections: []
     roles: []
 
+  pythonRequirements: |
+    PyMySQL==0.9.3
+
   runner: default
 
   vars:
@@ -45,6 +48,12 @@ spec:
       - name: Print message
         debug:
           msg: Running configure for {{ anarchy_subject_name }}
+
+      - name: Check PyMySQL was installed
+        mysql_info: {}
+        register: r_mysql_info
+        failed_when: >-
+          "module is required" in r_mysql_info.msg
 
     destroy:
       tasks:

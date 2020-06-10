@@ -151,6 +151,10 @@ class AnarchyGovernor(object):
         return self.spec.get('parameterSecrets', [])
 
     @property
+    def python_requirements(self):
+        return self.spec.get('pythonRequirements', None)
+
+    @property
     def resource_version(self):
         return self.metadata['resourceVersion']
 
@@ -186,6 +190,7 @@ class AnarchyGovernor(object):
     def run_ansible(self, runtime, run_config, run_vars, context, anarchy_subject, anarchy_action, event_name=None):
         run_spec = {
             'ansibleGalaxyRequirements': self.ansible_galaxy_requirements,
+            'pythonRequirements': self.python_requirements,
             'preTasks': run_config.pre_tasks,
             'roles': run_config.roles,
             'tasks': run_config.tasks,
