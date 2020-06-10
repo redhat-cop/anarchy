@@ -22,6 +22,12 @@ jobs:
         TAGS=('latest' "${VERSION}" "${VERSION%.*}")
         # Set IMAGE_TAGS output for use in next step
         ( IFS=$','; echo "::set-output name=IMAGE_TAGS::${TAGS[*]}" )
+        # Read version from helm/Chart.yaml
+        HELM_CHART_VERSION=$(sed -nr 's/^version: (.*)/\1/p' helm/Chart.yaml)
+        if [[ "v${HELM_CHART_VERSION}" != "${VERSION}" ]]; then
+          echo "Helm chart version to not match tag!"
+          exit 1
+        fi
 
     - name: Build and publish image
       uses: docker/build-push-action@v1
