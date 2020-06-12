@@ -189,13 +189,16 @@ class AnarchyGovernor(object):
 
     def run_ansible(self, runtime, run_config, run_vars, context, anarchy_subject, anarchy_action, event_name=None):
         run_spec = {
-            'ansibleGalaxyRequirements': self.ansible_galaxy_requirements,
-            'pythonRequirements': self.python_requirements,
             'preTasks': run_config.pre_tasks,
             'roles': run_config.roles,
             'tasks': run_config.tasks,
             'postTasks': run_config.post_tasks,
         }
+        if self.ansible_galaxy_requirements:
+            run_spec['ansibleGalaxyRequirements'] = self.ansible_galaxy_requirements
+        if self.python_requirements:
+            run_spec['pythonRequirements'] = self.python_requirements
+
         collected_run_vars = {}
         for context_item in context:
             name, obj = context_item
