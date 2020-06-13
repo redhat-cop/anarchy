@@ -1,14 +1,15 @@
 ansible==2.9.9
 ansible-runner==1.4.6
 Flask==1.1.2
-gevent==20.5.0
+gevent==20.6.1
 Jinja2==2.11.2
 jmespath==0.10.0
 jsonpatch==1.25
+kopf==0.27
 kubernetes==11.0.0
 ndg-httpsclient==0.5.1
 openshift==0.11.2
-prometheus-client==0.7.1
+prometheus-client==0.8.0
 pyasn1==0.4.8
 pyasn1-modules==0.2.8
 pyOpenSSL==19.1.0

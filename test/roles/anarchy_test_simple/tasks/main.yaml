@@ -1,10 +1,10 @@
 ---
-- name: Setup for babylon test
+- name: Setup for simple test
   include_tasks: setup.yaml
 
-- name: Setup for babylon test
+- name: Setup for simple test
   include_tasks: test.yaml
 
-- name: Cleanup for babylon test
+- name: Cleanup for simple test
   include_tasks: cleanup.yaml
   when: anarchy_test_cleanup | bool

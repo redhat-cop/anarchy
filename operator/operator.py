@@ -268,11 +268,19 @@ def get_run():
     if not anarchy_run:
         return flask.jsonify(None)
 
+    anarchy_governor = anarchy_subject.get_governor(runtime)
+    if not anarchy_governor:
+        operator_logger.warning(
+            'AnarchySubject %s was pending, but cannot find governor %s!',
+            anarchy_subject.name, anarchy_subject.governor_name
+        )
+        return flask.jsonify(None)
+
     anarchy_runner.runner_pods[runner_pod] = anarchy_run
     anarchy_run.set_runner(anarchy_runner.name + '.' + runner_pod, runtime)
     resp = anarchy_run.to_dict(runtime)
     resp['subject'] = anarchy_subject.to_dict(runtime)
-    resp['governor'] = anarchy_subject.get_governor(runtime).to_dict(runtime)
+    resp['governor'] = anarchy_governor.to_dict(runtime)
     return flask.jsonify(resp)
 
 @api.route('/run/<string:run_name>', methods=['POST'])
@@ -470,34 +478,51 @@ def check_runner_auth(auth_header):
 
     return anarchy_runner, runner_pod
 
+def watch_peering():
+    '''
+    Watch for KopfPeering and set runtime active flag
+    '''
+    while True:
+        runtime.watch_peering()
+
 def main_loop():
     last_runner_check = 0
     while True:
-        try:
-            action_cache_lock.acquire()
-            AnarchyAction.start_actions(runtime)
-        except Exception as e:
-            operator_logger.exception("Error in start_actions!")
-        finally:
-            action_cache_lock.release()
+        with runtime.is_active_condition:
+            while not runtime.is_active:
+                runtime.is_active_condition.wait()
 
-        try:
-            AnarchySubject.retry_failures(runtime)
-        except Exception as e:
-            operator_logger.exception("Error in retry_failures!")
-
-        if runner_check_interval < time.time() - last_runner_check:
+        while runtime.is_active:
             try:
-                AnarchyRunner.refresh_all_runner_pods(runtime)
-                last_runner_check = time.time()
-            except:
-                operator_logger.exception('Error checking runner pods in main loop')
+                action_cache_lock.acquire()
+                AnarchyAction.start_actions(runtime)
+            except Exception as e:
+                operator_logger.exception("Error in start_actions!")
+            finally:
+                action_cache_lock.release()
 
-        time.sleep(1)
+            try:
+                AnarchySubject.retry_failures(runtime)
+            except Exception as e:
+                operator_logger.exception("Error in retry_failures!")
+
+            if runner_check_interval < time.time() - last_runner_check:
+                try:
+                    AnarchyRunner.refresh_all_runner_pods(runtime)
+                    last_runner_check = time.time()
+                except:
+                    operator_logger.exception('Error managing runner pods in main loop')
+
+            time.sleep(1)
 
 def main():
     """Main function."""
     init()
+
+    threading.Thread(
+        name = 'watch_peering',
+        target = watch_peering
+    ).start()
 
     threading.Thread(
         name = 'main',

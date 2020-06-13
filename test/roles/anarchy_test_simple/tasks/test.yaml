@@ -277,7 +277,6 @@
 
   - name: Verify AnarchySubject delete for test-simple-1
     k8s_info:
-      state: absent
       api_version: anarchy.gpte.redhat.com/v1
       kind: AnarchySubject
       name: test-simple-1
