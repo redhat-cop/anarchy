@@ -10,7 +10,6 @@ rules:
   - anarchy.gpte.redhat.com
   resources:
   - anarchygovernors
-  - anarchyrunners
   verbs:
   - create
   - delete
