@@ -165,11 +165,12 @@ def handle_subject_create(body, **_):
         operator_logger.warning('AnarchySubject %s invalid: %s', body['metadata']['name'], e)
 
 @kopf.on.update(runtime.operator_domain, 'v1', 'anarchysubjects')
-def handle_subject_update(body, **_):
+def handle_subject_update(body, old, new, **_):
     wait_for_init()
     try:
         subject = AnarchySubject.get_from_resource(body)
-        subject.handle_update(runtime)
+        if old['spec'] != new['spec']:
+            subject.handle_spec_update(runtime)
     except AssertionError as e:
         operator_logger.warning('AnarchySubject %s invalid: %s', body['metadata']['name'], e)
 

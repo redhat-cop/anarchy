@@ -302,11 +302,16 @@ class AnarchySubject(object):
         if not event_handled:
             self.remove_finalizers(runtime)
 
-    def handle_update(self, runtime):
+    def handle_spec_update(self, runtime):
+        '''
+        Handle update to AnarchySubject spec.
+        '''
         self.process_subject_event_handlers(runtime, 'update')
 
     def patch(self, patch, runtime):
-        # FIXME - mechanism to prevent this from being processed double with a status update?
+        '''
+        Patch AnarchySubject resource and status.
+        '''
         resource_patch = {}
         result = None
         if 'metadata' in patch:
