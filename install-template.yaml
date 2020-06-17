@@ -16,7 +16,6 @@ objects:
     - ${ANARCHY_DOMAIN}
     resources:
     - anarchygovernors
-    - anarchyrunners
     verbs:
     - create
     - delete
@@ -34,10 +33,22 @@ objects:
     name: anarchy
   rules:
   - apiGroups:
+    - zalando.org
+    resources:
+    - kopfpeerings
+    verbs:
+    - create
+    - delete
+    - deletecollection
+    - get
+    - list
+    - patch
+    - update
+    - watch
+  - apiGroups:
     - ${ANARCHY_DOMAIN}
     resources:
     - anarchygovernors
-    - anarchyrunners
     verbs:
     - get
     - list
@@ -56,6 +67,7 @@ objects:
     verbs:
     - create
     - delete
+    - deletecollection
     - get
     - list
     - patch
@@ -70,6 +82,7 @@ objects:
     verbs:
     - create
     - delete
+    - deletecollection
     - get
     - list
     - patch
@@ -102,6 +115,7 @@ objects:
     verbs:
     - create
     - delete
+    - deletecollection
     - get
     - list
     - patch
@@ -115,6 +129,28 @@ objects:
     - create
     - patch
     - update
+- apiVersion: apiextensions.k8s.io/v1
+  kind: CustomResourceDefinition
+  metadata:
+    name: kopfpeerings.zalando.org
+  spec:
+    group: zalando.org
+    names:
+      kind: KopfPeering
+      plural: kopfpeerings
+      singular: kopfpeering
+    scope: Namespaced
+    versions:
+    - name: v1
+      schema:
+        openAPIV3Schema:
+          properties:
+            status:
+              type: object
+              x-kubernetes-preserve-unknown-fields: true
+          type: object
+      served: true
+      storage: true
 - apiVersion: apiextensions.k8s.io/v1beta1
   kind: CustomResourceDefinition
   metadata:
@@ -716,6 +752,9 @@ objects:
                       type: object
                     type: array
                 type: object
+              failures:
+                description: Count of failures this run has experienced.
+                type: integer
               governor:
                 description: Reference to the AnarchyGovernor related to this AnarchyRun.
                 properties:
@@ -853,6 +892,9 @@ objects:
                   status:
                     type: string
                 type: object
+              retryAfter:
+                description: UTC timestamp for next retry after failure.
+                type: string
               roles:
                 description: Ansible "roles" for the dynamic ansible play.
                 items:
