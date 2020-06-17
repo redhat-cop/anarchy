@@ -19,6 +19,9 @@ parameters:
   value: quay.io/redhat-cop/anarchy:v0.7.2
 - name: ANARCHY_IMAGE_PULL_POLICY
   value: IfNotPresent
+- name: LOGGING_LEVEL
+  description: "Logging level: DEBUG, INFO, WARNING"
+  value: INFO
 - name: RUNNER_IMAGE
   value: ''
 - name: RUNNER_IMAGE_PULL_POLICY
@@ -71,7 +74,7 @@ objects:
           - name: RUNNER_IMAGE_PULL_POLICY
             value: ${RUNNER_IMAGE_PULL_POLICY}
           - name: LOGGING_LEVEL
-            value: DEBUG
+            value: ${LOGGING_LEVEL}
           image: ${ANARCHY_IMAGE}
           imagePullPolicy: ${ANARCHY_IMAGE_PULL_POLICY}
           livenessProbe:
