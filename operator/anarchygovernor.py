@@ -1,6 +1,7 @@
 import copy
 import jinja2
 import json
+import kubernetes
 import logging
 import os
 import six
@@ -76,26 +77,61 @@ class AnarchyGovernor(object):
         def var_secrets(self):
             return self.spec.get('varSecrets', [])
 
+    # AnarchyGovernor cache
     cache = {}
-
-    @staticmethod
-    def register(resource):
-        governor = AnarchyGovernor(resource)
-        operator_logger.info("Registered governor %s", governor.name)
-        AnarchyGovernor.cache[governor.name] = governor
-        return governor
-
-    @staticmethod
-    def unregister(governor):
-        governor_name = governor.name if isinstance(governor, AnarchyGovernor) else governor
-        try:
-            del AnarchyGovernor.cache[governor_name]
-        except KeyError:
-            pass
 
     @staticmethod
     def get(name):
         return AnarchyGovernor.cache.get(name, None)
+
+    @staticmethod
+    def init(runtime):
+        '''
+        Get initial list of AnarchyGovernors.
+
+        This method is used during start-up to ensure that all AnarchyGovernor definitions are
+        loaded before processing starts.
+        '''
+        for resource in runtime.custom_objects_api.list_namespaced_custom_object(
+            runtime.operator_domain, 'v1', runtime.operator_namespace, 'anarchygovernors'
+        ).get('items', []):
+            AnarchyGovernor.register(resource)
+
+    @staticmethod
+    def register(resource):
+        name = resource['metadata']['name']
+        governor = AnarchyGovernor.cache.get(name)
+        if governor:
+            governor.refresh_from_resource(resource)
+        else:
+            governor = AnarchyGovernor(resource)
+            AnarchyGovernor.cache[name] = governor
+            operator_logger.info("Registered governor %s", governor.name)
+        return governor
+
+    @staticmethod
+    def unregister(governor):
+        AnarchyGovernor.cache.pop(governor.name if isinstance(governor, AnarchyGovernor) else governor)
+
+    @staticmethod
+    def watch(runtime):
+        '''
+        Watch AnarchyGovernors and keep definitions synchronized
+
+        This watch is independent of the kopf watch and is used to keep governor definitions updated
+        even when the pod is not the active peer.
+        '''
+        for event in kubernetes.watch.Watch().stream(
+            runtime.custom_objects_api.list_namespaced_custom_object,
+            runtime.operator_domain, 'v1', runtime.operator_namespace, 'anarchygovernors'
+        ):
+            obj = event.get('object')
+            if event['type'] == 'DELETED':
+                AnarchyGovernor.unregister(obj['metadata']['name'])
+            elif obj \
+            and obj.get('apiVersion') == runtime.operator_domain + '/v1' \
+            and obj.get('kind') == 'AnarchyGovernor':
+                AnarchyGovernor.register(obj)
 
     def __init__(self, resource):
         self.metadata = resource['metadata']
@@ -187,6 +223,10 @@ class AnarchyGovernor(object):
             'governor has no action named {}'.format(name)
         return self.actions[name]
 
+    def refresh_from_resource(self, resource):
+        self.metadata = resource['metadata']
+        self.spec = resource['spec']
+
     def run_ansible(self, runtime, run_config, run_vars, context, anarchy_subject, anarchy_action, event_name=None):
         run_spec = {
             'preTasks': run_config.pre_tasks,
@@ -217,7 +257,7 @@ class AnarchyGovernor(object):
 
         labels = {
             runtime.operator_domain + '/subject': anarchy_subject.name,
-            runtime.runner_label: 'pending'
+            runtime.runner_label: 'queued'
         }
         if event_name:
             labels[runtime.operator_domain + '/event'] = event_name
@@ -252,7 +292,7 @@ class AnarchyGovernor(object):
                 'uid': anarchy_subject.uid
             }
 
-        runtime.custom_objects_api.create_namespaced_custom_object(
+        anarchy_run = runtime.custom_objects_api.create_namespaced_custom_object(
             runtime.operator_domain, 'v1', runtime.operator_namespace, 'anarchyruns',
             {
                 'apiVersion': runtime.operator_domain + '/v1',
@@ -266,6 +306,20 @@ class AnarchyGovernor(object):
                 'spec': run_spec
             }
         )
+        anarchy_run_name = anarchy_run['metadata']['name']
+
+        if anarchy_action:
+            anarchy_action.add_run_to_status(anarchy_run, runtime)
+
+        anarchy_subject.add_run_to_status(anarchy_run, runtime)
+
+        if anarchy_subject.active_run_name == anarchy_run_name:
+            anarchy_subject.set_active_run_to_pending(runtime)
+        else:
+            operator_logger.debug(
+                'Not setting new AnarchyRun %s as pending, %s is active for AnarchySubject %s',
+                anarchy_run_name, anarchy_subject.active_run_name, anarchy_subject.name
+            )
 
     def to_dict(self, runtime):
         return dict(

@@ -21,7 +21,7 @@ DOCUMENTATION = '''
     options:
       anarchy_result_file:
         name: Location to write play result YAML
-        description: 
+        description:
           - "The anarchy output callback writes YAML to record details from the play"
         type: string
         default: playbook-result.yaml
@@ -31,7 +31,7 @@ DOCUMENTATION = '''
         ini:
           - key: anarchy_result_file
             section: defaults
-''' 
+'''
 
 def current_time():
     return '%sZ' % datetime.datetime.utcnow().isoformat()

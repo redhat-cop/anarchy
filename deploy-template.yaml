@@ -53,7 +53,7 @@ objects:
       matchLabels:
         name: ${NAME}
     strategy:
-      type: Recreate
+      type: RollingUpdate
     template:
       metadata:
         labels:
@@ -70,6 +70,8 @@ objects:
             value: ${RUNNER_IMAGE}
           - name: RUNNER_IMAGE_PULL_POLICY
             value: ${RUNNER_IMAGE_PULL_POLICY}
+          - name: LOGGING_LEVEL
+            value: DEBUG
           image: ${ANARCHY_IMAGE}
           imagePullPolicy: ${ANARCHY_IMAGE_PULL_POLICY}
           livenessProbe:

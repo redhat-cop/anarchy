@@ -9,48 +9,86 @@ from anarchysubject import AnarchySubject
 operator_logger = logging.getLogger('operator')
 
 class AnarchyRun(object):
+    pending_count = 0
+    active_runs = {}
 
     @staticmethod
-    def register(anarchy_run, runtime):
-        runner_value = anarchy_run.metadata['labels'].get(runtime.runner_label, None)
-        anarchy_subject_name = anarchy_run.subject_name
-        anarchy_subject = AnarchySubject.get(anarchy_subject_name, runtime)
-
-        if not anarchy_subject:
-            operator_logger.warn(
-                'Unable to find AnarchySubject %s for AnarchyRun %s',
-                anarchy_subject_name, anarchy_run.name
-            )
-            return
-
-        if not runner_value or runner_value == 'successful':
-            return
-        elif runner_value == 'failed':
-            anarchy_subject.anarchy_run_update(anarchy_run, runtime)
-            last_attempt = anarchy_run.run_post_datetime
-            if last_attempt:
-                if anarchy_run.failures > 9:
-                    retry_delay = timedelta(hours=1)
-                else:
-                    retry_delay = timedelta(seconds=5 * 2**anarchy_run.failures)
-                next_attempt = last_attempt + retry_delay
-            else:
-                next_attempt = datetime.utcnow()
-            anarchy_subject.retry_after = next_attempt
-        elif runner_value == 'lost':
-            anarchy_subject.anarchy_run_update(anarchy_run, runtime)
-            anarchy_subject.put_in_job_queue(runtime)
-        elif runner_value == 'pending':
-            anarchy_subject.enqueue_anarchy_run(anarchy_run, runtime)
+    def get_from_api(name, runtime):
+        '''
+        Get AnarchyRun from api by name.
+        '''
+        operator_logger.debug('Getting AnarchyRun %s', name)
+        resource = AnarchyRun.get_resource_from_api(name, runtime)
+        if resource:
+            return AnarchyRun(resource)
         else:
-            anarchy_subject.anarchy_run_update(anarchy_run, runtime)
+            return None
 
     @staticmethod
-    def unregister(anarchy_run, runtime):
-        '''Remove AnarchyRun from cache in AnarchySubject'''
-        anarchy_subject = AnarchySubject.cache.get(anarchy_run.subject_name, None)
-        if anarchy_subject:
-            anarchy_subject.remove_anarchy_run(anarchy_run, runtime)
+    def get_pending(runtime):
+        '''
+        Get pending AnarchyRun from api, if one exists.
+        '''
+        items = runtime.custom_objects_api.list_namespaced_custom_object(
+            runtime.operator_domain, 'v1', runtime.operator_namespace, 'anarchyruns',
+            label_selector='{}=pending'.format(runtime.runner_label), limit=1
+        ).get('items', [])
+        if items:
+            return AnarchyRun(items[0])
+        else:
+            return None
+
+    @staticmethod
+    def get_resource_from_api(name, runtime):
+        '''
+        Get raw AnarchyRun resource from api by name, if one exists.
+        '''
+        try:
+            return runtime.custom_objects_api.get_namespaced_custom_object(
+                runtime.operator_domain, 'v1', runtime.operator_namespace, 'anarchyruns', name
+            )
+        except kubernetes.client.rest.ApiException as e:
+            if e.status == 404:
+                return None
+            else:
+                raise
+
+    @staticmethod
+    def load_active_runs(runtime):
+        '''
+        Load AnarchyRuns that require processing
+
+        The runner label on AnarchyRuns indicates whether it was currently being
+        processed by the last instance of the operator on shut-down. We collect
+        these jobs and register them with their AnarchySubject.
+        '''
+        AnarchyRun.active_runs = {}
+        for resource in runtime.custom_objects_api.list_namespaced_custom_object(
+            runtime.operator_domain, 'v1', runtime.operator_namespace, 'anarchyruns',
+            label_selector = '{}!=successful'.format(runtime.runner_label)
+        ).get('items', []):
+            anarchy_run = AnarchyRun.register(resource)
+
+    @staticmethod
+    def manage_active_runs(runtime):
+        for name, run in AnarchyRun.active_runs.items():
+            run.manage(runtime)
+
+    @staticmethod
+    def register(resource):
+        name = resource['metadata']['name']
+        run = AnarchyRun.active_runs.get(name)
+        if run:
+            run.refresh_from_resource(resource)
+        else:
+            run = AnarchyRun(resource)
+            AnarchyRun.active_runs[name] = run
+            operator_logger.info("Registered run %s", run.name)
+        return run
+
+    @staticmethod
+    def unregister(run):
+        AnarchyRun.active_runs.pop(run.name if isinstance(run, AnarchyRun) else run)
 
     def __init__(self, resource):
         self.metadata = resource['metadata']
@@ -75,6 +113,24 @@ class AnarchyRun(object):
         return self.spec['governor']['name']
 
     @property
+    def name(self):
+        return self.metadata['name']
+
+    @property
+    def namespace(self):
+        return self.metadata['namespace']
+
+    @property
+    def retry_after(self):
+        return self.spec.get('retryAfter')
+
+    @property
+    def retry_after_datetime(self):
+        return datetime.strptime(
+            self.spec['retryAfter'], '%Y-%m-%dT%H:%M:%SZ'
+        ) if 'retryAfter' in self.spec else datetime.utcnow()
+
+    @property
     def run_post_datetime(self):
         if 'runPostTimestamp' in self.spec:
             return datetime.strptime(self.spec['runPostTimestamp'], '%Y-%m-%dT%H:%M:%SZ')
@@ -84,10 +140,6 @@ class AnarchyRun(object):
     @property
     def run_post_timestamp(self):
         return self.spec.get('runPostTimestamp')
-
-    @property
-    def name(self):
-        return self.metadata['name']
 
     @property
     def subject_name(self):
@@ -105,11 +157,24 @@ class AnarchyRun(object):
 
     def handle_lost_runner(self, runner_pod_name, runtime):
         """Notified that a runner has been lost, reset AnarchyRun to pending"""
-        operator_logger.warn(
+        operator_logger.warning(
             'Resetting AnarchyRun %s to lost', self.name
         )
-        self.get_subject(runtime).run_queue_release()
         self.post_result({'status': 'lost'}, runner_pod_name, runtime)
+
+    def manage(self, runtime):
+        runner_label = self.get_runner_label_value(runtime)
+        if runner_label == 'pending':
+            pass
+        elif runner_label == 'queued':
+            pass
+        elif runner_label == 'failed':
+            if self.retry_after_datetime < datetime.utcnow():
+                self.set_to_pending(runtime)
+        else: # Running, assigned to a runner pod
+            runner = AnarchyRunner.get(runner_label)
+            if not runner:
+                self.handle_lost_runner(runner_label, runtime)
 
     def post_result(self, result, runner_pod_name, runtime):
         operator_logger.info('Update AnarchyRun %s for %s run', self.name, result['status'])
@@ -117,7 +182,7 @@ class AnarchyRun(object):
         patch = [{
             'op': 'add',
             'path': '/metadata/labels/{0}~1runner'.format(runtime.operator_domain),
-            'value': result['status']
+            'value': 'pending' if result['status'] == 'lost' else result['status']
         },{
             'op': 'add',
             'path': '/spec/result',
@@ -133,14 +198,23 @@ class AnarchyRun(object):
         }]
 
         if result['status'] == 'failed':
+            if anarchy_run.failures > 8:
+                retry_delay = timedelta(minutes=30)
+            else:
+                retry_delay = timedelta(seconds=5 * 2**anarchy_run.failures)
             patch.append({
                 'op': 'add',
                 'path': '/spec/failures',
                 'value': self.failures + 1
             })
+            patch.append({
+                'op': 'add',
+                'path': '/spec/retryAfter',
+                'value': (datetime.utcnow() + retry_delay).strftime('%FT%TZ')
+            })
 
         try:
-            runtime.custom_objects_api.api_client.call_api(
+            data = runtime.custom_objects_api.api_client.call_api(
                 '/apis/{group}/{version}/namespaces/{namespace}/{plural}/{name}',
                 'PATCH',
                 { # path params
@@ -159,16 +233,12 @@ class AnarchyRun(object):
                 response_type='object',
                 auth_settings=['BearerToken'],
             )
+            self.refresh_from_resource(data[0])
         except kubernetes.client.rest.ApiException as e:
             if e.status == 404:
-                operator_logger.warn('Unable to updated deleted AnarchyRun %s', self.name)
+                operator_logger.warning('Unable to updated deleted AnarchyRun %s', self.name)
             else:
                 raise
-
-        if result['status'] == 'successful':
-            anarchy_subject = self.get_subject(runtime)
-            if anarchy_subject:
-                anarchy_subject.remove_anarchy_run(self, runtime)
 
     def set_runner(self, runner_value, runtime):
         operator_logger.debug('Set runner for AnarchyRun %s to %s', self.name, runner_value)
@@ -181,6 +251,26 @@ class AnarchyRun(object):
                 }
             }
         )
+
+    def ref(self, runtime):
+        return dict(
+            apiVersion = runtime.operator_domain + '/v1',
+            kind = 'AnarchyRun',
+            name = self.name,
+            namespace = self.namespace,
+            uid = self.uid
+        )
+
+    def refresh_from_resource(self, resource):
+        self.metadata = resource['metadata']
+        self.spec = resource['spec']
+
+    def set_to_pending(self, runtime):
+        resource = runtime.custom_objects_api.patch_namespaced_custom_object(
+            runtime.operator_domain, 'v1', self.namespace, 'anarchyruns', self.name,
+            {'metadata': {'labels': { runtime.runner_label: 'pending' } } }
+        )
+        self.refresh_from_resource(resource)
 
     def to_dict(self, runtime):
         return dict(
