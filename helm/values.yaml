@@ -10,6 +10,9 @@ namespace: anarchy
 imagePullSecrets: []
 nameOverride: ""
 
+# Number of Anarchy replicas for deployment
+replicaCount: 1
+
 serviceAccount:
   # Specifies whether a service account should be created
   create: true
