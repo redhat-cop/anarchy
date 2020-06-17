@@ -36,7 +36,11 @@ class AnarchyRuntime(object):
         self.__init_callback_base_url()
         self.anarchy_runners = {}
         self.last_lost_runner_check = time.time()
+        self.action_label = self.operator_domain + '/action'
+        self.run_label = self.operator_domain + '/run'
         self.runner_label = self.operator_domain + '/runner'
+        self.runner_terminating_label = self.operator_domain + '/runner-terminating'
+        self.subject_label = self.operator_domain + '/subject'
         # Detect if running in development environment and switch to single pod, all-in-one, mode
 
     def __init_domain(self, operator_domain):
@@ -57,9 +61,9 @@ class AnarchyRuntime(object):
             kubernetes.config.load_kube_config()
             kube_config = None
 
-        api_client = kubernetes.client.ApiClient(kube_config)
-        self.core_v1_api = kubernetes.client.CoreV1Api(api_client)
-        self.custom_objects_api = kubernetes.client.CustomObjectsApi(api_client)
+        self.api_client = kubernetes.client.ApiClient(kube_config)
+        self.core_v1_api = kubernetes.client.CoreV1Api(self.api_client)
+        self.custom_objects_api = kubernetes.client.CustomObjectsApi(self.api_client)
 
     def __init_namespace(self, operator_namespace):
         if operator_namespace:
@@ -198,10 +202,11 @@ class AnarchyRuntime(object):
                             active_peer = peerid
                             priority = status['priority']
                     if active_peer and '@{}/'.format(self.pod_name) in active_peer:
-                        operator_logger.info('Became active kopf peer: %s', active_peer)
+                        if not self.is_active:
+                            operator_logger.info('Became active kopf peer: %s', active_peer)
                         self.is_active = True
-                        self.is_active_condition.notify()
                     else:
-                        operator_logger.info('Active kopf peer is: %s', active_peer)
+                        if self.is_active:
+                            operator_logger.info('Active kopf peer is now: %s', active_peer)
                         self.is_active = False
-                        self.is_active_condition.notify()
+                    self.is_active_condition.notify()

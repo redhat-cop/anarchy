@@ -1,10 +1,13 @@
 import copy
+import json
 import kubernetes
 import logging
 import os
 import requests
 import requests.auth
 import tempfile
+import threading
+import time
 
 from anarchyutil import deep_update, random_string
 
@@ -13,7 +16,7 @@ operator_logger = logging.getLogger('operator')
 class AnarchyRunner(object):
     """Represents a pool of runner pods to process for AnarchyGovernors"""
 
-    runners = {}
+    cache = {}
 
     @staticmethod
     def default_runner_definition(runtime):
@@ -57,37 +60,104 @@ class AnarchyRunner(object):
         }
 
     @staticmethod
-    def refresh_all_runner_pods(runtime):
-        for runner in AnarchyRunner.runners.values():
-            runner.refresh_runner_pods(runtime)
+    def get(name):
+        return AnarchyRunner.cache.get(name, None)
+
+    @staticmethod
+    def init(runtime):
+        '''
+        Get initial list of AnarchyRunners.
+
+        This method is used during start-up to ensure that all AnarchyRunner definitions are
+        loaded before processing starts.
+        '''
+        for resource in runtime.custom_objects_api.list_namespaced_custom_object(
+            runtime.operator_domain, 'v1', runtime.operator_namespace, 'anarchyrunners'
+        ).get('items', []):
+            AnarchyRunner.register(resource)
+
+        for pod in runtime.core_v1_api.list_namespaced_pod(
+            runtime.operator_namespace, label_selector=runtime.runner_label
+        ).items:
+            runner_name = pod.metadata.labels[runtime.runner_label]
+            runner = AnarchyRunner.get(runner_name)
+            if runner:
+                runner.pods[pod.metadata.name] = pod
+            else:
+                operator_logger.warning("Init found runner pod %s but no runner named %s", pod.metadata.name, runner_name)
+
+    @staticmethod
+    def manage_runners(runtime):
+        for runner in AnarchyRunner.cache.values():
+            runner.manage(runtime)
 
     @staticmethod
     def register(resource):
-        runner = AnarchyRunner(resource)
-        current_runner = AnarchyRunner.runners.get(runner.name, None)
-        if current_runner:
-            runner.runner_pods = current_runner.runner_pods
-        operator_logger.info("Registered runner %s (%s)", runner.name, runner.resource_version)
-        AnarchyRunner.runners[runner.name] = runner
+        name = resource['metadata']['name']
+        runner = AnarchyRunner.cache.get(name)
+        if runner:
+            runner.refresh_from_resource(resource)
+        else:
+            runner = AnarchyRunner(resource)
+            AnarchyRunner.cache[name] = runner
+            operator_logger.info("Registered runner %s", runner.name)
         return runner
 
     @staticmethod
     def unregister(runner):
-        if isinstance(runner, AnarchyRunner):
-            del AnarchyRunner.runners[runner.name]
-        else:
-            del AnarchyRunner.runners[runner]
+        AnarchyRunner.cache.pop(runner.name if isinstance(runner, AnarchyRunner) else runner, None)
 
     @staticmethod
-    def get(name):
-        return AnarchyRunner.runners.get(name, None)
+    def watch(runtime):
+        '''
+        Watch AnarchyRunners and keep definitions synchronized
+
+        This watch is independent of the kopf watch and is used to keep runner definitions updated
+        even when the pod is not the active peer.
+        '''
+        for event in kubernetes.watch.Watch().stream(
+            runtime.custom_objects_api.list_namespaced_custom_object,
+            runtime.operator_domain, 'v1', runtime.operator_namespace, 'anarchyrunners'
+        ):
+            obj = event.get('object')
+            if event['type'] == 'DELETED':
+                AnarchyRunner.unregister(obj['metadata']['name'])
+            elif obj \
+            and obj.get('apiVersion') == runtime.operator_domain + '/v1' \
+            and obj.get('kind') == 'AnarchyRunner':
+                AnarchyRunner.register(obj)
+
+    @staticmethod
+    def watch_pods(runtime):
+        '''
+        Watch Pods with Anarchy runner label and keep list up to date
+        '''
+        for event in kubernetes.watch.Watch().stream(
+            runtime.core_v1_api.list_namespaced_pod,
+            runtime.operator_namespace, label_selector=runtime.runner_label
+        ):
+            pod = event.get('object')
+            if pod and isinstance(pod, kubernetes.client.V1Pod):
+                runner_name = pod.metadata.labels[runtime.runner_label]
+                if event['type'] == 'DELETED':
+                    runner = AnarchyRunner.get(runner_name)
+                    if runner:
+                        runner.pods.pop(pod.metadata.name, None)
+                else:
+                    runner = AnarchyRunner.get(runner_name)
+                    if runner:
+                        operator_logger.debug('Update AnarchyRunner %s Pod %s', runner.name, pod.metadata.name)
+                        runner.pods[pod.metadata.name] = pod
+                    else:
+                        operator_logger.warning("Watch found runner pod %s but no runner named %s", pod.metadata.name, runner_name)
 
     def __init__(self, resource):
         self.metadata = resource['metadata']
-        self.runner_pods = {}
+        self.pods = {}
         self.spec = resource['spec']
         if not self.spec.get('token'):
             self.spec['token'] = random_string(50)
+        self.lock = threading.Lock()
         self.sanity_check()
 
     def sanity_check(self):
@@ -145,35 +215,52 @@ class AnarchyRunner(object):
         return self.spec['token']
 
     @property
-    def service_account_name(self):
-        return self.spec.get('podTemplate', {}).get('spec', {}).get('serviceAccountName', 'anarchy-runner-' + self.name)
-
-    @property
     def uid(self):
         return self.metadata.get('uid')
 
-    def manage_runner_deployment(self, runtime):
+    def manage(self, runtime):
         '''
-        Manage Deployment for AnarchyRunner pods
+        Manage Pods for AnarchyRunner
         '''
         if runtime.running_all_in_one:
             return
-        self.manage_runner_service_account(runtime)
-        deployment_name = 'anarchy-runner-' + self.name
-        deployment_namespace = self.pod_namespace or runtime.operator_namespace
-        pod_template = self.pod_template.copy()
-        deep_update(pod_template, {
-            'metadata': {
-                'labels': { runtime.runner_label: self.name }
-            },
-            'spec': {}
-        })
-        if not 'serviceAccountName' in pod_template['spec']:
-            pod_template['spec']['serviceAccountName'] = 'anarchy-runner-' + self.name
+
+        with self.lock:
+            # Make sure the runner service account exists
+            self.manage_runner_service_account(runtime)
+            self.manage_runner_pods(runtime)
+
+    def manage_runner_pods(self, runtime):
+        '''
+        Manage Pods for AnarchyRunner
+        '''
+
+        #deployment_name = 'anarchy-runner-' + self.name
+        #deployment_namespace = self.pod_namespace or runtime.operator_namespace
+
+        pod_template = copy.deepcopy(self.pod_template)
+        if 'metadata' not in pod_template:
+            pod_template['metadata'] = {}
+        if 'labels' not in pod_template['metadata']:
+            pod_template['metadata']['labels'] = {}
+        if 'spec' not in pod_template:
+            pod_template['spec'] = {}
+        if 'serviceAccountName' not in pod_template['spec']:
+            pod_template['spec']['serviceAccountName'] = self.service_account_name(runtime)
         if not 'containers' in pod_template['spec']:
             pod_template['spec']['containers'] = [{}]
+        pod_template['metadata']['generateName'] = '{}-runner-{}-'.format(runtime.anarchy_service_name, self.name)
+        pod_template['metadata']['labels'][runtime.runner_label] = self.name
+        pod_template['metadata']['ownerReferences'] = [{
+            'apiVersion': runtime.operator_domain + '/v1',
+            'controller': True,
+            'kind': 'AnarchyRunner',
+            'name': self.name,
+            'uid': self.uid,
+        }]
+
         runner_container = pod_template['spec']['containers'][0]
-        if not 'name' in runner_container:
+        if 'name' not in runner_container:
             runner_container['name'] = 'runner'
         if not runner_container.get('image'):
             image = os.environ.get('RUNNER_IMAGE', '')
@@ -212,60 +299,38 @@ class AnarchyRunner(object):
             }
         ])
 
-        deployment_definition = {
-            'apiVersion': 'apps/v1',
-            'kind': 'Deployment',
-            'metadata': {
-                'name': deployment_name,
-                'namespace': deployment_namespace,
-                'labels': { runtime.runner_label: self.name },
-                'ownerReferences': [{
-                    'apiVersion': runtime.operator_domain + '/v1',
-                    'controller': True,
-                    'kind': 'AnarchyRunner',
-                    'name': self.name,
-                    'uid': self.uid,
-                }]
-            },
-            'spec': {
-                'selector': {
-                    'matchLabels': { runtime.runner_label: self.name }
-                },
-                'template': pod_template
-            }
-        }
-
-        deployment = None
-        try:
-            deployment = runtime.custom_objects_api.get_namespaced_custom_object(
-                'apps', 'v1', deployment_namespace, 'deployments', deployment_name
-            )
-        except kubernetes.client.rest.ApiException as e:
-            if e.status != 404:
-                raise
-
-        if deployment:
-            updated_deployment = copy.deepcopy(deployment)
-            deep_update(updated_deployment, deployment_definition) 
-            if updated_deployment['spec']['replicas'] < self.min_replicas:
-                updated_deployment['spec']['replicas'] = self.min_replicas
-            if updated_deployment['spec']['replicas'] > self.max_replicas:
-                updated_deployment['spec']['replicas'] = self.max_replicas
-            # FIXME - Scale based on queue size
-            if deployment != updated_deployment:
-                runtime.custom_objects_api.replace_namespaced_custom_object(
-                    'apps', 'v1', deployment_namespace,
-                    'deployments', deployment_name, updated_deployment
+        pod_count = 0
+        for name, pod in self.pods.items():
+            pod_dict = runtime.api_client.sanitize_for_serialization(pod)
+            if pod.metadata.labels.get(runtime.runner_terminating_label) == 'true':
+                # Ignore pod marked for termination
+                pass
+            elif pod_dict == deep_update(copy.deepcopy(pod_dict), pod_template):
+                pod_count += 1
+            else:
+                # Pod does not match template, need to terminate pod
+                runtime.core_v1_api.patch_namespaced_pod(
+                    pod.metadata.name, pod.metadata.namespace,
+                    { 'metadata': { 'labels': { runtime.runner_terminating_label: 'true' } } }
                 )
-        else:
-            deployment_definition['spec']['replicas'] = self.min_replicas
-            runtime.custom_objects_api.create_namespaced_custom_object(
-                'apps', 'v1', deployment_namespace, 'deployments', deployment_definition
-            )
+                operator_logger.info('Labeled AnarchyRunner %s runner pod %s for termination', self.name, pod.metadata.name)
+
+        for i in range(self.min_replicas - pod_count):
+            pod = None
+            while pod == None:
+                try:
+                    pod = runtime.core_v1_api.create_namespaced_pod(runtime.operator_namespace, pod_template)
+                    break
+                except kubernetes.client.rest.ApiException as e:
+                    if 'retry after the token is automatically created' in json.loads(e.body).get('message', ''):
+                        time.sleep(1)
+                    else:
+                        raise
+            operator_logger.info("Started runner pod %s for AnarchyRunner %s", pod.metadata.name, self.name)
 
     def manage_runner_service_account(self, runtime):
         """Create service account if not found"""
-        name = self.service_account_name
+        name = self.service_account_name(runtime)
         namespace = self.pod_namespace or runtime.operator_namespace
         try:
             runtime.core_v1_api.read_namespaced_service_account(name, namespace)
@@ -274,27 +339,16 @@ class AnarchyRunner(object):
             if e.status != 404:
                 raise
         runtime.core_v1_api.create_namespaced_service_account(
-            namespace, 
+            namespace,
             kubernetes.client.V1ServiceAccount(
                metadata=kubernetes.client.V1ObjectMeta(name=name)
             )
         )
 
-    def refresh_runner_pods(self, runtime):
-        """Refresh runtime list of AnarchyRunner pods"""
-        missing_runner_pods = set(self.runner_pods.keys())
-        for pod in runtime.core_v1_api.list_namespaced_pod(
-            runtime.operator_namespace, 
-            label_selector = '{}={}'.format(runtime.runner_label, self.name)
-        ).items:
-            if pod.status.phase == 'Running':
-                pod_name = pod.metadata.name
-                missing_runner_pods.discard(pod_name)
-                if pod_name not in self.runner_pods:
-                    self.runner_pods[pod_name] = None
+    def refresh_from_resource(self, resource):
+        self.metadata = resource['metadata']
+        self.spec = resource['spec']
 
-        for pod_name in missing_runner_pods:
-            run = self.runner_pods[pod_name]
-            del self.runner_pods[pod_name]
-            if run:
-                run.handle_lost_runner(pod_name, runtime)
+    def service_account_name(self, runtime):
+        return self.spec.get('podTemplate', {}).get('spec', {}).get('serviceAccountName', runtime.anarchy_service_name + '-runner-' + self.name)
+

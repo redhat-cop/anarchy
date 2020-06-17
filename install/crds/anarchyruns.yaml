@@ -60,7 +60,7 @@ spec:
                   description: Action name from the AnarchyGovernor spec.
                   type: string
                 vars:
-                  description: Processed variables for the action. 
+                  description: Processed variables for the action.
                   type: object
             ansibleGalaxyRequirements:
               description: >-
@@ -80,6 +80,10 @@ spec:
               description: >-
                 Python requirements from the AnarchyGovernor, frozen in time from when this action was scheduled.
               type: string
+            failures:
+              description: >-
+                Count of failures this run has experienced.
+              type: integer
             governor:
               description: >-
                 Reference to the AnarchyGovernor related to this AnarchyRun.
@@ -96,8 +100,12 @@ spec:
                 uid:
                   type: string
                 vars:
-                  description: Processed vars and varSecrets for the governor. 
+                  description: Processed vars and varSecrets for the governor.
                   type: object
+            retryAfter:
+              description: >-
+                UTC timestamp for next retry after failure.
+              type: string
             subject:
               description: >-
                 Reference to the AnarchySubject related to this AnarchyRun.
@@ -114,7 +122,7 @@ spec:
                 uid:
                   type: string
                 vars:
-                  description: Processed vars and varSecrets for the subject. 
+                  description: Processed vars and varSecrets for the subject.
                   type: object
             handler:
               description: >-
@@ -126,7 +134,7 @@ spec:
                     Event or callback handler name.
                   type: string
                 vars:
-                  description: Processed variables for the handler. 
+                  description: Processed variables for the handler.
                   type: object
             tasks:
               description: >-

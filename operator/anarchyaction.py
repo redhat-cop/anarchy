@@ -34,7 +34,7 @@ class AnarchyAction(object):
 
     @staticmethod
     def cache_remove(action):
-        AnarchyAction.cache.pop(action.name, None)
+        AnarchyAction.cache.pop(action.name if isinstance(action, AnarchyAction) else action, None)
 
     @staticmethod
     def cache_update(resource):
@@ -50,21 +50,20 @@ class AnarchyAction(object):
 
     @staticmethod
     def get(name, runtime):
-        # FIXME
-        """Get action by name from cache or get resource"""
-        action = AnarchyAction.cache.get(name, None)
-        if action:
-            action.last_active = time.time()
-            return action
+        operator_logger.debug('Getting AnarchyAction %s', name)
+        resource = AnarchyAction.get_resource_from_api(name, runtime)
+        if resource:
+            subject = AnarchyAction(resource)
+            return subject
+        else:
+            return None
 
+    @staticmethod
+    def get_resource_from_api(name, runtime):
         try:
-            resource = runtime.custom_objects_api.get_namespaced_custom_object(
-                runtime.operator_domain, 'v1', runtime.operator_namespace,
-                'anarchyactions', name
+            return runtime.custom_objects_api.get_namespaced_custom_object(
+                runtime.operator_domain, 'v1', runtime.operator_namespace, 'anarchyactions', name
             )
-            action = AnarchyAction(resource)
-            AnarchyAction.cache_put(action)
-            return action
         except kubernetes.client.rest.ApiException as e:
             if e.status == 404:
                 return None
@@ -80,7 +79,6 @@ class AnarchyAction(object):
                     action.start(runtime)
                 except Exception as e:
                     operator_logger.exception("Error running action %s", action.name)
-
 
     def __init__(self, resource):
         self.metadata = resource['metadata']
@@ -146,6 +144,34 @@ class AnarchyAction(object):
     def uid(self):
         return self.metadata['uid']
 
+    def add_run_to_status(self, anarchy_run, runtime):
+        runtime.custom_objects_api.patch_namespaced_custom_object_status(
+            runtime.operator_domain, 'v1', runtime.operator_namespace, 'anarchyactions', self.name,
+            {
+                'status': {
+                    'runRef': {
+                        'apiVersion': anarchy_run['apiVersion'],
+                        'kind': anarchy_run['kind'],
+                        'name': anarchy_run['metadata']['name'],
+                        'namespace': anarchy_run['metadata']['namespace'],
+                        'uid': anarchy_run['metadata']['uid']
+                    },
+                    'runScheduled': anarchy_run['metadata']['creationTimestamp']
+                }
+            }
+        )
+        resource = runtime.custom_objects_api.patch_namespaced_custom_object(
+            runtime.operator_domain, 'v1', runtime.operator_namespace, 'anarchyactions', self.name,
+            {
+                'metadata': {
+                    'labels': {
+                        runtime.run_label: anarchy_run['metadata']['name']
+                    }
+                }
+            }
+        )
+        self.refresh_from_resource(resource)
+
     def check_callback_token(self, authorization_header):
         if not authorization_header.startswith('Bearer '):
             return false
@@ -153,15 +179,6 @@ class AnarchyAction(object):
 
     def get_subject(self, runtime):
         return AnarchySubject.get(self.subject_name, runtime)
-
-    def patch_status(self, runtime, patch):
-        resource = runtime.custom_objects_api.patch_namespaced_custom_object_status(
-            runtime.operator_domain, 'v1', runtime.operator_namespace, 'anarchyactions',
-            self.name, {"status": patch}
-        )
-        self.metadata = resource['metadata']
-        self.spec = resource['spec']
-        self.status = resource['status']
 
     def process_callback(self, runtime, callback_name, callback_data):
         subject = self.get_subject(runtime)
@@ -181,13 +198,30 @@ class AnarchyAction(object):
                 operator_logger.warning('Name parameter, "%s", not set in callback data', name_parameter)
                 return
 
-        callback_events = self.status.get('callbackEvents', [])
-        callback_events.append({
-            'name': callback_name,
-            'data': callback_data,
-            'timestamp': datetime.utcnow().strftime('%FT%TZ')
-        })
-        self.patch_status(runtime, {'callbackEvents': callback_events})
+        while True:
+            if not self.status:
+                self.status = {}
+            if not 'callbackEvents' in self.status:
+                self.status['callbackEvents'] = []
+
+            self.status['callbackEvents'].append({
+                'name': callback_name,
+                'data': callback_data,
+                'timestamp': datetime.utcnow().strftime('%FT%TZ')
+            })
+
+            try:
+                resource = runtime.custom_objects_api.replace_namespaced_custom_object_status(
+                    runtime.operator_domain, 'v1', self.namespace, 'anarchyactions', self.name, self.to_dict(runtime)
+                )
+                self.refresh_from_resource(resource)
+                break
+            except kubernetes.client.rest.ApiException as e:
+                if e.status == 409:
+                    # Conflict, refresh subject from api and retry
+                    self.refresh_from_api(runtime)
+                else:
+                    raise
 
         handler = action_config.callback_handlers.get(callback_name, None)
         if not handler:
@@ -210,6 +244,18 @@ class AnarchyAction(object):
         }
 
         governor.run_ansible(runtime, handler, run_vars, context, subject, self, callback_name)
+
+    def refresh_from_api(self, runtime):
+        resource = AnarchyAction.get_resource_from_api(self.name, runtime)
+        if resource:
+            self.refresh_from_resource(resource)
+        else:
+            raise Exception('Unable to find AnarchyAction {} to refresh'.format(self.name))
+
+    def refresh_from_resource(self, resource):
+        self.metadata = resource['metadata']
+        self.spec = resource['spec']
+        self.status = resource.get('status')
 
     def set_owner(self, runtime):
         '''
@@ -258,9 +304,9 @@ class AnarchyAction(object):
                 }
             }
         )
-        
 
     def start(self, runtime):
+        AnarchyAction.cache_remove(self)
         subject = self.get_subject(runtime)
         governor = subject.get_governor(runtime)
 
@@ -281,7 +327,14 @@ class AnarchyAction(object):
             'anarchy_action_callback_url': runtime.action_callback_url(self.name)
         }
 
-        self.status = dict(runScheduled=datetime.utcnow().strftime('%FT%TZ'))
-        self.patch_status(runtime, self.status)
         governor.run_ansible(runtime, action_config, run_vars, context, subject, self)
         return True
+
+    def to_dict(self, runtime):
+        return dict(
+            apiVersion = runtime.operator_domain + '/v1',
+            kind = 'AnarchyAction',
+            metadata = self.metadata,
+            spec = self.spec,
+            status = self.status
+        )

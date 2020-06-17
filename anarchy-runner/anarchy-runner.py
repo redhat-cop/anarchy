@@ -96,7 +96,7 @@ class AnarchyRunner(object):
             try:
                 shutil.rmtree(os.path.join(artifacts_dir, subdir))
             except OSError as e:
-                logging.warn('Failed to clean arifacts dir %s/%s: %s', artifacts_dir, subdir, str(e))
+                logging.warning('Failed to clean arifacts dir %s/%s: %s', artifacts_dir, subdir, str(e))
 
     def get_run(self):
         response = requests.get(
@@ -104,7 +104,7 @@ class AnarchyRunner(object):
             headers={'Authorization': 'Bearer {}:{}:{}'.format(self.runner_name, self.pod_name, self.runner_token)}
         )
         if response.status_code != 200:
-            logging.warn('Failed to get run with status {}', response.status_code)
+            logging.warning('Failed to get run with status {}', response.status_code)
             return None
         return response.json()
 

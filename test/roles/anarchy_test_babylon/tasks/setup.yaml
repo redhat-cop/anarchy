@@ -126,7 +126,7 @@
         hostname: "{{ r_get_anarchy_test_babylon_server_route.resources[0].spec.host | b64encode}}"
         user: "{{ anarchy_test_babylon_user | b64encode }}"
         password: "{{ anarchy_test_babylon_password | b64encode }}"
-  
+
 - name: Create test AnarchyGovernor
   k8s:
     state: present
