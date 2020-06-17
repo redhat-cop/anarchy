@@ -33,3 +33,4 @@ sed -i "s|quay.io/redhat-cop/anarchy:.*|quay.io/redhat-cop/anarchy:$VERSION|" de
 git add deploy-template.yaml helm/Chart.yaml
 git commit -m 'Release $VERSION'
 git tag $VERSION
+git push origin $VERSION
