@@ -19,6 +19,8 @@ parameters:
   value: quay.io/redhat-cop/anarchy:v0.7.3
 - name: ANARCHY_IMAGE_PULL_POLICY
   value: IfNotPresent
+- name: ANARCHY_REPLICAS
+  value: '1'
 - name: LOGGING_LEVEL
   description: "Logging level: DEBUG, INFO, WARNING"
   value: INFO
@@ -51,7 +53,7 @@ objects:
   metadata:
     name: ${NAME}
   spec:
-    replicas: 1
+    replicas: ${{ANARCHY_REPLICAS}}
     selector:
       matchLabels:
         name: ${NAME}
