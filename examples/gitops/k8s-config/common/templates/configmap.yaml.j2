@@ -1,9 +1,0 @@
----
-apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: {{ (app_name ~ '-' ~ k8s_config_environment_level) | to_json }}
-data:
-  envlevel: {{ k8s_config_environment_level | to_json }}
-  testvar1: {{ testvar1 | to_json }}
-  testvar2: {{ testvar2 | to_json }}

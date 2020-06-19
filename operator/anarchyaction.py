@@ -122,7 +122,7 @@ class AnarchyAction(object):
 
     @property
     def has_started(self):
-        return True if self.status else False
+        return True if self.status and 'runScheduled' in self.status else False
 
     @property
     def kind(self):

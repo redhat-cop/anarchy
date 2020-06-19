@@ -1,0 +1,44 @@
+---
+image:
+  repository: quay.io/redhat-cop/anarchy
+  pullPolicy: IfNotPresent
+
+envVars: {}
+
+namespace: anarchy-k8s-config
+
+anarchyDeploy: true
+
+imagePullSecrets: []
+nameOverride: ""
+
+# Number of Anarchy replicas for deployment
+replicaCount: 1
+
+serviceAccount:
+  # Specifies whether a service account should be created
+  create: true
+  # The name of the service account to use.
+  # If not set and create is true, a name is generated using the name template
+  name:
+
+service:
+  type: ClusterIP
+  port:
+    api: 5000
+    metrics: 8000
+
+resources: {}
+
+nodeSelector: {}
+
+tolerations: []
+
+affinity: {}
+
+k8s_config:
+  repo: https://github.com/redhat-cop/k8s_config.git
+  version: 0.4.0
+  run_interval: 1h
+
+k8s_cluster_info: {}
