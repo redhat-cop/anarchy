@@ -895,7 +895,9 @@ objects:
               roles:
                 description: Ansible "roles" for the dynamic ansible play.
                 items:
-                  type: object
+                  oneOf:
+                  - type: string
+                  - type: object
                 type: array
               runPostTimestamp:
                 description: Timestamp of when the run result was received from the
