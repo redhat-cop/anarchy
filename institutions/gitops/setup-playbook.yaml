@@ -21,12 +21,6 @@
     set_fact:
       k8s_config:
         run_interval: 1h
-        sources:
-        - name: Anarchy k8s-config institution
-          base_path: institutions/gitops
-          git:
-            repo: https://github.com/redhat-cop/anarchy.git
-            version: master
 
       k8s_cluster_info:
         cluster_domain: >-
