@@ -67,7 +67,7 @@ class AnarchyRun(object):
             runtime.operator_domain, 'v1', runtime.operator_namespace, 'anarchyruns',
             label_selector = '{}!=successful'.format(runtime.runner_label)
         ).get('items', []):
-            anarchy_run = AnarchyRun.register(resource)
+            AnarchyRun.register(resource)
 
     @staticmethod
     def manage_active_runs(runtime):
@@ -198,10 +198,10 @@ class AnarchyRun(object):
         }]
 
         if result['status'] == 'failed':
-            if anarchy_run.failures > 8:
+            if self.failures > 8:
                 retry_delay = timedelta(minutes=30)
             else:
-                retry_delay = timedelta(seconds=5 * 2**anarchy_run.failures)
+                retry_delay = timedelta(seconds=5 * 2**self.failures)
             patch.append({
                 'op': 'add',
                 'path': '/spec/failures',
