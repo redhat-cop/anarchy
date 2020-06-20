@@ -35,7 +35,7 @@ sed -i "s/^version: .*/version: ${VERSION:1}/" helm/Chart.yaml institutions/*/he
 sed -i "s/^appVersion: .*/appVersion: ${VERSION:1}/" helm/Chart.yaml institutions/*/helm/Chart.yaml
 sed -i "s|quay.io/redhat-cop/anarchy:.*|quay.io/redhat-cop/anarchy:$VERSION|" deploy-template.yaml
 
-git add deploy-template.yaml helm/Chart.yaml
+git add deploy-template.yaml helm/Chart.yaml institutions/*/helm/Chart.yaml
 git commit -m "Release $VERSION"
 git tag $VERSION
 git push origin $VERSION
