@@ -9,6 +9,6 @@ roleRef:
   name: {{ .Values.namespace }}
 subjects:
 - kind: ServiceAccount
-  name: {{ include "anarchy.serviceAccountName" . }}
+  name: {{ include "anarchy.serviceAccountName" . }}-runner-default
   namespace: {{ .Values.namespace }}
 {{- end }}
