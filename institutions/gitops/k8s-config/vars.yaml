@@ -1,0 +1,39 @@
+---
+anarchy_version: master
+
+k8s_resources:
+- name: Anarchy install
+  openshift_template:
+    url: https://raw.githubusercontent.com/redhat-cop/anarchy/{{ anarchy_version }}/install-template.yaml
+    
+- namespace: anarchy-k8s-config
+  resources:
+  - name: Anarchy k8s-config deployment
+    helm_template:
+      dir: "institutions/gitops/helm"
+      git:
+        repo: https://github.com/redhat-cop/anarchy.git
+        version: "{{ anarchy_version }}"
+      values:
+        k8s_config: "{{ k8s_config }}"
+        k8s_cluster_info: "{{ k8s_cluster_info }}"
+
+  - name: Anarchy k8s-config autonomous subject
+    when: anarchy_gitops_deploy_autonomous | bool
+    definition:
+      apiVersion: anarchy.gpte.redhat.com/v1
+      kind: AnarchySubject
+      metadata:
+        name: autonomous
+        annotations:
+          description: >-
+            Anarchy k8s_config gitops autonomous self-management
+      spec:
+        governor: gitops
+        vars:
+          anarchy_gitops_deploy_autonomous: true
+          k8s_config_sources:
+          - name: anarchy-k8s-config
+            base_path: institutions/gitops/k8s-config
+            git:
+              repo: https://github.com/redhat-cop/anarchy.git

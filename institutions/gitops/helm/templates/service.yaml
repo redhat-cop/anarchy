@@ -1,0 +1,19 @@
+{{- if .Values.anarchyDeploy -}}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "anarchy.name" . }}
+  labels:
+    {{- include "anarchy.labels" . | nindent 4 }}
+spec:
+  type: {{ .Values.service.type }}
+  ports:
+  {{- range $k, $v := .Values.service.port }}
+  - name: {{ $k }}
+    protocol: TCP
+    port: {{ $v }}
+    targetPort: {{ $v }}
+  {{- end }}
+  selector:
+    {{- include "anarchy.selectorLabels" . | nindent 4 }}
+{{- end }}

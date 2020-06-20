@@ -1,0 +1,88 @@
+---
+apiVersion: template.openshift.io/v1
+kind: Template
+metadata:
+  annotations:
+    description: Anarchy k8s_config
+  name: anarchy-k8s-config
+
+parameters:
+- name: NAMESPACE
+  displayName: Namespace
+  description: Anarchy k8s_config namespace
+  value: anarchy-k8s-config
+
+- name: CONFIG_REPO
+- name: CONFIG_VERSION
+
+- name: K8S_CONFIG_REPO
+  displayName: k8s_config repository
+  description: k8s_config git repository
+  value: https://github.com/redhat-cop/k8s_config.git
+
+- name: K8S_CONFIG_VERSION
+  displayName: k8s_config version
+  description: k8s_config repository version
+  value: 0.3.0
+
+- name: K8S_CONFIG_RUN_INTERVAL
+  displayName: k8s_config run interval
+  description: >-
+    Time interval for running k8s_config, given as a whole number with suffix
+    'h' for hours or 'm' for minutes.
+  value: 1h
+
+objects:
+- apiVersion: anarchy.gpte.redhat.com/v1
+  kind: AnarchyGovernor
+  metadata:
+    name: gitops
+  spec:
+    ansibleGalaxyRequirements:
+      roles:
+      - name: k8s_config
+        src: git+${K8S_CONFIG_REPO}
+        version: ${K8S_CONFIG_VERSION}
+
+    vars:
+      k8s_config_run_interval: 1h
+
+    subjectEventHandlers:
+      create:
+        tasks:
+        - name: Schedule Configure
+          anarchy_schedule_action:
+            action: configure
+      update:
+        tasks:
+        - name: Schedule Configure
+          anarchy_schedule_action:
+            action: configure
+
+    actions:
+      configure:
+        roles:
+        - name: k8s_config roles
+          import_role:
+            name: k8s_config
+
+        - name: Schedule next run
+          anarchy_schedule_action:
+            action: configure
+            after: "{{ k8s_config_run_interval }}"
+
+- apiVersion: anarchy.gpte.redhat.com/v1
+  kind: AnarchySubject
+  metadata:
+    name: main
+  spec:
+    governor: gitops
+    vars:
+      k8s_config_run_interval: ${K8S_CONFIG_RUN_INTERVAL}
+    k8s_config_sources:
+    - name: Main
+      git:
+        accept_hostkey: true
+        repo: "{{ babylon_repo_url }}"
+        version: "{{ babylon_repo_version }}"
+      base_path: openshift/config

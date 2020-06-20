@@ -1,0 +1,7 @@
+---
+apiVersion: v2
+name: anarchy
+description: Anarchy k8s_config
+type: application
+version: 0.7.4
+appVersion: 0.7.4
