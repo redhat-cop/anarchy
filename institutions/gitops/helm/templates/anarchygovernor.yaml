@@ -11,6 +11,8 @@ spec:
       src: git+{{ .Values.k8s_config.repo }}
       version: {{ .Values.k8s_config.version }}
   vars:
+    k8s_config:
+      {{- toYaml .Values.k8s_config | nindent 6 }}
     k8s_cluster_info:
       {{- toYaml .Values.k8s_cluster_info | nindent 6 }}
   subjectEventHandlers:
