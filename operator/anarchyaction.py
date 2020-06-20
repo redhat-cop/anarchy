@@ -20,16 +20,7 @@ class AnarchyAction(object):
     cache = {}
 
     @staticmethod
-    def cache_clean():
-        for action_name in list(AnarchyAction.cache.keys()):
-            action = AnarchyAction.cache[action_name]
-            if time.time() - action.last_active > cache_age_limit \
-            and not action.has_started:
-                del AnarchyAction.cache[action_name]
-
-    @staticmethod
     def cache_put(action):
-        action.last_active = time.time()
         AnarchyAction.cache[action.name] = action
 
     @staticmethod
@@ -72,7 +63,7 @@ class AnarchyAction(object):
 
     @staticmethod
     def start_actions(runtime):
-        for action in AnarchyAction.cache.values():
+        for action in list(AnarchyAction.cache.values()):
             if not action.has_started \
             and action.after_datetime <= datetime.utcnow():
                 try:
