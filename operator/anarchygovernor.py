@@ -102,16 +102,20 @@ class AnarchyGovernor(object):
         name = resource['metadata']['name']
         governor = AnarchyGovernor.cache.get(name)
         if governor:
+            operator_logger.info("Refreshed AnarchyGovernor %s", governor.name)
             governor.refresh_from_resource(resource)
         else:
             governor = AnarchyGovernor(resource)
             AnarchyGovernor.cache[name] = governor
-            operator_logger.info("Registered governor %s", governor.name)
+            operator_logger.info("Registered AnarchyGovernor %s", governor.name)
         return governor
 
     @staticmethod
     def unregister(governor):
-        AnarchyGovernor.cache.pop(governor.name if isinstance(governor, AnarchyGovernor) else governor)
+        name = governor.name if isinstance(governor, AnarchyGovernor) else governor
+        if name in AnarchyGovernor.cache:
+            AnarchyGovernor.cache.pop(name)
+            operator_logger.info("Unregistered AnarchyGovernor %s", name)
 
     @staticmethod
     def watch(runtime):
@@ -126,20 +130,14 @@ class AnarchyGovernor(object):
             runtime.operator_domain, 'v1', runtime.operator_namespace, 'anarchygovernors'
         ):
             obj = event.get('object')
-            if event['type'] == 'DELETED':
-                AnarchyGovernor.unregister(obj['metadata']['name'])
-            elif obj \
-            and obj.get('apiVersion') == runtime.operator_domain + '/v1' \
-            and obj.get('kind') == 'AnarchyGovernor':
-                AnarchyGovernor.register(obj)
+            if obj and obj.get('apiVersion') == runtime.operator_domain + '/v1':
+                if event['type'] in ['ADDED', 'MODIFIED', None]:
+                    AnarchyGovernor.register(obj)
+                elif event['type'] == 'DELETED':
+                    AnarchyGovernor.unregister(obj['metadata']['name'])
 
     def __init__(self, resource):
-        self.metadata = resource['metadata']
-        self.spec = resource['spec']
-        self.set_subject_event_handlers(self.spec.get('subjectEventHandlers',{}))
-        self.actions = {}
-        for action_name, action_spec in self.spec.get('actions', {}).items():
-            self.actions[action_name] = AnarchyGovernor.ActionConfig(action_name, action_spec, self)
+        self.refresh_from_resource(resource)
 
     def __set_actions(self):
         actions = {}
@@ -226,6 +224,10 @@ class AnarchyGovernor(object):
     def refresh_from_resource(self, resource):
         self.metadata = resource['metadata']
         self.spec = resource['spec']
+        self.set_subject_event_handlers(self.spec.get('subjectEventHandlers',{}))
+        self.actions = {}
+        for action_name, action_spec in self.spec.get('actions', {}).items():
+            self.actions[action_name] = AnarchyGovernor.ActionConfig(action_name, action_spec, self)
 
     def run_ansible(self, runtime, run_config, run_vars, context, anarchy_subject, anarchy_action, event_name=None):
         run_spec = {
