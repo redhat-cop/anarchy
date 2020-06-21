@@ -226,23 +226,27 @@
       anarchy_action_callback_url: "{{ anarchy_callback_base_url }}/action/{{ _action.metadata.name }}"
       anarchy_action_name: "{{ _action.metadata.name }}"
 
-
 - name: Create AnarchyAction without ownerReferences
   k8s:
     apply: true
     state: present
-    definition: "{{ lookup('template', 'action.yaml.j2') | from_yaml }}"
-  vars:
-    _name: action-without-owner-references-test
-    _action: configure
-    _subject_name: test-simple-1
+    definition:
+      apiVersion: anarchy.gpte.redhat.com/v1
+      kind: AnarchyAction
+      metadata:
+        name: test-simple-1-set-owner-ref
+        namespace:  "{{ anarchy_namespace }}"
+      spec:
+        action: configure
+        subjectRef:
+          name: test-simple-1
 
 - name: Verify AnarchyAction Without ownerReferences is set
   k8s_info:
     api_version: anarchy.gpte.redhat.com/v1
     kind: AnarchyAction
     namespace: "{{ anarchy_namespace }}"
-    name: action-without-owner-references-test
+    name: test-simple-1-set-owner-ref
   register: r_get_test_simple_configure_action
   vars:
     _action: "{{ r_get_test_simple_configure_action.resources[0] }}"
@@ -253,7 +257,7 @@
   retries: 10
   delay: 5
 
-- name: Validate References for action-without-owner-references-test
+- name: Validate References for test-simple-1-set-owner-ref
   assert:
     that:
     - _action.metadata.labels['anarchy.gpte.redhat.com/action'] == 'configure'
@@ -264,6 +268,55 @@
     - _action.spec.subjectRef.namespace == anarchy_namespace
   vars:
     _action: "{{ r_get_test_simple_configure_action.resources[0] }}"
+
+- name: Create AnarchyAction to test failure recovery
+  k8s:
+    apply: true
+    state: present
+    definition:
+      apiVersion: anarchy.gpte.redhat.com/v1
+      kind: AnarchyAction
+      metadata:
+        name: test-simple-1-fail-first-run
+        namespace:  "{{ anarchy_namespace }}"
+      spec:
+        action: configure
+        subjectRef:
+          name: test-simple-1
+        vars:
+          fail_first_run: true
+
+- name: Get AnarchyAction test-simple-1-fail-first-run
+  k8s_info:
+    api_version: anarchy.gpte.redhat.com/v1
+    kind: AnarchyAction
+    namespace: "{{ anarchy_namespace }}"
+    name: test-simple-1-fail-first-run
+  register: r_get_action
+  vars:
+    _action: "{{ r_get_action.resources[0] }}"
+  failed_when: >-
+    'runRef' not in _action.status | default({})
+  until: r_get_action is success
+  retries: 10
+  delay: 5
+
+- name: Check AnarchyRun for test-simple-1-fail-first-run
+  k8s_info:
+    api_version: anarchy.gpte.redhat.com/v1
+    kind: AnarchyRun
+    namespace: "{{ anarchy_namespace }}"
+    name: "{{ _run_ref.name }}"
+  register: r_get_run
+  vars:
+    _action: "{{ r_get_action.resources[0] }}"
+    _run_ref: "{{ _action.status.runRef }}"
+    _run: "{{ r_get_run.resources[0] }}"
+  failed_when: >-
+    _run.spec.result.status | default('') != 'successful'
+  until: r_get_run is success
+  retries: 20
+  delay: 5
 
 - when: anarchy_test_delete_subjects | bool
   block:

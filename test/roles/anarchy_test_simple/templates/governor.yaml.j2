@@ -45,6 +45,13 @@ spec:
   actions:
     configure:
       tasks:
+      - name: Fail first run
+        fail:
+          msg: Failed first run as requested
+        when:
+        - fail_first_run | default(False) | bool
+        - anarchy_run.spec.failures | default(0) < 1
+
       - name: Print message
         debug:
           msg: Running configure for {{ anarchy_subject_name }}

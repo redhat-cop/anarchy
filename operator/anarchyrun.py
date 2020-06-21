@@ -54,22 +54,6 @@ class AnarchyRun(object):
                 raise
 
     @staticmethod
-    def load_active_runs(runtime):
-        '''
-        Load AnarchyRuns that require processing
-
-        The runner label on AnarchyRuns indicates whether it was currently being
-        processed by the last instance of the operator on shut-down. We collect
-        these jobs and register them with their AnarchySubject.
-        '''
-        AnarchyRun.active_runs = {}
-        for resource in runtime.custom_objects_api.list_namespaced_custom_object(
-            runtime.operator_domain, 'v1', runtime.operator_namespace, 'anarchyruns',
-            label_selector = '{}!=successful'.format(runtime.runner_label)
-        ).get('items', []):
-            AnarchyRun.register(resource)
-
-    @staticmethod
     def manage_active_runs(runtime):
         for name, run in AnarchyRun.active_runs.items():
             run.manage(runtime)
@@ -88,7 +72,7 @@ class AnarchyRun(object):
 
     @staticmethod
     def unregister(run):
-        AnarchyRun.active_runs.pop(run.name if isinstance(run, AnarchyRun) else run)
+        AnarchyRun.active_runs.pop(run.name if isinstance(run, AnarchyRun) else run, None)
 
     def __init__(self, resource):
         self.metadata = resource['metadata']
@@ -163,25 +147,33 @@ class AnarchyRun(object):
         self.post_result({'status': 'lost'}, runner_pod_name, runtime)
 
     def manage(self, runtime):
-        runner_label = self.get_runner_label_value(runtime)
-        if runner_label == 'pending':
+        runner_label_value = self.get_runner_label_value(runtime)
+        if runner_label_value == 'pending':
             pass
-        elif runner_label == 'queued':
+        elif runner_label_value == 'queued':
             pass
-        elif runner_label == 'failed':
+        elif runner_label_value == 'failed':
             if self.retry_after_datetime < datetime.utcnow():
                 self.set_to_pending(runtime)
-        else: # Running, assigned to a runner pod
-            runner = AnarchyRunner.get(runner_label)
-            if not runner:
-                self.handle_lost_runner(runner_label, runtime)
+        elif '.' in runner_label_value: # Running, assigned to a runner pod
+            runner_name, runner_pod_name = runner_label_value.split('.')
+            runner = AnarchyRunner.get(runner_name)
+            if runner:
+                if runner.pods.get(runner_pod_name):
+                    pass # FIXME - Timeout?
+                else:
+                    self.handle_lost_runner(runner_label, runtime)
+            else:
+                operator_logger.warning(
+                    'Unable to find AnarchyRunner %s for AnarchyRun %s', runner_name, self.name
+                )
 
     def post_result(self, result, runner_pod_name, runtime):
         operator_logger.info('Update AnarchyRun %s for %s run', self.name, result['status'])
 
         patch = [{
             'op': 'add',
-            'path': '/metadata/labels/{0}~1runner'.format(runtime.operator_domain),
+            'path': '/metadata/labels/' + runtime.runner_label.replace('/', '~1'),
             'value': 'pending' if result['status'] == 'lost' else result['status']
         },{
             'op': 'add',
@@ -197,7 +189,14 @@ class AnarchyRun(object):
             'value': datetime.utcnow().strftime('%FT%TZ')
         }]
 
-        if result['status'] == 'failed':
+        if result['status'] == 'successful' \
+        and self.metadata.get('labels', {}).get(runtime.active_label, None) != None:
+            AnarchyRun.unregister(self)
+            patch.append({
+                'op': 'remove',
+                'path': '/metadata/labels/' + runtime.active_label.replace('/', '~1')
+            })
+        elif result['status'] == 'failed':
             if self.failures > 8:
                 retry_delay = timedelta(minutes=30)
             else:

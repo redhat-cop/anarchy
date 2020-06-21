@@ -258,11 +258,12 @@ class AnarchyGovernor(object):
         run_spec['vars'] = collected_run_vars
 
         labels = {
-            runtime.operator_domain + '/subject': anarchy_subject.name,
-            runtime.runner_label: 'queued'
+            runtime.active_label: 'true',
+            runtime.runner_label: 'queued',
+            runtime.subject_label: anarchy_subject.name,
         }
         if event_name:
-            labels[runtime.operator_domain + '/event'] = event_name
+            labels[runtime.event_label] = event_name
 
         if anarchy_action:
             run_spec['action'] = {
@@ -276,7 +277,7 @@ class AnarchyGovernor(object):
                 generate_name = '{}-{}-'.format(anarchy_action.name, event_name)
             else:
                 generate_name = anarchy_action.name + '-'
-            labels[runtime.operator_domain + '/action'] = anarchy_action.name
+            labels[runtime.action_label] = anarchy_action.name
             owner_reference = {
                 'apiVersion': runtime.operator_domain + '/v1',
                 'controller': True,

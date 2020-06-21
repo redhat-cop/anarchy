@@ -106,7 +106,7 @@ def handle_subject_timer(body, **_):
     subject.set_active_run_to_pending_from_status(runtime)
 
 @kopf.on.event(runtime.operator_domain, 'v1', 'anarchysubjects')
-def handle_subject_event(event, **_):
+def handle_subject_event(event, logger, **_):
     '''
     Anarchy uses on.event instead of on.delete because Anarchy needs custom
     for removing finalizers. The finalizer will be removed immediately if the
@@ -115,12 +115,11 @@ def handle_subject_event(event, **_):
     the finalizer.
     '''
     obj = event.get('object')
-    if event['type'] in ['ADDED', 'MODIFIED', None] \
-    and obj \
-    and obj.get('apiVersion') == runtime.operator_domain + '/v1':
-        if 'deletionTimestamp' in obj['metadata']:
+    if obj and obj.get('apiVersion') == runtime.operator_domain + '/v1':
+        if event['type'] in ['ADDED', 'MODIFIED', None]:
             subject = AnarchySubject(obj)
-            subject.handle_delete(runtime)
+            if subject.is_pending_delete:
+                subject.handle_delete(runtime)
 
 @kopf.on.create(runtime.operator_domain, 'v1', 'anarchyactions', labels={runtime.run_label: kopf.ABSENT})
 @kopf.on.resume(runtime.operator_domain, 'v1', 'anarchyactions', labels={runtime.run_label: kopf.ABSENT})
@@ -139,6 +138,14 @@ def handle_action_activity(body, logger, **_):
 def handle_action_delete(name, logger, **_):
     AnarchyAction.cache_remove(name)
 
+@kopf.on.event(runtime.operator_domain, 'v1', 'anarchyruns', labels={runtime.active_label: 'true'})
+def handle_run_event(event, logger, **_):
+    obj = event.get('object')
+    if obj and obj.get('apiVersion') == runtime.operator_domain + '/v1':
+        if event['type'] in ['ADDED', 'MODIFIED', None]:
+            AnarchyRun.register(obj)
+        elif event['type'] == 'DELETED':
+            AnarchyRun.unregister(obj['metadata']['name'])
 
 @api.route('/action/<string:anarchy_action_name>', methods=['POST'])
 def action_callback(anarchy_action_name):
@@ -508,15 +515,9 @@ def main_loop():
         elif not AnarchyRunner.get('default'):
             init_default_runner()
 
-        AnarchyRun.load_active_runs(runtime)
-
         while runtime.is_active:
             AnarchyAction.start_actions(runtime)
-
-            try:
-                AnarchyRun.manage_active_runs(runtime)
-            except Exception as e:
-                operator_logger.exception("Error in AnarchyRun.manage!")
+            AnarchyRun.manage_active_runs(runtime)
 
             if runner_check_interval < time.time() - last_runner_check:
                 try:
