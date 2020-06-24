@@ -26,7 +26,8 @@ from anarchyaction import AnarchyAction
 from anarchyrun import AnarchyRun
 
 api = flask.Flask('rest')
-runner_check_interval = 60
+cleanup_interval = int(os.environ.get('CLEANUP_INTERVAL', 10))
+runner_check_interval = int(os.environ.get('RUNNER_CHECK_INTERVAL', 60))
 
 operator_logger = logging.getLogger('operator')
 operator_logger.setLevel(os.environ.get('LOGGING_LEVEL', 'INFO'))
@@ -138,7 +139,7 @@ def handle_action_activity(body, logger, **_):
 def handle_action_delete(name, logger, **_):
     AnarchyAction.cache_remove(name)
 
-@kopf.on.event(runtime.operator_domain, 'v1', 'anarchyruns', labels={runtime.active_label: 'true'})
+@kopf.on.event(runtime.operator_domain, 'v1', 'anarchyruns', labels={runtime.finished_label: kopf.ABSENT})
 def handle_run_event(event, logger, **_):
     obj = event.get('object')
     if obj and obj.get('apiVersion') == runtime.operator_domain + '/v1':
@@ -385,9 +386,9 @@ def post_subject_action(subject_name):
                 "metadata": {
                     "generateName": "%s-%s-" % (anarchy_subject.name, action_name),
                     "labels": {
-                        runtime.operator_domain + '/action': action_name,
-                        runtime.operator_domain + "/subject": anarchy_subject.name,
-                        runtime.operator_domain + "/governor": anarchy_governor.name
+                        runtime.action_label: action_name,
+                        runtime.subject_label: anarchy_subject.name,
+                        runtime.governor_label: anarchy_governor.name
                     },
                     "ownerReferences": [{
                         "apiVersion": runtime.operator_domain + "/v1",
@@ -504,6 +505,7 @@ def watch_peering():
             time.sleep(5)
 
 def main_loop():
+    last_cleanup = 0
     last_runner_check = 0
     while True:
         with runtime.is_active_condition:
@@ -518,6 +520,13 @@ def main_loop():
         while runtime.is_active:
             AnarchyAction.start_actions(runtime)
             AnarchyRun.manage_active_runs(runtime)
+
+            if cleanup_interval < time.time() - last_cleanup:
+                try:
+                    AnarchyGovernor.cleanup(runtime)
+                    last_cleanup = time.time()
+                except:
+                    operator_logger.exception('Error in AnarchyGovernor.cleanup!')
 
             if runner_check_interval < time.time() - last_runner_check:
                 try:

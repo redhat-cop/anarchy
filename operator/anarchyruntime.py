@@ -37,8 +37,9 @@ class AnarchyRuntime(object):
         self.anarchy_runners = {}
         self.last_lost_runner_check = time.time()
         self.action_label = self.operator_domain + '/action'
-        self.active_label = self.operator_domain + '/active'
         self.event_label = self.operator_domain + '/event'
+        self.finished_label = self.operator_domain + '/finished'
+        self.governor_label = self.operator_domain + '/governor'
         self.run_label = self.operator_domain + '/run'
         self.runner_label = self.operator_domain + '/runner'
         self.runner_terminating_label = self.operator_domain + '/runner-terminating'

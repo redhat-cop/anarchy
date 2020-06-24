@@ -41,6 +41,28 @@ spec:
               description: >-
                 AnsibleRunner that should process AnsibleRuns for this governor.
               type: string
+            removeSuccessfulActions:
+              description: >-
+                Specification for removing AnarchyActions after successful completion.
+              type: object
+              properties:
+                after:
+                  description: >-
+                    Time interval specified in units of days (d), hours (h), minutes (m), and seconds (s).
+                    Examples: 1d, 3h, 1h30m, 10s
+                    Default is 7 days. Use string "disabled" to prevent removal.
+                  type: string
+            removeSuccessfulRuns:
+              description: >-
+                Specification for removing AnarchyRuns after successful completion.
+              type: object
+              properties:
+                after:
+                  description: >-
+                    Time interval specified in units of days (d), hours (h), minutes (m), and seconds (s).
+                    Examples: 1d, 3h, 1h30m, 10s
+                    Default is 7 days. Use string "disabled" to prevent removal.
+                  type: string
             ansibleGalaxyRequirements:
               description: >-
                 List of Ansible Galaxy requirements in requirements format with keys "roles" and "collections".

@@ -265,9 +265,9 @@ class AnarchyAction(object):
             {
                 'metadata': {
                     'labels': {
-                        runtime.operator_domain + '/action': self.action,
-                        runtime.operator_domain + '/governor': governor.name,
-                        runtime.operator_domain + '/subject': subject.name,
+                        runtime.action_label: self.action,
+                        runtime.governor_label: governor.name,
+                        runtime.subject_label: subject.name,
                     },
                     'ownerReferences': [{
                         'apiVersion': runtime.operator_domain + '/v1',

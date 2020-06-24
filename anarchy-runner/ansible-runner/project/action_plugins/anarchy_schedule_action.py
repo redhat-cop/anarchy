@@ -3,7 +3,7 @@
 # Copyright: (c) 2019, Johnathan Kupferer <jkupfere@redhat.com>
 # GNU General Public License v3.0+ (see COPYING or https://www.gnu.org/licenses/gpl-3.0.txt)
 
-import datetime
+from datetime import datetime, timedelta
 import os
 import re
 import requests
@@ -11,24 +11,23 @@ import requests
 from ansible.plugins.action import ActionBase
 
 datetime_re = re.compile(r'^\d\d\d\d-\d\d-\d\dT\d\d:\d\d:\d\dZ$')
-time_interval_re = re.compile(r'^\d+[dhms]?$')
 
-def time_interval_to_seconds(interval):
+def parse_time_interval(interval):
     if isinstance(interval, int):
-        return interval
-    if isinstance(interval, str):
-        if interval.endswith('s'):
-            return int(interval[:-1])
-        elif interval.endswith('m'):
-            return int(interval[:-1]) * 60
-        elif interval.endswith('h'):
-            return int(interval[:-1]) * 3600
-        elif interval.endswith('d'):
-            return int(interval[:-1]) * 86400
+        return timedelta(seconds=interval)
+    if isinstance(interval, str) \
+    and interval != '':
+        m = re.match(r'(?:(\d+)d)?(?:(\d+)h)?(?:(\d+)m)?(?:(\d+)s?)?$', interval)
+        if m:
+            return timedelta(
+                days=int(m.group(1)),
+                hours=int(m.group(2)),
+                minutes=int(m.group(3)),
+                seconds=int(m.group(4))
+            )
         else:
-            int(interval)
-    else:
-        raise Exception("Invalid type for time interval, %s, must be int or str" % (type(interval).__name__))
+            return None
+    return None
 
 class ActionModule(ActionBase):
     def run(self, tmp=None, task_vars=None, **_):
@@ -44,21 +43,20 @@ class ActionModule(ActionBase):
         after = module_args.get('after', None)
         cancel = module_args.get('cancel', [])
 
-        if isinstance(after, datetime.datetime):
+        if isinstance(after, datetime):
             after = after.strftime('%FT%TZ')
         elif not after:
-            after = datetime.datetime.utcnow().strftime('%FT%TZ')
-        elif time_interval_re.match(after):
-            after = (
-                datetime.datetime.utcnow() +
-                datetime.timedelta(0, time_interval_to_seconds(after))
-            ).strftime('%FT%TZ')
+            after = datetime.utcnow().strftime('%FT%TZ')
         elif datetime_re.match(after):
             pass
         else:
-            result['failed'] = True
-            result['message'] = 'Invalid value for `after`: {}'.format(after)
-            return result
+            interval = parse_time_interval(after)
+            if interval:
+                after = (datetime.utcnow() + interval).strftime('%FT%TZ')
+            else:
+                result['failed'] = True
+                result['message'] = 'Invalid value for `after`: {}'.format(after)
+                return result
 
         response = requests.post(
             anarchy_url + '/run/subject/' + anarchy_subject_name + '/actions',

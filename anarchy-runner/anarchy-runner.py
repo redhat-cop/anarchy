@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 
 from base64 import b64encode
-from datetime import datetime, timedelta
+from datetime import datetime
 import ansible_runner
 import copy
 import hashlib

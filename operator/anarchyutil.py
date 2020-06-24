@@ -1,4 +1,6 @@
+from datetime import datetime, timedelta
 import random
+import re
 import string
 
 def deep_update(target, update):
@@ -37,6 +39,23 @@ def deep_update_list(target, update):
                 target[i] = v
         else:
             target.append(v)
+
+def parse_time_interval(interval):
+    if isinstance(interval, int):
+        return timedelta(seconds=interval)
+    if isinstance(interval, str) \
+    and interval != '':
+        m = re.match(r'(?:(\d+)d)?(?:(\d+)h)?(?:(\d+)m)?(?:(\d+)s?)?$', interval)
+        if m:
+            return timedelta(
+                days=int(m.group(1) or 0),
+                hours=int(m.group(2) or 0),
+                minutes=int(m.group(3) or 0),
+                seconds=int(m.group(4) or 0)
+            )
+        else:
+            return None
+    return None
 
 def random_string(length=8, character_set=string.ascii_lowercase + string.digits):
     return ''.join(random.choice(character_set) for i in range(length))

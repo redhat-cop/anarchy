@@ -1,3 +1,5 @@
+from anarchyutil import parse_time_interval
+from datetime import datetime, timedelta
 import copy
 import jinja2
 import json
@@ -79,6 +81,12 @@ class AnarchyGovernor(object):
 
     # AnarchyGovernor cache
     cache = {}
+
+    @staticmethod
+    def cleanup(runtime):
+        for governor in list(AnarchyGovernor.cache.values()):
+            governor.cleanup_actions(runtime)
+            governor.cleanup_runs(runtime)
 
     @staticmethod
     def get(name):
@@ -189,6 +197,22 @@ class AnarchyGovernor(object):
         return self.spec.get('pythonRequirements', None)
 
     @property
+    def remove_successful_actions_after(self):
+        time_interval = self.spec.get('removeSuccessfulActions', {}).get('after')
+        if time_interval:
+            return parse_time_interval(time_interval)
+        else:
+            return timedelta(days=7)
+
+    @property
+    def remove_successful_runs_after(self):
+        time_interval = self.spec.get('removeSuccessfulRuns', {}).get('after')
+        if time_interval:
+            return parse_time_interval(time_interval)
+        else:
+            return timedelta(days=7)
+
+    @property
     def resource_version(self):
         return self.metadata['resourceVersion']
 
@@ -203,6 +227,67 @@ class AnarchyGovernor(object):
     @property
     def var_secrets(self):
         return self.spec.get('varSecrets', [])
+
+    def cleanup_actions(self, runtime):
+        time_interval = self.remove_successful_actions_after
+        if not isinstance(time_interval, timedelta):
+            return
+        for action_resource in runtime.custom_objects_api.list_namespaced_custom_object(
+            runtime.operator_domain, 'v1', runtime.operator_namespace, 'anarchyactions',
+            label_selector='{}={},{}'.format(runtime.governor_label, self.name, runtime.run_label)
+        ).get('items', []):
+            action_name = action_resource['metadata']['name']
+            run_name = action_resource.get('status', {}).get('runRef', {}).get('name')
+            run_scheduled_timestamp = action_resource.get('status', {}).get('runScheduled')
+            if not run_name or not run_scheduled_timestamp:
+                operator_logger.warning(
+                    'AnarchyAction %s has label %s but status does not have runRef or runScheduled',
+                    action_name, runtime.run_label
+                )
+                continue
+
+            run_scheduled_datetime = datetime.strptime(run_scheduled_timestamp, '%Y-%m-%dT%H:%M:%SZ')
+
+            # If run has not be scheduled longer ago than the interval then do not delete
+            if run_scheduled_datetime + time_interval > datetime.utcnow():
+                continue
+
+            try:
+                run_resource = runtime.custom_objects_api.get_namespaced_custom_object(
+                    runtime.operator_domain, 'v1', runtime.operator_namespace, 'anarchyruns', run_name
+                )
+                # If run has not posted a successful result longer ago than the interval then do not delete
+                if run_resource['metadata']['labels'][runtime.runner_label] != 'successful':
+                    continue
+
+                # If run has not posted a result longer ago than the interval then do not delete
+                run_post_datetime = datetime.strptime(run_resource['spec']['runPostTimestamp'], '%Y-%m-%dT%H:%M:%SZ')
+                if run_post_datetime + time_interval > datetime.utcnow():
+                    continue
+            except:
+                # If run is already deleted then action may be deleted
+                if e.status != 404:
+                    raise
+
+            runtime.custom_objects_api.delete_namespaced_custom_object(
+                runtime.operator_domain, 'v1', runtime.operator_namespace, 'anarchyactions', action_name
+            )
+
+    def cleanup_runs(self, runtime):
+        time_interval = self.remove_successful_runs_after
+        if not isinstance(time_interval, timedelta):
+            return
+        for run_resource in runtime.custom_objects_api.list_namespaced_custom_object(
+            runtime.operator_domain, 'v1', runtime.operator_namespace, 'anarchyruns',
+            label_selector='{}={},{}=successful'.format(runtime.governor_label, self.name, runtime.runner_label)
+        ).get('items', []):
+            run_name = run_resource['metadata']['name']
+            # If run has not posted a result longer ago than the interval then do not delete
+            run_post_datetime = datetime.strptime(run_resource['spec']['runPostTimestamp'], '%Y-%m-%dT%H:%M:%SZ')
+            if run_post_datetime + time_interval < datetime.utcnow():
+                runtime.custom_objects_api.delete_namespaced_custom_object(
+                    runtime.operator_domain, 'v1', runtime.operator_namespace, 'anarchyruns', run_name
+                )
 
     def get_parameters(self, runtime, api, anarchy_subject, action_config):
         parameters = {}
@@ -258,7 +343,7 @@ class AnarchyGovernor(object):
         run_spec['vars'] = collected_run_vars
 
         labels = {
-            runtime.active_label: 'true',
+            runtime.governor_label: self.name,
             runtime.runner_label: 'queued',
             runtime.subject_label: anarchy_subject.name,
         }

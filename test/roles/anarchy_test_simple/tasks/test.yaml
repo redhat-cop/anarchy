@@ -269,6 +269,76 @@
   vars:
     _action: "{{ r_get_test_simple_configure_action.resources[0] }}"
 
+- name: Create AnarchyAction to test scheduling
+  k8s:
+    apply: true
+    state: present
+    definition:
+      apiVersion: anarchy.gpte.redhat.com/v1
+      kind: AnarchyAction
+      metadata:
+        name: test-simple-1-future-execution
+        namespace:  "{{ anarchy_namespace }}"
+      spec:
+        action: configure
+        after: "{{ '10s' | anarchy_after_timestamp }}"
+        subjectRef:
+          name: test-simple-1
+        vars:
+          fail_first_run: true
+
+- name: Pause for AnarchyAction initial handling
+  pause:
+    seconds: 5
+
+- name: Get AnarchyAction test-simple-1-future-execution before run
+  k8s_info:
+    api_version: anarchy.gpte.redhat.com/v1
+    kind: AnarchyAction
+    namespace: "{{ anarchy_namespace }}"
+    name: test-simple-1-future-execution
+  register: r_get_action
+  vars:
+    _action: "{{ r_get_action.resources[0] }}"
+  failed_when: >-
+    'ownerReferences' not in _action.metadata | default({}) or
+    'runRef' in _action.status | default({})
+  until: r_get_action is success
+  retries: 10
+  delay: 5
+
+- name: Wait for AnarchyAction test-simple-1-future-execution run
+  k8s_info:
+    api_version: anarchy.gpte.redhat.com/v1
+    kind: AnarchyAction
+    namespace: "{{ anarchy_namespace }}"
+    name: test-simple-1-future-execution
+  register: r_get_action
+  vars:
+    _action: "{{ r_get_action.resources[0] }}"
+  failed_when: >-
+    'runRef' not in _action.status | default({})
+  until: r_get_action is success
+  retries: 20
+  delay: 5
+
+- name: Check AnarchyRun for test-simple-1-future-execution
+  k8s_info:
+    api_version: anarchy.gpte.redhat.com/v1
+    kind: AnarchyRun
+    namespace: "{{ anarchy_namespace }}"
+    name: "{{ _run_ref.name }}"
+  register: r_get_run
+  vars:
+    _action: "{{ r_get_action.resources[0] }}"
+    _run_ref: "{{ _action.status.runRef }}"
+    _run: "{{ r_get_run.resources[0] }}"
+  failed_when: >-
+    _run.spec.result.status | default('') != 'successful'
+  until: r_get_run is success
+  retries: 10
+  delay: 5
+
 - name: Create AnarchyAction to test failure recovery
   k8s:
     apply: true

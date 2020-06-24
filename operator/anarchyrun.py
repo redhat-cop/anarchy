@@ -142,7 +142,7 @@ class AnarchyRun(object):
     def handle_lost_runner(self, runner_pod_name, runtime):
         """Notified that a runner has been lost, reset AnarchyRun to pending"""
         operator_logger.warning(
-            'Resetting AnarchyRun %s to lost', self.name
+            'Handling AnarchyRun %s lost runner %s', self.name, runner_pod_name
         )
         self.post_result({'status': 'lost'}, runner_pod_name, runtime)
 
@@ -162,7 +162,7 @@ class AnarchyRun(object):
                 if runner.pods.get(runner_pod_name):
                     pass # FIXME - Timeout?
                 else:
-                    self.handle_lost_runner(runner_label, runtime)
+                    self.handle_lost_runner(runtime.runner_label, runtime)
             else:
                 operator_logger.warning(
                     'Unable to find AnarchyRunner %s for AnarchyRun %s', runner_name, self.name
@@ -189,13 +189,13 @@ class AnarchyRun(object):
             'value': datetime.utcnow().strftime('%FT%TZ')
         }]
 
-        if result['status'] == 'successful' \
-        and self.metadata.get('labels', {}).get(runtime.active_label, None) != None:
-            AnarchyRun.unregister(self)
+        if result['status'] == 'successful':
             patch.append({
-                'op': 'remove',
-                'path': '/metadata/labels/' + runtime.active_label.replace('/', '~1')
+                'op': 'add',
+                'path': '/metadata/labels/' + runtime.finished_label.replace('/', '~1'),
+                'value': 'true',
             })
+
         elif result['status'] == 'failed':
             if self.failures > 8:
                 retry_delay = timedelta(minutes=30)
