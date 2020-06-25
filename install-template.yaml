@@ -320,6 +320,26 @@ objects:
                   environment. Format should be python requirements.txt style such
                   as produced by "pip freeze".
                 type: string
+              removeSuccessfulActions:
+                description: Specification for removing AnarchyActions after successful
+                  completion.
+                properties:
+                  after:
+                    description: 'Time interval specified in units of days (d), hours
+                      (h), minutes (m), and seconds (s). Examples: 1d, 3h, 1h30m,
+                      10s Default is 7 days. Use string "disabled" to prevent removal.'
+                    type: string
+                type: object
+              removeSuccessfulRuns:
+                description: Specification for removing AnarchyRuns after successful
+                  completion.
+                properties:
+                  after:
+                    description: 'Time interval specified in units of days (d), hours
+                      (h), minutes (m), and seconds (s). Examples: 1d, 3h, 1h30m,
+                      10s Default is 7 days. Use string "disabled" to prevent removal.'
+                    type: string
+                type: object
               runner:
                 description: AnsibleRunner that should process AnsibleRuns for this
                   governor.
