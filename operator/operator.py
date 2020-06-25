@@ -26,7 +26,7 @@ from anarchyaction import AnarchyAction
 from anarchyrun import AnarchyRun
 
 api = flask.Flask('rest')
-cleanup_interval = int(os.environ.get('CLEANUP_INTERVAL', 10))
+cleanup_interval = int(os.environ.get('CLEANUP_INTERVAL', 300))
 runner_check_interval = int(os.environ.get('RUNNER_CHECK_INTERVAL', 60))
 
 operator_logger = logging.getLogger('operator')
