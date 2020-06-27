@@ -19,7 +19,7 @@ k8s_resources:
         k8s_cluster_info: "{{ k8s_cluster_info }}"
 
   - name: Anarchy k8s-config autonomous subject
-    when: anarchy_gitops_deploy_autonomous | bool
+    when: anarchy_gitops_deploy_autonomous | default(true) | bool
     definition:
       apiVersion: anarchy.gpte.redhat.com/v1
       kind: AnarchySubject
