@@ -20,10 +20,10 @@ def parse_time_interval(interval):
         m = re.match(r'(?:(\d+)d)?(?:(\d+)h)?(?:(\d+)m)?(?:(\d+)s?)?$', interval)
         if m:
             return timedelta(
-                days=int(m.group(1)),
-                hours=int(m.group(2)),
-                minutes=int(m.group(3)),
-                seconds=int(m.group(4))
+                days=int(m.group(1) or 0),
+                hours=int(m.group(2) or 0),
+                minutes=int(m.group(3) or 0),
+                seconds=int(m.group(4) or 0)
             )
         else:
             return None
