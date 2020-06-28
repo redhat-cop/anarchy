@@ -28,8 +28,29 @@ spec:
           action: configure
   actions:
     configure:
+      pre_tasks:
+      - name: Get OpenShift API server information
+        k8s_info:
+          api_version: config.openshift.io/v1
+          kind: ClusterOperator
+          name: openshift-apiserver
+        register: _k8s_info_cluster_operator_openshift_apiserver
+
+      - name: Set openshift_api_version and openshift_api_minor_version
+        set_fact:
+          openshift_api_minor_version: >-
+            {{ _k8s_info_cluster_operator_openshift_apiserver.resources[0]
+             | json_query("status.versions[?name=='openshift-apiserver']|[0].version")
+             | regex_replace("\.\d+$", "")
+            }}
+          openshift_api_version: >-
+            {{ _k8s_info_cluster_operator_openshift_apiserver.resources[0]
+             | json_query("status.versions[?name=='openshift-apiserver']|[0].version")
+            }}
+
       roles:
       - k8s_config
+
       tasks:
       - name: Schedule next run
         anarchy_schedule_action:
