@@ -46,16 +46,16 @@ spec:
       - name: Set openshift_api_version, openshift_api_minor_version, and openshift_version_channel
         set_fact:
           openshift_api_minor_version: >-
-            {{ _k8s_info_cluster_operator_openshift_apiserver.resources[0]
+            {{ "{{" }} _k8s_info_cluster_operator_openshift_apiserver.resources[0]
              | json_query("status.versions[?name=='openshift-apiserver']|[0].version")
              | regex_replace("\.\d+$", "")
             }}
           openshift_api_version: >-
-            {{ _k8s_info_cluster_operator_openshift_apiserver.resources[0]
+            {{ "{{" }} _k8s_info_cluster_operator_openshift_apiserver.resources[0]
              | json_query("status.versions[?name=='openshift-apiserver']|[0].version")
             }}
           openshift_version_channel: >-
-            {{ _k8s_info_cluster_version.resources[0].spec.channel }}
+            {{ "{{" }} _k8s_info_cluster_version.resources[0].spec.channel }}
 
       roles:
       - k8s_config

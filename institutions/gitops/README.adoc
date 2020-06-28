@@ -1,0 +1,50 @@
+= Anarchy GitOps with k8s_config
+
+== Setup
+
+The Playbook `setup-playbook.yaml` is provided as reference.
+It may be used directly or as reference for creating a customized setup playbook.
+The variable `set_k8s_cluster_info` can be used to add extra properties to `k8s_cluster_info` described below.
+
+The variable `k8s_config` can be used to set information about how to configure the use of the https://github.com/redhat-cop/k8s_config[`k8s_config` ansible role].
+This variable may be set as a dictionary the following keys:
+
+[options="header",cols="1,4"]
+|=======================
+|Name
+|Description
+
+|`repo`
+| Git repository source for `k8s_config`. Default `https://github.com/redhat-cop/k8s_config.git`
+
+|`run_interval`
+| Run interval for configuration. Defaults to `1h`
+
+|`version`
+| Release tag of `k8s_config` for installing from git.
+Default `0.4.1`
+|=======================
+
+== Variables
+
+[options="header",cols="1,4"]
+|=======================
+|Name
+|Description
+
+|`anarchy_gitops_deploy_autonomous`
+| Boolean variable to determine if the Anarchy gitops configuration should be configured to be self-managing.
+
+|`k8s_cluster_info`
+| Cluster information set during initial setup.
+If using the provided `setup-playbook.yaml` this will contain `cluster_domain`, `cluster_id`, and `cluster_ingress_domain`.
+
+|`openshift_api_minor_version`
+| OpenShift cluster API minor version. Ex: "4.4"
+
+|`openshift_api_version`
+| OpenShift cluster API version. Ex: "4.4.9"
+
+|`openshift_version_channel`
+| OpenShift version configuration channel. Ex: "stable-4.4"
+|=======================
