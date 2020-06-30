@@ -38,7 +38,7 @@ affinity: {}
 
 k8s_config:
   repo: https://github.com/redhat-cop/k8s_config.git
-  version: 0.4.1
+  version: v0.4.3
   run_interval: 1h
 
 k8s_cluster_info: {}
