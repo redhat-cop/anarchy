@@ -16,7 +16,7 @@ parameters:
   displayName: Anarchy operator CRD domain
   value: anarchy.gpte.redhat.com
 - name: ANARCHY_IMAGE
-  value: quay.io/redhat-cop/anarchy:v0.8.3
+  value: quay.io/redhat-cop/anarchy:v0.8.4
 - name: ANARCHY_IMAGE_PULL_POLICY
   value: IfNotPresent
 - name: ANARCHY_REPLICAS
