@@ -135,9 +135,12 @@ def handle_action_activity(body, logger, **_):
         else:
             AnarchyAction.cache_put(action)
 
-@kopf.on.delete(runtime.operator_domain, 'v1', 'anarchyactions', labels={runtime.run_label: kopf.ABSENT}, optional=True)
-def handle_action_delete(name, logger, **_):
-    AnarchyAction.cache_remove(name)
+@kopf.on.event(runtime.operator_domain, 'v1', 'anarchyactions', labels={runtime.run_label: kopf.ABSENT})
+def handle_action_event(event, logger, **_):
+    obj = event.get('object')
+    if obj and obj.get('apiVersion') == runtime.operator_domain + '/v1':
+        if event['type'] == 'DELETED':
+            AnarchyAction.cache_remove(obj['metadata']['name'])
 
 @kopf.on.event(runtime.operator_domain, 'v1', 'anarchyruns', labels={runtime.finished_label: kopf.ABSENT})
 def handle_run_event(event, logger, **_):

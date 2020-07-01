@@ -136,32 +136,37 @@ class AnarchyAction(object):
         return self.metadata['uid']
 
     def add_run_to_status(self, anarchy_run, runtime):
-        runtime.custom_objects_api.patch_namespaced_custom_object_status(
-            runtime.operator_domain, 'v1', runtime.operator_namespace, 'anarchyactions', self.name,
-            {
-                'status': {
-                    'runRef': {
-                        'apiVersion': anarchy_run['apiVersion'],
-                        'kind': anarchy_run['kind'],
-                        'name': anarchy_run['metadata']['name'],
-                        'namespace': anarchy_run['metadata']['namespace'],
-                        'uid': anarchy_run['metadata']['uid']
-                    },
-                    'runScheduled': anarchy_run['metadata']['creationTimestamp']
-                }
-            }
-        )
-        resource = runtime.custom_objects_api.patch_namespaced_custom_object(
-            runtime.operator_domain, 'v1', runtime.operator_namespace, 'anarchyactions', self.name,
-            {
-                'metadata': {
-                    'labels': {
-                        runtime.run_label: anarchy_run['metadata']['name']
+        try:
+            runtime.custom_objects_api.patch_namespaced_custom_object_status(
+                runtime.operator_domain, 'v1', runtime.operator_namespace, 'anarchyactions', self.name,
+                {
+                    'status': {
+                        'runRef': {
+                            'apiVersion': anarchy_run['apiVersion'],
+                            'kind': anarchy_run['kind'],
+                            'name': anarchy_run['metadata']['name'],
+                            'namespace': anarchy_run['metadata']['namespace'],
+                            'uid': anarchy_run['metadata']['uid']
+                        },
+                        'runScheduled': anarchy_run['metadata']['creationTimestamp']
                     }
                 }
-            }
-        )
-        self.refresh_from_resource(resource)
+            )
+            resource = runtime.custom_objects_api.patch_namespaced_custom_object(
+                runtime.operator_domain, 'v1', runtime.operator_namespace, 'anarchyactions', self.name,
+                {
+                    'metadata': {
+                        'labels': {
+                            runtime.run_label: anarchy_run['metadata']['name']
+                        }
+                    }
+                }
+            )
+            self.refresh_from_resource(resource)
+        except kubernetes.client.rest.ApiException as e:
+            # If error is 404, not found, then subject or action must have been deleted
+            if e.status != 404:
+                raise
 
     def check_callback_token(self, authorization_header):
         if not authorization_header.startswith('Bearer '):
