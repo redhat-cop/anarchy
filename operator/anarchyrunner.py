@@ -137,8 +137,11 @@ class AnarchyRunner(object):
             runtime.operator_namespace, label_selector=runtime.runner_label
         ):
             pod = event.get('object')
-            if pod and isinstance(pod, kubernetes.client.V1Pod):
+            if pod and isinstance(pod, kubernetes.client.V1Pod) \
+            and pod.metadata.labels:
                 runner_name = pod.metadata.labels[runtime.runner_label]
+                if not runner_name:
+                    continue
                 if event['type'] == 'DELETED':
                     runner = AnarchyRunner.get(runner_name)
                     if runner:
