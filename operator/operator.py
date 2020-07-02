@@ -49,12 +49,12 @@ def init_default_runner():
     """
     try:
         runner = runtime.custom_objects_api.get_namespaced_custom_object(
-            runtime.operator_domain, 'v1', runtime.operator_namespace, 'anarchyrunners', 'default'
+            runtime.operator_domain, runtime.api_version, runtime.operator_namespace, 'anarchyrunners', 'default'
         )
     except kubernetes.client.rest.ApiException as e:
         if e.status == 404:
             runner = runtime.custom_objects_api.create_namespaced_custom_object(
-                runtime.operator_domain, 'v1', runtime.operator_namespace, 'anarchyrunners',
+                runtime.operator_domain, runtime.api_version, runtime.operator_namespace, 'anarchyrunners',
                 AnarchyRunner.default_runner_definition(runtime)
             )
         else:
@@ -75,15 +75,15 @@ def start_runner_process():
     env['RUNNER_TOKEN'] = default_runner.runner_token
     subprocess.Popen(['/opt/app-root/src/.s2i/bin/run'], env=env)
 
-@kopf.on.create(runtime.operator_domain, 'v1', 'anarchyrunners')
-@kopf.on.resume(runtime.operator_domain, 'v1', 'anarchyrunners')
-@kopf.on.update(runtime.operator_domain, 'v1', 'anarchyrunners')
-@kopf.timer(runtime.operator_domain, 'v1', 'anarchyrunners', idle=60, interval=60)
+@kopf.on.create(runtime.operator_domain, runtime.api_version, 'anarchyrunners')
+@kopf.on.resume(runtime.operator_domain, runtime.api_version, 'anarchyrunners')
+@kopf.on.update(runtime.operator_domain, runtime.api_version, 'anarchyrunners')
+@kopf.timer(runtime.operator_domain, runtime.api_version, 'anarchyrunners', idle=60, interval=60)
 def handle_runner_activity(body, **_):
     if not runtime.running_all_in_one:
         AnarchyRunner.register(body).manage(runtime)
 
-@kopf.on.create(runtime.operator_domain, 'v1', 'anarchysubjects')
+@kopf.on.create(runtime.operator_domain, runtime.api_version, 'anarchysubjects')
 def handle_subject_create(body, **_):
     try:
         subject = AnarchySubject(body)
@@ -91,7 +91,7 @@ def handle_subject_create(body, **_):
     except AssertionError as e:
         operator_logger.warning('AnarchySubject %s invalid: %s', body['metadata']['name'], e)
 
-@kopf.on.update(runtime.operator_domain, 'v1', 'anarchysubjects')
+@kopf.on.update(runtime.operator_domain, runtime.api_version, 'anarchysubjects')
 def handle_subject_update(body, old, new, **_):
     try:
         subject = AnarchySubject(body)
@@ -100,13 +100,12 @@ def handle_subject_update(body, old, new, **_):
     except AssertionError as e:
         operator_logger.warning('AnarchySubject %s invalid: %s', body['metadata']['name'], e)
 
-# FIXME - Change Timing
-@kopf.timer(runtime.operator_domain, 'v1', 'anarchysubjects', idle=60, interval=60)
+@kopf.timer(runtime.operator_domain, runtime.api_version, 'anarchysubjects', idle=60, interval=60)
 def handle_subject_timer(body, **_):
     subject = AnarchySubject(body)
     subject.set_active_run_to_pending_from_status(runtime)
 
-@kopf.on.event(runtime.operator_domain, 'v1', 'anarchysubjects')
+@kopf.on.event(runtime.operator_domain, runtime.api_version, 'anarchysubjects')
 def handle_subject_event(event, logger, **_):
     '''
     Anarchy uses on.event instead of on.delete because Anarchy needs custom
@@ -116,15 +115,15 @@ def handle_subject_event(event, logger, **_):
     the finalizer.
     '''
     obj = event.get('object')
-    if obj and obj.get('apiVersion') == runtime.operator_domain + '/v1':
+    if obj and obj.get('apiVersion') == runtime.api_group_version:
         if event['type'] in ['ADDED', 'MODIFIED', None]:
             subject = AnarchySubject(obj)
             if subject.is_pending_delete:
                 subject.handle_delete(runtime)
 
-@kopf.on.create(runtime.operator_domain, 'v1', 'anarchyactions', labels={runtime.run_label: kopf.ABSENT})
-@kopf.on.resume(runtime.operator_domain, 'v1', 'anarchyactions', labels={runtime.run_label: kopf.ABSENT})
-@kopf.on.update(runtime.operator_domain, 'v1', 'anarchyactions', labels={runtime.run_label: kopf.ABSENT})
+@kopf.on.create(runtime.operator_domain, runtime.api_version, 'anarchyactions', labels={runtime.run_label: kopf.ABSENT})
+@kopf.on.resume(runtime.operator_domain, runtime.api_version, 'anarchyactions', labels={runtime.run_label: kopf.ABSENT})
+@kopf.on.update(runtime.operator_domain, runtime.api_version, 'anarchyactions', labels={runtime.run_label: kopf.ABSENT})
 def handle_action_activity(body, logger, **_):
     action = AnarchyAction(body)
     if not action.has_owner:
@@ -135,17 +134,17 @@ def handle_action_activity(body, logger, **_):
         else:
             AnarchyAction.cache_put(action)
 
-@kopf.on.event(runtime.operator_domain, 'v1', 'anarchyactions', labels={runtime.run_label: kopf.ABSENT})
+@kopf.on.event(runtime.operator_domain, runtime.api_version, 'anarchyactions', labels={runtime.run_label: kopf.ABSENT})
 def handle_action_event(event, logger, **_):
     obj = event.get('object')
-    if obj and obj.get('apiVersion') == runtime.operator_domain + '/v1':
+    if obj and obj.get('apiVersion') == runtime.api_group_version:
         if event['type'] == 'DELETED':
             AnarchyAction.cache_remove(obj['metadata']['name'])
 
-@kopf.on.event(runtime.operator_domain, 'v1', 'anarchyruns', labels={runtime.finished_label: kopf.ABSENT})
+@kopf.on.event(runtime.operator_domain, runtime.api_version, 'anarchyruns', labels={runtime.finished_label: kopf.ABSENT})
 def handle_run_event(event, logger, **_):
     obj = event.get('object')
-    if obj and obj.get('apiVersion') == runtime.operator_domain + '/v1':
+    if obj and obj.get('apiVersion') == runtime.api_group_version:
         if event['type'] in ['ADDED', 'MODIFIED', None]:
             AnarchyRun.register(obj)
         elif event['type'] == 'DELETED':
@@ -371,20 +370,20 @@ def post_subject_action(subject_name):
         cancel_actions.append(action_name)
 
     for action_resource in runtime.custom_objects_api.list_namespaced_custom_object(
-        runtime.operator_domain, 'v1', runtime.operator_namespace, 'anarchyactions',
+        runtime.operator_domain, runtime.api_version, runtime.operator_namespace, 'anarchyactions',
         label_selector='{}/subject={}'.format(runtime.operator_domain, anarchy_subject.name)
     ).get('items', []):
         if action_resource['spec']['action'] in cancel_actions \
         and 'status' not in action_resource:
             runtime.custom_objects_api.delete_namespaced_custom_object(
-                runtime.operator_domain, 'v1', runtime.operator_namespace, 'anarchyactions', action_resource['metadata']['name']
+                runtime.operator_domain, runtime.api_version, runtime.operator_namespace, 'anarchyactions', action_resource['metadata']['name']
             )
 
     if action_name:
         result = runtime.custom_objects_api.create_namespaced_custom_object(
-            runtime.operator_domain, 'v1', runtime.operator_namespace, 'anarchyactions',
+            runtime.operator_domain, runtime.api_version, runtime.operator_namespace, 'anarchyactions',
             {
-                "apiVersion": runtime.operator_domain + "/v1",
+                "apiVersion": runtime.api_group_version,
                 "kind": "AnarchyAction",
                 "metadata": {
                     "generateName": "%s-%s-" % (anarchy_subject.name, action_name),
@@ -394,7 +393,7 @@ def post_subject_action(subject_name):
                         runtime.governor_label: anarchy_governor.name
                     },
                     "ownerReferences": [{
-                        "apiVersion": runtime.operator_domain + "/v1",
+                        "apiVersion": runtime.api_group_version,
                         "controller": True,
                         "kind": "AnarchySubject",
                         "name": anarchy_subject.name,
@@ -406,14 +405,14 @@ def post_subject_action(subject_name):
                     "after": after_timestamp,
                     "callbackToken": uuid.uuid4().hex,
                     "governorRef": {
-                        "apiVersion": runtime.operator_domain + "/v1",
+                        "apiVersion": runtime.api_group_version,
                         "kind": "AnarchyGovernor",
                         "name": anarchy_governor.name,
                         "namespace":  runtime.operator_namespace,
                         "uid": anarchy_governor.uid
                     },
                     "subjectRef": {
-                        "apiVersion": runtime.operator_domain + "/v1",
+                        "apiVersion": runtime.api_group_version,
                         "kind": "AnarchySubject",
                         "name": anarchy_subject.name,
                         "namespace":  runtime.operator_namespace,

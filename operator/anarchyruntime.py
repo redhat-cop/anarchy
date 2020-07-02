@@ -36,6 +36,8 @@ class AnarchyRuntime(object):
         self.__init_callback_base_url()
         self.anarchy_runners = {}
         self.last_lost_runner_check = time.time()
+        self.api_version = 'v1'
+        self.api_group_version = self.operator_domain + '/' + self.api_version
         self.action_label = self.operator_domain + '/action'
         self.event_label = self.operator_domain + '/event'
         self.finished_label = self.operator_domain + '/finished'
@@ -193,6 +195,16 @@ class AnarchyRuntime(object):
             'zalando.org', 'v1', self.operator_namespace, 'kopfpeerings'
         ):
             obj = event.get('object')
+
+            if event['type'] == 'ERROR' \
+            and obj['kind'] == 'Status':
+                if obj['status'] == 'Failure':
+                    if obj['reason'] in ('Expired', 'Gone'):
+                        operator_logger.info('KopfPeering watch restarting, reason %s', obj['reason'])
+                        return
+                    else:
+                        raise Exception("KopfPeering watch failure: reason {}, message {}", obj['reason'], obj['message'])
+
             if obj \
             and obj.get('apiVersion') == 'zalando.org/v1' \
             and obj.get('kind') == 'KopfPeering' \

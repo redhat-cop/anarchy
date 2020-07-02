@@ -53,7 +53,7 @@ class AnarchyAction(object):
     def get_resource_from_api(name, runtime):
         try:
             return runtime.custom_objects_api.get_namespaced_custom_object(
-                runtime.operator_domain, 'v1', runtime.operator_namespace, 'anarchyactions', name
+                runtime.operator_domain, runtime.api_version, runtime.operator_namespace, 'anarchyactions', name
             )
         except kubernetes.client.rest.ApiException as e:
             if e.status == 404:
@@ -138,7 +138,7 @@ class AnarchyAction(object):
     def add_run_to_status(self, anarchy_run, runtime):
         try:
             runtime.custom_objects_api.patch_namespaced_custom_object_status(
-                runtime.operator_domain, 'v1', runtime.operator_namespace, 'anarchyactions', self.name,
+                runtime.operator_domain, runtime.api_version, runtime.operator_namespace, 'anarchyactions', self.name,
                 {
                     'status': {
                         'runRef': {
@@ -153,7 +153,7 @@ class AnarchyAction(object):
                 }
             )
             resource = runtime.custom_objects_api.patch_namespaced_custom_object(
-                runtime.operator_domain, 'v1', runtime.operator_namespace, 'anarchyactions', self.name,
+                runtime.operator_domain, runtime.api_version, runtime.operator_namespace, 'anarchyactions', self.name,
                 {
                     'metadata': {
                         'labels': {
@@ -208,7 +208,7 @@ class AnarchyAction(object):
 
             try:
                 resource = runtime.custom_objects_api.replace_namespaced_custom_object_status(
-                    runtime.operator_domain, 'v1', self.namespace, 'anarchyactions', self.name, self.to_dict(runtime)
+                    runtime.operator_domain, runtime.api_version, self.namespace, 'anarchyactions', self.name, self.to_dict(runtime)
                 )
                 self.refresh_from_resource(resource)
                 break
@@ -265,7 +265,7 @@ class AnarchyAction(object):
         if not governor:
             raise kopf.TemporaryError('Cannot find governor of the action "%s"', self.action)
         runtime.custom_objects_api.patch_namespaced_custom_object(
-            runtime.operator_domain, 'v1', runtime.operator_namespace, 'anarchyactions',
+            runtime.operator_domain, runtime.api_version, runtime.operator_namespace, 'anarchyactions',
             self.name,
             {
                 'metadata': {
@@ -275,7 +275,7 @@ class AnarchyAction(object):
                         runtime.subject_label: subject.name,
                     },
                     'ownerReferences': [{
-                        'apiVersion': runtime.operator_domain + '/v1',
+                        'apiVersion': runtime.api_group_version,
                         'controller': True,
                         'kind': 'AnarchySubject',
                         'name': subject.name,
@@ -284,14 +284,14 @@ class AnarchyAction(object):
                 },
                 'spec': {
                     'governorRef': {
-                        'apiVersion': runtime.operator_domain + '/v1',
+                        'apiVersion': runtime.api_group_version,
                         'kind': 'AnarchyGovernor',
                         'name': governor.name,
                         'namespace': governor.namespace,
                         'uid': governor.uid
                     },
                     'subjectRef': {
-                        'apiVersion': runtime.operator_domain + '/v1',
+                        'apiVersion': runtime.api_group_version,
                         'kind': 'AnarchySubject',
                         'name': subject.name,
                         'namespace': subject.namespace,
@@ -328,7 +328,7 @@ class AnarchyAction(object):
 
     def to_dict(self, runtime):
         return dict(
-            apiVersion = runtime.operator_domain + '/v1',
+            apiVersion = runtime.api_group_version,
             kind = 'AnarchyAction',
             metadata = self.metadata,
             spec = self.spec,

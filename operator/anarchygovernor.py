@@ -101,7 +101,7 @@ class AnarchyGovernor(object):
         loaded before processing starts.
         '''
         for resource in runtime.custom_objects_api.list_namespaced_custom_object(
-            runtime.operator_domain, 'v1', runtime.operator_namespace, 'anarchygovernors'
+            runtime.operator_domain, runtime.api_version, runtime.operator_namespace, 'anarchygovernors'
         ).get('items', []):
             AnarchyGovernor.register(resource)
 
@@ -135,11 +135,21 @@ class AnarchyGovernor(object):
         '''
         for event in kubernetes.watch.Watch().stream(
             runtime.custom_objects_api.list_namespaced_custom_object,
-            runtime.operator_domain, 'v1', runtime.operator_namespace, 'anarchygovernors'
+            runtime.operator_domain, runtime.api_version, runtime.operator_namespace, 'anarchygovernors'
         ):
             obj = event.get('object')
-            if obj and obj.get('apiVersion') == runtime.operator_domain + '/v1':
-                if event['type'] in ['ADDED', 'MODIFIED', None]:
+
+            if event['type'] == 'ERROR' \
+            and obj['kind'] == 'Status':
+                if obj['status'] == 'Failure':
+                    if obj['reason'] in ('Expired', 'Gone'):
+                        operator_logger.info('AnarchyGovernor watch restarting, reason %s', obj['reason'])
+                        return
+                    else:
+                        raise Exception("AnarchyGovernor watch failure: reason {}, message {}", obj['reason'], obj['message'])
+
+            if obj and obj.get('apiVersion') == runtime.api_group_version:
+                if event['type'] in ('ADDED', 'MODIFIED', None):
                     AnarchyGovernor.register(obj)
                 elif event['type'] == 'DELETED':
                     AnarchyGovernor.unregister(obj['metadata']['name'])
@@ -233,7 +243,7 @@ class AnarchyGovernor(object):
         if not isinstance(time_interval, timedelta):
             return
         for action_resource in runtime.custom_objects_api.list_namespaced_custom_object(
-            runtime.operator_domain, 'v1', runtime.operator_namespace, 'anarchyactions',
+            runtime.operator_domain, runtime.api_version, runtime.operator_namespace, 'anarchyactions',
             label_selector='{}={},{}'.format(runtime.governor_label, self.name, runtime.run_label)
         ).get('items', []):
             action_name = action_resource['metadata']['name']
@@ -254,7 +264,7 @@ class AnarchyGovernor(object):
 
             try:
                 run_resource = runtime.custom_objects_api.get_namespaced_custom_object(
-                    runtime.operator_domain, 'v1', runtime.operator_namespace, 'anarchyruns', run_name
+                    runtime.operator_domain, runtime.api_version, runtime.operator_namespace, 'anarchyruns', run_name
                 )
                 # If run has not posted a successful result longer ago than the interval then do not delete
                 if run_resource['metadata']['labels'][runtime.runner_label] != 'successful':
@@ -270,7 +280,7 @@ class AnarchyGovernor(object):
                     raise
 
             runtime.custom_objects_api.delete_namespaced_custom_object(
-                runtime.operator_domain, 'v1', runtime.operator_namespace, 'anarchyactions', action_name
+                runtime.operator_domain, runtime.api_version, runtime.operator_namespace, 'anarchyactions', action_name
             )
 
     def cleanup_runs(self, runtime):
@@ -278,7 +288,7 @@ class AnarchyGovernor(object):
         if not isinstance(time_interval, timedelta):
             return
         for run_resource in runtime.custom_objects_api.list_namespaced_custom_object(
-            runtime.operator_domain, 'v1', runtime.operator_namespace, 'anarchyruns',
+            runtime.operator_domain, runtime.api_version, runtime.operator_namespace, 'anarchyruns',
             label_selector='{}={},{}=successful'.format(runtime.governor_label, self.name, runtime.runner_label)
         ).get('items', []):
             run_name = run_resource['metadata']['name']
@@ -286,7 +296,7 @@ class AnarchyGovernor(object):
             run_post_datetime = datetime.strptime(run_resource['spec']['runPostTimestamp'], '%Y-%m-%dT%H:%M:%SZ')
             if run_post_datetime + time_interval < datetime.utcnow():
                 runtime.custom_objects_api.delete_namespaced_custom_object(
-                    runtime.operator_domain, 'v1', runtime.operator_namespace, 'anarchyruns', run_name
+                    runtime.operator_domain, runtime.api_version, runtime.operator_namespace, 'anarchyruns', run_name
                 )
 
     def get_parameters(self, runtime, api, anarchy_subject, action_config):
@@ -332,7 +342,7 @@ class AnarchyGovernor(object):
             context_vars = runtime.get_vars(obj)
             context_spec = { 'vars': context_vars }
             if hasattr(obj, 'uid'):
-                context_spec['apiVersion'] = runtime.operator_domain + '/v1'
+                context_spec['apiVersion'] = runtime.api_group_version
                 context_spec['uid'] = obj.uid
             for attr in ('kind', 'name', 'namespace'):
                 if hasattr(obj, attr):
@@ -352,7 +362,7 @@ class AnarchyGovernor(object):
 
         if anarchy_action:
             run_spec['action'] = {
-                'apiVersion': runtime.operator_domain + '/v1',
+                'apiVersion': runtime.api_group_version,
                 'kind': 'AnarchyAction',
                 'name': anarchy_action.name,
                 'namespace': anarchy_action.namespace,
@@ -364,7 +374,7 @@ class AnarchyGovernor(object):
                 generate_name = anarchy_action.name + '-'
             labels[runtime.action_label] = anarchy_action.name
             owner_reference = {
-                'apiVersion': runtime.operator_domain + '/v1',
+                'apiVersion': runtime.api_group_version,
                 'controller': True,
                 'kind': 'AnarchyAction',
                 'name': anarchy_action.name,
@@ -373,7 +383,7 @@ class AnarchyGovernor(object):
         else:
             generate_name = '{}-{}-'.format(anarchy_subject.name, event_name)
             owner_reference = {
-                'apiVersion': runtime.operator_domain + '/v1',
+                'apiVersion': runtime.api_group_version,
                 'controller': True,
                 'kind': 'AnarchySubject',
                 'name': anarchy_subject.name,
@@ -381,9 +391,9 @@ class AnarchyGovernor(object):
             }
 
         anarchy_run = runtime.custom_objects_api.create_namespaced_custom_object(
-            runtime.operator_domain, 'v1', runtime.operator_namespace, 'anarchyruns',
+            runtime.operator_domain, runtime.api_version, runtime.operator_namespace, 'anarchyruns',
             {
-                'apiVersion': runtime.operator_domain + '/v1',
+                'apiVersion': runtime.api_group_version,
                 'kind': 'AnarchyRun',
                 'metadata': {
                     'generateName': generate_name,
@@ -411,7 +421,7 @@ class AnarchyGovernor(object):
 
     def to_dict(self, runtime):
         return dict(
-            apiVersion = runtime.operator_domain + '/v1',
+            apiVersion = runtime.api_group_version,
             kind = 'AnarchyGovernor',
             metadata=self.metadata,
             spec=self.spec

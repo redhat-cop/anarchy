@@ -21,7 +21,7 @@ class AnarchyRunner(object):
     @staticmethod
     def default_runner_definition(runtime):
         return {
-            'apiVersion': runtime.operator_domain + '/v1',
+            'apiVersion': runtime.api_group_version,
             'kind': 'AnarchyRunner',
             'metadata': {
                 'name': 'default',
@@ -72,7 +72,7 @@ class AnarchyRunner(object):
         loaded before processing starts.
         '''
         for resource in runtime.custom_objects_api.list_namespaced_custom_object(
-            runtime.operator_domain, 'v1', runtime.operator_namespace, 'anarchyrunners'
+            runtime.operator_domain, runtime.api_version, runtime.operator_namespace, 'anarchyrunners'
         ).get('items', []):
             AnarchyRunner.register(resource)
 
@@ -117,13 +117,23 @@ class AnarchyRunner(object):
         '''
         for event in kubernetes.watch.Watch().stream(
             runtime.custom_objects_api.list_namespaced_custom_object,
-            runtime.operator_domain, 'v1', runtime.operator_namespace, 'anarchyrunners'
+            runtime.operator_domain, runtime.api_version, runtime.operator_namespace, 'anarchyrunners'
         ):
             obj = event.get('object')
+
+            if event['type'] == 'ERROR' \
+            and obj['kind'] == 'Status':
+                if obj['status'] == 'Failure':
+                    if obj['reason'] in ('Expired', 'Gone'):
+                        operator_logger.info('AnarchyGovernor watch restarting, reason %s', obj['reason'])
+                        return
+                    else:
+                        raise Exception("AnarchyGovernor watch failure: reason {}, message {}", obj['reason'], obj['message'])
+
             if event['type'] == 'DELETED':
                 AnarchyRunner.unregister(obj['metadata']['name'])
             elif obj \
-            and obj.get('apiVersion') == runtime.operator_domain + '/v1' \
+            and obj.get('apiVersion') == runtime.api_group_version \
             and obj.get('kind') == 'AnarchyRunner':
                 AnarchyRunner.register(obj)
 
@@ -136,23 +146,33 @@ class AnarchyRunner(object):
             runtime.core_v1_api.list_namespaced_pod,
             runtime.operator_namespace, label_selector=runtime.runner_label
         ):
-            pod = event.get('object')
-            if pod and isinstance(pod, kubernetes.client.V1Pod) \
-            and pod.metadata.labels:
-                runner_name = pod.metadata.labels[runtime.runner_label]
+            obj = event.get('object')
+
+            if event['type'] == 'ERROR' \
+            and obj['kind'] == 'Status':
+                if obj['status'] == 'Failure':
+                    if obj['reason'] in ('Expired', 'Gone'):
+                        operator_logger.info('Runner Pod watch restarting, reason %s', obj['reason'])
+                        return
+                    else:
+                        raise Exception("Runner Pod watch failure: reason {}, message {}", obj['reason'], obj['message'])
+
+            if obj and isinstance(obj, kubernetes.client.V1Pod) \
+            and obj.metadata.labels:
+                runner_name = obj.metadata.labels[runtime.runner_label]
                 if not runner_name:
                     continue
                 if event['type'] == 'DELETED':
                     runner = AnarchyRunner.get(runner_name)
                     if runner:
-                        runner.pods.pop(pod.metadata.name, None)
+                        runner.pods.pop(obj.metadata.name, None)
                 else:
                     runner = AnarchyRunner.get(runner_name)
                     if runner:
-                        operator_logger.debug('Update AnarchyRunner %s Pod %s', runner.name, pod.metadata.name)
-                        runner.pods[pod.metadata.name] = pod
+                        operator_logger.debug('Update AnarchyRunner %s Pod %s', runner.name, obj.metadata.name)
+                        runner.pods[obj.metadata.name] = obj
                     else:
-                        operator_logger.warning("Watch found runner pod %s but no runner named %s", pod.metadata.name, runner_name)
+                        operator_logger.warning("Watch found runner pod %s but no runner named %s", obj.metadata.name, runner_name)
 
     def __init__(self, resource):
         self.metadata = resource['metadata']
@@ -255,7 +275,7 @@ class AnarchyRunner(object):
         pod_template['metadata']['generateName'] = '{}-runner-{}-'.format(runtime.anarchy_service_name, self.name)
         pod_template['metadata']['labels'][runtime.runner_label] = self.name
         pod_template['metadata']['ownerReferences'] = [{
-            'apiVersion': runtime.operator_domain + '/v1',
+            'apiVersion': runtime.api_group_version,
             'controller': True,
             'kind': 'AnarchyRunner',
             'name': self.name,

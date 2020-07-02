@@ -30,7 +30,7 @@ class AnarchyRun(object):
         Get pending AnarchyRun from api, if one exists.
         '''
         items = runtime.custom_objects_api.list_namespaced_custom_object(
-            runtime.operator_domain, 'v1', runtime.operator_namespace, 'anarchyruns',
+            runtime.operator_domain, runtime.api_version, runtime.operator_namespace, 'anarchyruns',
             label_selector='{}=pending'.format(runtime.runner_label), limit=1
         ).get('items', [])
         if items:
@@ -45,7 +45,7 @@ class AnarchyRun(object):
         '''
         try:
             return runtime.custom_objects_api.get_namespaced_custom_object(
-                runtime.operator_domain, 'v1', runtime.operator_namespace, 'anarchyruns', name
+                runtime.operator_domain, runtime.api_version, runtime.operator_namespace, 'anarchyruns', name
             )
         except kubernetes.client.rest.ApiException as e:
             if e.status == 404:
@@ -218,7 +218,7 @@ class AnarchyRun(object):
                 'PATCH',
                 { # path params
                     'group': runtime.operator_domain,
-                    'version': 'v1',
+                    'version': runtime.api_version,
                     'plural': 'anarchyruns',
                     'namespace': runtime.operator_namespace,
                     'name': self.name
@@ -242,7 +242,7 @@ class AnarchyRun(object):
     def set_runner(self, runner_value, runtime):
         operator_logger.debug('Set runner for AnarchyRun %s to %s', self.name, runner_value)
         runtime.custom_objects_api.patch_namespaced_custom_object(
-            runtime.operator_domain, 'v1', runtime.operator_namespace,
+            runtime.operator_domain, runtime.api_version, runtime.operator_namespace,
             'anarchyruns', self.name,
             {
                 'metadata': {
@@ -253,7 +253,7 @@ class AnarchyRun(object):
 
     def ref(self, runtime):
         return dict(
-            apiVersion = runtime.operator_domain + '/v1',
+            apiVersion = runtime.api_group_version,
             kind = 'AnarchyRun',
             name = self.name,
             namespace = self.namespace,
@@ -266,14 +266,14 @@ class AnarchyRun(object):
 
     def set_to_pending(self, runtime):
         resource = runtime.custom_objects_api.patch_namespaced_custom_object(
-            runtime.operator_domain, 'v1', self.namespace, 'anarchyruns', self.name,
+            runtime.operator_domain, self.api_version, self.namespace, 'anarchyruns', self.name,
             {'metadata': {'labels': { runtime.runner_label: 'pending' } } }
         )
         self.refresh_from_resource(resource)
 
     def to_dict(self, runtime):
         return dict(
-            apiVersion = runtime.operator_domain + '/v1',
+            apiVersion = runtime.api_group_version,
             kind = 'AnarchyRun',
             metadata=self.metadata,
             spec=self.spec,
