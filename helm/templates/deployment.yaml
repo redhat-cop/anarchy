@@ -40,6 +40,10 @@ spec:
         image: {{ .Values.image.repository }}:v{{ .Chart.AppVersion }}
         {{- end }}
         imagePullPolicy: {{ .Values.image.pullPolicy }}
+        livenessProbe:
+          httpGet:
+            path: /healthz
+            port: 8080
         resources:
           {{- toYaml .Values.resources | nindent 10 }}
       {{- with .Values.nodeSelector }}
