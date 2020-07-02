@@ -28,7 +28,7 @@ class AnarchySubject(object):
     def get_resource_from_api(name, runtime):
         try:
             return runtime.custom_objects_api.get_namespaced_custom_object(
-                runtime.operator_domain, 'v1', runtime.operator_namespace, 'anarchysubjects', name
+                runtime.operator_domain, runtime.api_version, runtime.operator_namespace, 'anarchysubjects', name
             )
         except kubernetes.client.rest.ApiException as e:
             if e.status == 404:
@@ -117,7 +117,7 @@ class AnarchySubject(object):
         finalizers = self.metadata.get('finalizers', [])
         if runtime.operator_domain not in finalizers:
             resource = runtime.custom_objects_api.patch_namespaced_custom_object(
-                runtime.operator_domain, 'v1', runtime.operator_namespace, 'anarchysubjects', self.name,
+                runtime.operator_domain, runtime.api_version, runtime.operator_namespace, 'anarchysubjects', self.name,
                 {'metadata': {'finalizers': finalizers + [runtime.operator_domain] } }
             )
             self.refresh_from_resource(resource)
@@ -141,7 +141,7 @@ class AnarchySubject(object):
             anarchy_subject['status']['runs']['active'].append(k8s_ref(anarchy_run))
             try:
                 resource = runtime.custom_objects_api.replace_namespaced_custom_object_status(
-                    runtime.operator_domain, 'v1', self.namespace, 'anarchysubjects', self.name, anarchy_subject
+                    runtime.operator_domain, runtime.api_version, self.namespace, 'anarchysubjects', self.name, anarchy_subject
                 )
                 self.refresh_from_resource(resource)
                 return
@@ -154,7 +154,7 @@ class AnarchySubject(object):
 
     def delete(self, remove_finalizers, runtime):
         result = runtime.custom_objects_api.delete_namespaced_custom_object(
-            runtime.operator_domain, 'v1', runtime.operator_namespace, 'anarchysubjects', self.name
+            runtime.operator_domain, runtime.api_version, runtime.operator_namespace, 'anarchysubjects', self.name
         )
         if remove_finalizers:
             self.remove_finalizers(runtime)
@@ -226,7 +226,7 @@ class AnarchySubject(object):
                 )
             try:
                 resource = runtime.custom_objects_api.replace_namespaced_custom_object_status(
-                    runtime.operator_domain, 'v1', self.namespace, 'anarchysubjects', self.name, anarchy_subject
+                    runtime.operator_domain, runtime.api_version, self.namespace, 'anarchysubjects', self.name, anarchy_subject
                 )
                 self.refresh_from_resource(resource)
                 return
@@ -250,12 +250,12 @@ class AnarchySubject(object):
             resource_patch['spec'] = patch['spec']
         if resource_patch:
             result = runtime.custom_objects_api.patch_namespaced_custom_object(
-                runtime.operator_domain, 'v1', runtime.operator_namespace,
+                runtime.operator_domain, runtime.api_version, runtime.operator_namespace,
                 'anarchysubjects', self.name, resource_patch
             )
         if 'status' in patch:
             result = runtime.custom_objects_api.patch_namespaced_custom_object_status(
-                runtime.operator_domain, 'v1', runtime.operator_namespace,
+                runtime.operator_domain, runtime.api_version, runtime.operator_namespace,
                 'anarchysubjects', self.name, {'status': patch['status']}
             )
         return result
@@ -287,7 +287,7 @@ class AnarchySubject(object):
 
     def record_delete_started(self, runtime):
         runtime.custom_objects_api.patch_namespaced_custom_object_status(
-            runtime.operator_domain, 'v1', runtime.operator_namespace, 'anarchysubjects', self.name,
+            runtime.operator_domain, runtime.api_version, runtime.operator_namespace, 'anarchysubjects', self.name,
             {'status': {'deleteHandlersStarted': datetime.utcnow().strftime('%FT%TZ') } }
         )
 
@@ -324,7 +324,7 @@ class AnarchySubject(object):
                 return
             try:
                 resource = runtime.custom_objects_api.replace_namespaced_custom_object_status(
-                    runtime.operator_domain, 'v1', self.namespace, 'anarchysubjects', self.name, anarchy_subject
+                    runtime.operator_domain, runtime.api_version, self.namespace, 'anarchysubjects', self.name, anarchy_subject
                 )
                 self.refresh_from_resource(resource)
                 return
@@ -337,7 +337,7 @@ class AnarchySubject(object):
 
     def remove_finalizers(self, runtime):
         return runtime.custom_objects_api.patch_namespaced_custom_object(
-            runtime.operator_domain, 'v1', runtime.operator_namespace, 'anarchysubjects', self.name,
+            runtime.operator_domain, runtime.api_version, runtime.operator_namespace, 'anarchysubjects', self.name,
             {'metadata': {'finalizers': None } }
         )
 
@@ -354,7 +354,7 @@ class AnarchySubject(object):
             try:
                 operator_logger.info('Setting AnarchyRun %s to pending for AnarchySubject %s', run_name, self.name)
                 runtime.custom_objects_api.patch_namespaced_custom_object(
-                    runtime.operator_domain, 'v1', run_namespace, 'anarchyruns', run_name,
+                    runtime.operator_domain, runtime.api_version, run_namespace, 'anarchyruns', run_name,
                     {'metadata': {'labels': { runtime.runner_label: 'pending' } } }
                 )
                 return
@@ -381,14 +381,14 @@ class AnarchySubject(object):
             run_namespace = run_ref['namespace']
             try:
                 run = runtime.custom_objects_api.get_namespaced_custom_object(
-                    runtime.operator_domain, 'v1', run_namespace, 'anarchyruns', run_name
+                    runtime.operator_domain, runtime.api_version, run_namespace, 'anarchyruns', run_name
                 )
                 runner_label_value = run['metadata']['labels'][runtime.runner_label]
 
                 if runner_label_value == 'queued':
                     operator_logger.info('Setting AnarchyRun %s to pending for AnarchySubject %s', run_name, self.name)
                     runtime.custom_objects_api.patch_namespaced_custom_object(
-                        runtime.operator_domain, 'v1', run_namespace, 'anarchyruns', run_name,
+                        runtime.operator_domain, runtime.api_version, run_namespace, 'anarchyruns', run_name,
                         {'metadata': {'labels': { runtime.runner_label: 'pending' } } }
                     )
                     return
@@ -408,7 +408,7 @@ class AnarchySubject(object):
 
     def to_dict(self, runtime):
         return dict(
-            apiVersion = runtime.operator_domain + '/v1',
+            apiVersion = runtime.api_group_version,
             kind = 'AnarchySubject',
             metadata = self.metadata,
             spec = self.spec,
