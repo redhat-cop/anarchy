@@ -19,18 +19,35 @@ spec:
       description: >-
         AnarchyRunners define Ansible runners used to process actions and handle events.
       type: object
+      required:
+      - apiVersion
+      - kind
+      - metadata
+      - spec
       properties:
-        minReplicas:
-          description: Minimum number of replicas for dynamic scaling of the AnarchyRunner pool.
-          type: integer
-          minimum: 0
-        maxReplicas:
-          description: Maximum number of replicas for dynamic scaling of the AnarchyRunner pool.
-          type: integer
-          minimum: 0
-        podTemplate:
-          description: Pod template used to define AnarchyRunner pods.
-          type: object
-        token:
-          description: Token used to validate communication with pods in the AnarchyRunner pool.
+        apiVersion:
           type: string
+        kind:
+          type: string
+        metadata:
+          type: object
+        spec:
+          description: >-
+            Definition of the AnarchyRunner.
+          type: object
+          properties:
+            minReplicas:
+              description: Minimum number of replicas for dynamic scaling of the AnarchyRunner pool.
+              type: integer
+              minimum: 0
+            maxReplicas:
+              description: Maximum number of replicas for dynamic scaling of the AnarchyRunner pool.
+              type: integer
+              minimum: 0
+            podTemplate:
+              description: >-
+                Pod template used to define AnarchyRunner pods.
+              type: object
+            token:
+              description: Token used to validate communication with pods in the AnarchyRunner pool.
+              type: string
