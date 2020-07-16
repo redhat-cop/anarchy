@@ -197,9 +197,19 @@ def get_run():
         runtime.core_v1_api.delete_namespaced_pod(runner_pod.metadata.name, runner_pod.metadata.namespace)
         return flask.jsonify(None)
 
-    anarchy_run = AnarchyRun.get_pending(runtime)
-    if not anarchy_run:
-        return flask.jsonify(None)
+    while True:
+        # Loop trying to get a pending anarchy run and claim in for this runner
+        # until either nothing is pending or one is claimed.
+        anarchy_run = AnarchyRun.get_pending(runtime)
+        if not anarchy_run:
+            operator_logger.debug(
+                'No AnarchyRun pending for AnarchyRunner %s Pod %s',
+                anarchy_runner.name, runner_pod.metadata.name
+            )
+            return flask.jsonify(None)
+        if anarchy_run.set_runner(anarchy_runner.name + '.' + runner_pod.metadata.name, runtime):
+            # If successfully set_runner on anarchy run, then break from loop
+            break
 
     anarchy_subject = anarchy_run.get_subject(runtime)
     if not anarchy_subject:
@@ -217,7 +227,6 @@ def get_run():
         )
         return flask.jsonify(None)
 
-    anarchy_run.set_runner(anarchy_runner.name + '.' + runner_pod.metadata.name, runtime)
     runtime.core_v1_api.patch_namespaced_pod(
         runner_pod.metadata.name, runner_pod.metadata.namespace,
         { 'metadata': { 'labels': { runtime.run_label: anarchy_run.name, runtime.subject_label: anarchy_subject.name } } }
