@@ -274,14 +274,18 @@ class AnarchyGovernor(object):
                 run_post_datetime = datetime.strptime(run_resource['spec']['runPostTimestamp'], '%Y-%m-%dT%H:%M:%SZ')
                 if run_post_datetime + time_interval > datetime.utcnow():
                     continue
-            except:
+            except kubernetes.client.rest.ApiException as e:
                 # If run is already deleted then action may be deleted
                 if e.status != 404:
                     raise
-
-            runtime.custom_objects_api.delete_namespaced_custom_object(
-                runtime.operator_domain, runtime.api_version, runtime.operator_namespace, 'anarchyactions', action_name
-            )
+            
+            try:
+                runtime.custom_objects_api.delete_namespaced_custom_object(
+                    runtime.operator_domain, runtime.api_version, runtime.operator_namespace, 'anarchyactions', action_name
+                )
+            except kubernetes.client.rest.ApiException as e:
+                if e.status != 404:
+                    raise
 
     def cleanup_runs(self, runtime):
         time_interval = self.remove_successful_runs_after
@@ -295,9 +299,13 @@ class AnarchyGovernor(object):
             # If run has not posted a result longer ago than the interval then do not delete
             run_post_datetime = datetime.strptime(run_resource['spec']['runPostTimestamp'], '%Y-%m-%dT%H:%M:%SZ')
             if run_post_datetime + time_interval < datetime.utcnow():
-                runtime.custom_objects_api.delete_namespaced_custom_object(
-                    runtime.operator_domain, runtime.api_version, runtime.operator_namespace, 'anarchyruns', run_name
-                )
+                try:
+                    runtime.custom_objects_api.delete_namespaced_custom_object(
+                        runtime.operator_domain, runtime.api_version, runtime.operator_namespace, 'anarchyruns', run_name
+                    )
+                except kubernetes.client.rest.ApiException as e:
+                    if e.status != 404:
+                        raise
 
     def get_parameters(self, runtime, api, anarchy_subject, action_config):
         parameters = {}
