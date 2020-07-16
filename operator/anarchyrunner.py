@@ -96,11 +96,12 @@ class AnarchyRunner(object):
         name = resource['metadata']['name']
         runner = AnarchyRunner.cache.get(name)
         if runner:
+            operator_logger.info("Refreshed AnarchyRunner %s", runner.name)
             runner.refresh_from_resource(resource)
         else:
             runner = AnarchyRunner(resource)
             AnarchyRunner.cache[name] = runner
-            operator_logger.info("Registered runner %s", runner.name)
+            operator_logger.info("Registered AnarchyRunner %s", runner.name)
         return runner
 
     @staticmethod

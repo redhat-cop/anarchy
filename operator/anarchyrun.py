@@ -1,4 +1,5 @@
 from datetime import datetime, timedelta
+import copy
 import kubernetes
 import logging
 import threading
@@ -240,16 +241,21 @@ class AnarchyRun(object):
                 raise
 
     def set_runner(self, runner_value, runtime):
-        operator_logger.debug('Set runner for AnarchyRun %s to %s', self.name, runner_value)
-        runtime.custom_objects_api.patch_namespaced_custom_object(
-            runtime.operator_domain, runtime.api_version, runtime.operator_namespace,
-            'anarchyruns', self.name,
-            {
-                'metadata': {
-                    'labels': { runtime.runner_label: runner_value }
-                }
-            }
-        )
+        resource_def = copy.deepcopy(self.to_dict(runtime))
+        resource_def['metadata']['labels'][runtime.runner_label] = runner_value
+        try:
+            resource = runtime.custom_objects_api.replace_namespaced_custom_object(
+                runtime.operator_domain, runtime.api_version, self.namespace, 'anarchyruns', self.name, resource_def
+            )
+            self.refresh_from_resource(resource)
+            operator_logger.info('Set runner for AnarchyRun %s to %s', self.name, runner_value)
+        except kubernetes.client.rest.ApiException as e:
+            if e.status == 409:
+                # Failed to set runner due to conflict
+                return False
+            else:
+                raise
+        return True
 
     def ref(self, runtime):
         return dict(

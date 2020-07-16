@@ -53,6 +53,7 @@ def init_default_runner():
         )
     except kubernetes.client.rest.ApiException as e:
         if e.status == 404:
+            operator_logger.info('Creating default AnarchyRunner')
             runner = runtime.custom_objects_api.create_namespaced_custom_object(
                 runtime.operator_domain, runtime.api_version, runtime.operator_namespace, 'anarchyrunners',
                 AnarchyRunner.default_runner_definition(runtime)
@@ -74,14 +75,6 @@ def start_runner_process():
     env['RUNNER_NAME'] = 'default'
     env['RUNNER_TOKEN'] = default_runner.runner_token
     subprocess.Popen(['/opt/app-root/src/.s2i/bin/run'], env=env)
-
-@kopf.on.create(runtime.operator_domain, runtime.api_version, 'anarchyrunners')
-@kopf.on.resume(runtime.operator_domain, runtime.api_version, 'anarchyrunners')
-@kopf.on.update(runtime.operator_domain, runtime.api_version, 'anarchyrunners')
-@kopf.timer(runtime.operator_domain, runtime.api_version, 'anarchyrunners', idle=60, interval=60)
-def handle_runner_activity(body, **_):
-    if not runtime.running_all_in_one:
-        AnarchyRunner.register(body).manage(runtime)
 
 @kopf.on.create(runtime.operator_domain, runtime.api_version, 'anarchysubjects')
 def handle_subject_create(body, **_):

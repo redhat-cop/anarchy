@@ -108,17 +108,31 @@ class AnarchyRunner(object):
             return None
         return response.json()
 
-    def post_result(self, anarchy_run, result):
+    def post_result(self, anarchy_run, result, retries=10):
         run_name = anarchy_run['metadata']['name']
         subject_name = anarchy_run['spec']['subject']['name']
-        requests.post(
-            self.anarchy_url + '/run/' + run_name,
-            headers={'Authorization': 'Bearer {}:{}:{}'.format(self.runner_name, self.pod_name, self.runner_token)},
-            json=dict(result=result)
-        )
+        for i in range(retries):
+            try:
+                response = requests.post(
+                    self.anarchy_url + '/run/' + run_name,
+                    headers={'Authorization': 'Bearer {}:{}:{}'.format(self.runner_name, self.pod_name, self.runner_token)},
+                    json=dict(result=result)
+                )
+                if response.status_code != 200:
+                    logging.warning('Failed to post run with status {}', response.status_code)
+                return response
+            except Exception as e:
+                logging.exception("Exception when posting run")
+                return
+            time.sleep(self.polling_interval)
 
     def run(self):
-        anarchy_run = self.get_run()
+        try:
+            anarchy_run = self.get_run()
+        except Exception as e:
+            logging.exception("Exception when getting run")
+            return
+
         if not anarchy_run:
             logging.debug('No tasks to run')
             self.sleep()
