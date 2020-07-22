@@ -283,7 +283,7 @@ def post_run(run_name):
     anarchy_run.post_result(result, runner_pod.metadata.name, runtime)
     if result['status'] == 'successful' \
     and run_name == anarchy_subject.active_run_name:
-        anarchy_subject.move_active_run_to_completed(anarchy_run, runtime)
+        anarchy_subject.remove_active_run_from_status(anarchy_run, runtime)
         anarchy_subject.set_active_run_to_pending(runtime)
 
     return flask.jsonify({'success':True})

@@ -135,8 +135,7 @@ class AnarchySubject(object):
                 anarchy_subject['status'] = {}
             if not 'runs' in anarchy_subject['status']:
                 anarchy_subject['status']['runs'] = {
-                    'active': [],
-                    'complete': []
+                    'active': []
                 }
             anarchy_subject['status']['runs']['active'].append(k8s_ref(anarchy_run))
             try:
@@ -148,7 +147,9 @@ class AnarchySubject(object):
             except kubernetes.client.rest.ApiException as e:
                 if e.status == 409:
                     # Conflict, refresh subject from api and retry
-                    self.refresh_from_api(runtime)
+                    if not self.refresh_from_api(runtime):
+                        operator_logger.error('Cannot add run to status, unable to refresh AnarchySubject %s', self.subject_name)
+                        return
                 else:
                     raise
 
@@ -192,7 +193,7 @@ class AnarchySubject(object):
         '''
         self.process_subject_event_handlers(runtime, 'update')
 
-    def move_active_run_to_completed(self, anarchy_run, runtime):
+    def remove_active_run_from_status(self, anarchy_run, runtime):
         # Support passing run by object or name
         run_name = anarchy_run.name if hasattr(anarchy_run, 'name') else anarchy_run
         first_attempt = True
@@ -202,28 +203,26 @@ class AnarchySubject(object):
                 anarchy_subject['status'] = {}
             if not 'runs' in anarchy_subject['status']:
                 anarchy_subject['status']['runs'] = {
-                    'active': [],
-                    'complete': []
+                    'active': []
                 }
             status_runs_active = anarchy_subject['status']['runs']['active']
-            status_runs_complete = anarchy_subject['status']['runs']['complete']
             run_ref = None
             for i in range(len(status_runs_active)):
                 if status_runs_active[i]['name'] == run_name:
                     run_ref = status_runs_active.pop(i)
                     if i != 0:
                         operator_logger.warning(
-                            'Moving AnarchyRun %s in AnarchySubject %s to completed, but it was not listed first!',
+                            'Removing AnarchyRun %s in AnarchySubject %s, but it was not listed first!',
                             anarchy_run.name, self.name
                         )
                     break
-            if run_ref:
-                status_runs_complete.append(run_ref)
-            elif first_attempt:
-                operator_logger.warning(
-                    'Attempt to move AnarchyRun %s in AnarchySubject %s to complete when not listed in active!',
-                    run_name, self.name
-                )
+            if not run_ref:
+                if first_attempt:
+                    operator_logger.warning(
+                        'Attempt to remove AnarchyRun %s in AnarchySubject %s status when not listed in active!',
+                        run_name, self.name
+                    )
+                return
             try:
                 resource = runtime.custom_objects_api.replace_namespaced_custom_object_status(
                     runtime.operator_domain, runtime.api_version, self.namespace, 'anarchysubjects', self.name, anarchy_subject
@@ -234,7 +233,9 @@ class AnarchySubject(object):
                 if e.status == 409:
                     # Conflict, refresh subject from api and retry
                     first_attempt = False
-                    self.refresh_from_api(runtime)
+                    if not self.refresh_from_api(runtime):
+                        operator_logger.info('Cannot remove active run from status, unable to refresh AnarchySubject %s', self.subject_name)
+                        return
                 else:
                     raise
 
@@ -295,8 +296,9 @@ class AnarchySubject(object):
         resource = AnarchySubject.get_resource_from_api(self.name, runtime)
         if resource:
             self.refresh_from_resource(resource)
+            return True
         else:
-            raise Exception('Unable to find AnarchySubject {} to refresh'.format(self.name))
+            return False
 
     def refresh_from_resource(self, resource):
         self.metadata = resource['metadata']
@@ -310,8 +312,7 @@ class AnarchySubject(object):
                 anarchy_subject['status'] = {}
             if not 'runs' in anarchy_subject['status']:
                 anarchy_subject['status']['runs'] = {
-                    'active': [],
-                    'complete': []
+                    'active': []
                 }
             status_runs_active = anarchy_subject['status']['runs']['active']
             found_run = False
@@ -393,7 +394,7 @@ class AnarchySubject(object):
                     )
                     return
                 elif runner_label_value == 'successful':
-                    self.move_active_run_to_completed(run_name, runtime)
+                    self.remove_active_run_from_status(run_name, runtime)
 
             except kubernetes.client.rest.ApiException as e:
                 if e.status == 404:
