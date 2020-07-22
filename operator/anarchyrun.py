@@ -272,7 +272,7 @@ class AnarchyRun(object):
 
     def set_to_pending(self, runtime):
         resource = runtime.custom_objects_api.patch_namespaced_custom_object(
-            runtime.operator_domain, self.api_version, self.namespace, 'anarchyruns', self.name,
+            runtime.operator_domain, runtime.api_version, self.namespace, 'anarchyruns', self.name,
             {'metadata': {'labels': { runtime.runner_label: 'pending' } } }
         )
         self.refresh_from_resource(resource)
