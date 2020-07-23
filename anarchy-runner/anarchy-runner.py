@@ -104,7 +104,7 @@ class AnarchyRunner(object):
             headers={'Authorization': 'Bearer {}:{}:{}'.format(self.runner_name, self.pod_name, self.runner_token)}
         )
         if response.status_code != 200:
-            logging.warning('Failed to get run with status {}', response.status_code)
+            logging.warning('Failed to get run with status %s', response.status_code)
             return None
         return response.json()
 
@@ -119,7 +119,7 @@ class AnarchyRunner(object):
                     json=dict(result=result)
                 )
                 if response.status_code != 200:
-                    logging.warning('Failed to post run with status {}', response.status_code)
+                    logging.warning('Failed to post run with status %s', response.status_code)
                 return response
             except Exception as e:
                 logging.exception("Exception when posting run")
