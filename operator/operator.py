@@ -359,7 +359,7 @@ def post_subject_action(subject_name):
     action_name = flask.request.json.get('action', None)
     after_timestamp = flask.request.json.get('after', None)
     cancel_actions = flask.request.json.get('cancel', None)
-    if not action_name or cancel_actions:
+    if not action_name and not cancel_actions:
         operator_logger.warning('No action or cancel given for scheduling action')
         flask.abort(400)
         return
