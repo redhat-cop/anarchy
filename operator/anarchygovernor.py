@@ -157,10 +157,6 @@ class AnarchyGovernor(object):
     def __init__(self, resource):
         self.refresh_from_resource(resource)
 
-    def __set_actions(self):
-        actions = {}
-        self.actions = actions
-
     def set_subject_event_handlers(self, event_handlers):
         self.subject_event_handlers = {}
         for event_name, handler_spec in event_handlers.items():
@@ -237,6 +233,14 @@ class AnarchyGovernor(object):
     @property
     def var_secrets(self):
         return self.spec.get('varSecrets', [])
+
+    def action_config(self, name):
+        if name in self.actions:
+            return self.actions[name]
+        elif '*' in self.actions:
+            return self.actions['*']
+        else:
+            return None
 
     def cleanup_actions(self, runtime):
         time_interval = self.remove_successful_actions_after
@@ -318,11 +322,6 @@ class AnarchyGovernor(object):
         add_values(parameters, runtime, action_config.request.parameters)
         add_secret_values(parameters, runtime, action_config.request.parameter_secrets)
         return parameters
-
-    def action_config(self, name):
-        assert name in self.actions, \
-            'governor has no action named {}'.format(name)
-        return self.actions[name]
 
     def refresh_from_resource(self, resource):
         self.metadata = resource['metadata']

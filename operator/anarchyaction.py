@@ -182,7 +182,7 @@ class AnarchyAction(object):
         if not governor:
             operator_logger.warning('Received callback for subject "%s", but cannot find AnarchyGovernor %s', subject.name, governor.name)
             return
-        action_config = governor.actions.get(self.action, None)
+        action_config = governor.action_config(self.action)
 
         if not action_config:
             operator_logger.warning('Received callback for action, "%s", which is not defined in AnarchyGovernor %s', self.action, governor.name)
@@ -306,7 +306,7 @@ class AnarchyAction(object):
         subject = self.get_subject(runtime)
         governor = subject.get_governor(runtime)
 
-        action_config = governor.actions.get(self.action, None)
+        action_config = governor.action_config(self.action)
         if not action_config:
             operator_logger.warning('Attempting to start action, "%s", which is not defined in AnarchyGovernor %s', self.action, governor.name)
             return
