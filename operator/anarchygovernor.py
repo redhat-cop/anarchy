@@ -246,7 +246,8 @@ class AnarchyGovernor(object):
         if name in self.actions:
             return self.actions[name]
         elif '*' in self.actions:
-            return self.actions['*']
+            wildcard_action = self.actions['*']
+            return AnarchyGovernor.ActionConfig(name, wildcard_action.spec, self)
         else:
             return None
 
