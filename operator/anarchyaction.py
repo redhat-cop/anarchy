@@ -219,7 +219,7 @@ class AnarchyAction(object):
                 else:
                     raise
 
-        handler = action_config.callback_handlers.get(callback_name, None)
+        handler = action_config.callback_handler(callback_name)
         if not handler:
             operator_logger.warning('No callback handler in %s for %s', action_config.name, callback_name)
             return

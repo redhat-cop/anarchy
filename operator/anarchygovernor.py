@@ -79,6 +79,14 @@ class AnarchyGovernor(object):
         def var_secrets(self):
             return self.spec.get('varSecrets', [])
 
+        def callback_handler(self, name):
+            if name in self.callback_handlers:
+                return self.callback_handlers[name]
+            elif '*' in self.callback_handlers:
+                return self.callback_handlers['*']
+            else:
+                return None
+
     # AnarchyGovernor cache
     cache = {}
 
@@ -425,6 +433,14 @@ class AnarchyGovernor(object):
                 'Not setting new AnarchyRun %s as pending, %s is active for AnarchySubject %s',
                 anarchy_run_name, anarchy_subject.active_run_name, anarchy_subject.name
             )
+
+    def subject_event_handler(self, name):
+        if name in self.subject_event_handlers:
+            return self.subject_event_handlers[name]
+        elif '*' in self.subject_event_handlers:
+            return self.subject_event_handlers['*']
+        else:
+            return None
 
     def to_dict(self, runtime):
         return dict(
