@@ -270,7 +270,7 @@ class AnarchySubject(object):
             )
             return
 
-        handler = governor.subject_event_handlers.get(event_name)
+        handler = governor.subject_event_handler(event_name)
         if not handler:
             return
 

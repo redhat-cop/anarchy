@@ -79,6 +79,14 @@ class AnarchyGovernor(object):
         def var_secrets(self):
             return self.spec.get('varSecrets', [])
 
+        def callback_handler(self, name):
+            if name in self.callback_handlers:
+                return self.callback_handlers[name]
+            elif '*' in self.callback_handlers:
+                return self.callback_handlers['*']
+            else:
+                return None
+
     # AnarchyGovernor cache
     cache = {}
 
@@ -157,10 +165,6 @@ class AnarchyGovernor(object):
     def __init__(self, resource):
         self.refresh_from_resource(resource)
 
-    def __set_actions(self):
-        actions = {}
-        self.actions = actions
-
     def set_subject_event_handlers(self, event_handlers):
         self.subject_event_handlers = {}
         for event_name, handler_spec in event_handlers.items():
@@ -237,6 +241,15 @@ class AnarchyGovernor(object):
     @property
     def var_secrets(self):
         return self.spec.get('varSecrets', [])
+
+    def action_config(self, name):
+        if name in self.actions:
+            return self.actions[name]
+        elif '*' in self.actions:
+            wildcard_action = self.actions['*']
+            return AnarchyGovernor.ActionConfig(name, wildcard_action.spec, self)
+        else:
+            return None
 
     def cleanup_actions(self, runtime):
         time_interval = self.remove_successful_actions_after
@@ -318,11 +331,6 @@ class AnarchyGovernor(object):
         add_values(parameters, runtime, action_config.request.parameters)
         add_secret_values(parameters, runtime, action_config.request.parameter_secrets)
         return parameters
-
-    def action_config(self, name):
-        assert name in self.actions, \
-            'governor has no action named {}'.format(name)
-        return self.actions[name]
 
     def refresh_from_resource(self, resource):
         self.metadata = resource['metadata']
@@ -426,6 +434,14 @@ class AnarchyGovernor(object):
                 'Not setting new AnarchyRun %s as pending, %s is active for AnarchySubject %s',
                 anarchy_run_name, anarchy_subject.active_run_name, anarchy_subject.name
             )
+
+    def subject_event_handler(self, name):
+        if name in self.subject_event_handlers:
+            return self.subject_event_handlers[name]
+        elif '*' in self.subject_event_handlers:
+            return self.subject_event_handlers['*']
+        else:
+            return None
 
     def to_dict(self, runtime):
         return dict(
