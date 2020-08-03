@@ -527,7 +527,7 @@ def main_loop():
             if run_check_interval < time.time() - last_run_check:
                 try:
                     AnarchyRun.manage_active_runs(runtime)
-                    run_check_interval = time.time()
+                    last_run_check = time.time()
                 except:
                     operator_logger.exception('Error in AnarchyRun.manage_active_runs!')
 
