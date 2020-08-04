@@ -27,7 +27,8 @@ from anarchyrun import AnarchyRun
 
 api = flask.Flask('rest')
 cleanup_interval = int(os.environ.get('CLEANUP_INTERVAL', 300))
-runner_check_interval = int(os.environ.get('RUNNER_CHECK_INTERVAL', 60))
+run_check_interval = int(os.environ.get('RUN_CHECK_INTERVAL', 5))
+runner_check_interval = int(os.environ.get('RUNNER_CHECK_INTERVAL', 30))
 
 operator_logger = logging.getLogger('operator')
 operator_logger.setLevel(os.environ.get('LOGGING_LEVEL', 'INFO'))
@@ -133,15 +134,6 @@ def handle_action_event(event, logger, **_):
     if obj and obj.get('apiVersion') == runtime.api_group_version:
         if event['type'] == 'DELETED':
             AnarchyAction.cache_remove(obj['metadata']['name'])
-
-@kopf.on.event(runtime.operator_domain, runtime.api_version, 'anarchyruns', labels={runtime.finished_label: kopf.ABSENT})
-def handle_run_event(event, logger, **_):
-    obj = event.get('object')
-    if obj and obj.get('apiVersion') == runtime.api_group_version:
-        if event['type'] in ['ADDED', 'MODIFIED', None]:
-            AnarchyRun.register(obj)
-        elif event['type'] == 'DELETED':
-            AnarchyRun.unregister(obj['metadata']['name'])
 
 @api.route('/action/<string:anarchy_action_name>', methods=['POST'])
 def action_callback(anarchy_action_name):
@@ -510,6 +502,7 @@ def watch_peering():
 
 def main_loop():
     last_cleanup = 0
+    last_run_check = 0
     last_runner_check = 0
     while True:
         with runtime.is_active_condition:
@@ -523,7 +516,6 @@ def main_loop():
 
         while runtime.is_active:
             AnarchyAction.start_actions(runtime)
-            AnarchyRun.manage_active_runs(runtime)
 
             if cleanup_interval < time.time() - last_cleanup:
                 try:
@@ -532,12 +524,19 @@ def main_loop():
                 except:
                     operator_logger.exception('Error in AnarchyGovernor.cleanup!')
 
+            if run_check_interval < time.time() - last_run_check:
+                try:
+                    AnarchyRun.manage_active_runs(runtime)
+                    last_run_check = time.time()
+                except:
+                    operator_logger.exception('Error in AnarchyRun.manage_active_runs!')
+
             if runner_check_interval < time.time() - last_runner_check:
                 try:
                     AnarchyRunner.manage_runners(runtime)
                     last_runner_check = time.time()
                 except:
-                    operator_logger.exception('Error in AnarchyRunner.managing_runners!')
+                    operator_logger.exception('Error in AnarchyRunner.manage_runners!')
 
             time.sleep(1)
 

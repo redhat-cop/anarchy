@@ -11,7 +11,6 @@ operator_logger = logging.getLogger('operator')
 
 class AnarchyRun(object):
     pending_count = 0
-    active_runs = {}
 
     @staticmethod
     def get_from_api(name, runtime):
@@ -56,24 +55,15 @@ class AnarchyRun(object):
 
     @staticmethod
     def manage_active_runs(runtime):
-        for name, run in AnarchyRun.active_runs.items():
-            run.manage(runtime)
-
-    @staticmethod
-    def register(resource):
-        name = resource['metadata']['name']
-        run = AnarchyRun.active_runs.get(name)
-        if run:
-            run.refresh_from_resource(resource)
-        else:
+        '''
+        Manage AnarchyRuns, retrying failures and detecting lost runners.
+        '''
+        for resource in runtime.custom_objects_api.list_namespaced_custom_object(
+            runtime.operator_domain, runtime.api_version, runtime.operator_namespace, 'anarchyruns',
+            label_selector='!{}'.format(runtime.finished_label)
+        ).get('items', []):
             run = AnarchyRun(resource)
-            AnarchyRun.active_runs[name] = run
-            operator_logger.info("Registered run %s", run.name)
-        return run
-
-    @staticmethod
-    def unregister(run):
-        AnarchyRun.active_runs.pop(run.name if isinstance(run, AnarchyRun) else run, None)
+            run.manage(runtime)
 
     def __init__(self, resource):
         self.metadata = resource['metadata']
