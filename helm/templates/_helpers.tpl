@@ -43,3 +43,14 @@ Create the name of the service account to use
 {{      default "default" .Values.serviceAccount.name }}
 {{-   end -}}
 {{- end -}}
+
+{{/*
+Create the name of the namespace to use
+*/}}
+{{- define "anarchy.namespaceName" -}}
+{{- if .Values.namespace.create -}}
+    {{ default (include "anarchy.name" .) .Values.namespace.name }}
+{{- else -}}
+    {{ default "default" .Values.namespace.name }}
+{{- end -}}
+{{- end -}}

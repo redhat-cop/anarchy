@@ -1,0 +1,10 @@
+{{- if .Values.namespace.create -}}
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: {{ include "anarchy.namespaceName" . }}
+  labels:
+    {{- include "anarchy.labels" . | nindent 4 }}
+  annotations:
+    openshift-provision/action: create
+{{- end -}}
