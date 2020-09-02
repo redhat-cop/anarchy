@@ -270,7 +270,7 @@ class AnarchyRunner(object):
                 'anarchy_action_config': anarchy_action_config,
                 'anarchy_action_config_name': anarchy_action_config['name']
             })
-        open(self.runner_dir + '/env/extravars', mode='w').write(json.dumps(extravars))
+        open(self.runner_dir + '/inventory/group_vars/all/anarchy.json', mode='w').write(json.dumps(extravars))
 
 
 anarchy_runner = AnarchyRunner()
