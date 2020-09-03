@@ -5,7 +5,13 @@ image:
 
 envVars: {}
 
-namespace: anarchy
+namespace:
+  create: true
+  name: anarchy
+
+# Install ClusterRoles
+clusterroles:
+  create: true
 
 imagePullSecrets: []
 nameOverride: ""

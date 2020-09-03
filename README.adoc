@@ -46,34 +46,13 @@ image::docs/AnarchyCallbackDiagram.png[Anarchy Diagram,748,338]
 
 == Installation
 
-=== OpenShift
+=== Prerequisite
 
-Create CustomResourceDefinitions and ClusterRoles defined in the `install/` directory:
+Anarchy is using [Kopf](https://github.com/zalando-incubator/kopf) and needs the kopf peering CRDs installed before installing Anarchy.
 
----------------------
-oc apply -Rf install/
----------------------
-
-Create a new project namespace to deploy Anarchy:
-
-----------------------
-oc new-project anarchy
-----------------------
-
-Process the template `deploy-template.yaml` to deploy the Anarchy operator into your namespace.
-
---------------------------------------------------------------------------------
-oc process -f https://raw.githubusercontent.com/redhat-cop/anarchy/master/deploy-template.yaml | oc apply -f -
---------------------------------------------------------------------------------
-
-Check your to make sure the anarchy-operator pod is running and the default runner starts soon after:
-
--------------------------------------------------------------------------
-$ oc get pods
-NAME                                     READY   STATUS    RESTARTS   AGE
-anarchy-5f7d7898d7-f6dww                 1/1     Running   0          11m
-anarchy-runner-default-9767c79b6-vt6b4   1/1     Running   0          12m
--------------------------------------------------------------------------
+----
+oc apply -f https://raw.githubusercontent.com/zalando-incubator/kopf/master/peering.yaml
+----
 
 === Using Helm
 
@@ -86,16 +65,25 @@ git clone https://github.com/redhat-cop/anarchy.git
 cd anarchy
 ----
 
-Create a namespace in which to deploy the Anarchy operator
-
-----
-kubectl create namespace anarchy
-----
-
 Install with Helm
 
 ----
-helm install --namespace anarchy anarchy helm/
+helm install anarchy helm/
+----
+
+Check your to make sure the anarchy-operator pod is running and the default runner starts soon after:
+
+-------------------------------------------------------------------------
+$ oc get pods
+NAME                                     READY   STATUS    RESTARTS   AGE
+anarchy-5f7d7898d7-f6dww                 1/1     Running   0          11m
+anarchy-runner-default-9767c79b6-vt6b4   1/1     Running   0          12m
+-------------------------------------------------------------------------
+
+Anarchy can be installed even if you do not have cluster admin privileges. This will require the CRDs and ClusterRoles to already have been installed.
+
+----
+helm install anarchy helm/ --skip-crds --set clusterroles.create=false
 ----
 
 == Anarchy Design

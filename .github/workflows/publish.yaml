@@ -28,11 +28,6 @@ jobs:
           echo "Helm chart version does not match tag!"
           exit 1
         fi
-        DEPLOY_TEMPLATE_VERSION=$(sed -nr '/^- name: ANARCHY_IMAGE$/ {n;s/^  value:.*://p}' deploy-template.yaml)
-        if [[ "${DEPLOY_TEMPLATE_VERSION}" != "${VERSION}" ]]; then
-          echo "deploy-template image version does not match tag!"
-          exit 1
-        fi
 
     - name: Build and publish image
       uses: docker/build-push-action@v1

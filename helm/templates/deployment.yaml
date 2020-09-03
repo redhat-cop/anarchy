@@ -2,6 +2,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: {{ include "anarchy.name" . }}
+  namespace: {{ include "anarchy.namespaceName" . }}
   labels:
     {{- include "anarchy.labels" . | nindent 4 }}
 spec:

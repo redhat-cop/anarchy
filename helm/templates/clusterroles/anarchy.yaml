@@ -1,6 +1,7 @@
 ---
+{{- if .Values.clusterroles.create }}
 kind: ClusterRole
-apiVersion: v1
+apiVersion: rbac.authorization.k8s.io/v1
 metadata:
   name: anarchy
   labels:
@@ -103,3 +104,4 @@ rules:
   - create
   - patch
   - update
+{{- end -}}
