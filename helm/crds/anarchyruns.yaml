@@ -1,268 +1,271 @@
 ---
-apiVersion: apiextensions.k8s.io/v1beta1
+apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
   name: anarchyruns.anarchy.gpte.redhat.com
 spec:
   group: anarchy.gpte.redhat.com
-  version: v1
   scope: Namespaced
   names:
     plural: anarchyruns
     singular: anarchyrun
     kind: AnarchyRun
     shortNames: []
-  validation:
-    openAPIV3Schema:
-      description: >-
-        AnarchyRuns represent Ansible processing that is queued to occur or has occurred.
-        AnarchyRuns process events for AnarchySubjects such as subject create, update,
-        or delete as well as processing scheduled AnarchyActions.
-      type: object
-      required:
-      - apiVersion
-      - kind
-      - metadata
-      - spec
-      properties:
-        apiVersion:
-          type: string
-        kind:
-          type: string
-        metadata:
-          type: object
-        spec:
-          description: >-
-            Specification for how to process the Ansible run.
-          type: object
-          properties:
-            action:
-              description: >-
-                Reference to the AnarchyAction related to this AnarchyRun. Only
-                present if the run was scheluded to process an action.
-              type: object
-              properties:
-                apiVersion:
-                  type: string
-                kind:
-                  type: string
-                name:
-                  type: string
-                namespace:
-                  type: string
-                uid:
-                  type: string
-            actionConfig:
-              description: Action configuration from the AnarchyGovernor.
-              type: object
-              properties:
-                name:
-                  description: Action name from the AnarchyGovernor spec.
-                  type: string
-                vars:
-                  description: Processed variables for the action.
-                  type: object
-            ansibleGalaxyRequirements:
-              description: >-
-                List of Ansible Galaxy requirements from the AnarchyGovernor, frozen in time from when
-                this action was scheduled.
-              type: object
-              properties:
-                roles:
-                  type: array
-                  items:
+  versions:
+  - name: v1
+    served: true
+    storage: true
+    schema:
+      openAPIV3Schema:
+        description: >-
+          AnarchyRuns represent Ansible processing that is queued to occur or has occurred.
+          AnarchyRuns process events for AnarchySubjects such as subject create, update,
+          or delete as well as processing scheduled AnarchyActions.
+        type: object
+        required:
+        - apiVersion
+        - kind
+        - metadata
+        - spec
+        properties:
+          apiVersion:
+            type: string
+          kind:
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: >-
+              Specification for how to process the Ansible run.
+            type: object
+            properties:
+              action:
+                description: >-
+                  Reference to the AnarchyAction related to this AnarchyRun. Only
+                  present if the run was scheluded to process an action.
+                type: object
+                properties:
+                  apiVersion:
+                    type: string
+                  kind:
+                    type: string
+                  name:
+                    type: string
+                  namespace:
+                    type: string
+                  uid:
+                    type: string
+              actionConfig:
+                description: Action configuration from the AnarchyGovernor.
+                type: object
+                properties:
+                  name:
+                    description: Action name from the AnarchyGovernor spec.
+                    type: string
+                  vars:
+                    description: Processed variables for the action.
                     type: object
-                collections:
-                  type: array
-                  items:
+              ansibleGalaxyRequirements:
+                description: >-
+                  List of Ansible Galaxy requirements from the AnarchyGovernor, frozen in time from when
+                  this action was scheduled.
+                type: object
+                properties:
+                  roles:
+                    type: array
+                    items:
+                      type: object
+                  collections:
+                    type: array
+                    items:
+                      type: object
+              pythonRequirements:
+                description: >-
+                  Python requirements from the AnarchyGovernor, frozen in time from when this action was scheduled.
+                type: string
+              failures:
+                description: >-
+                  Count of failures this run has experienced.
+                type: integer
+              governor:
+                description: >-
+                  Reference to the AnarchyGovernor related to this AnarchyRun.
+                type: object
+                properties:
+                  apiVersion:
+                    type: string
+                  kind:
+                    type: string
+                  name:
+                    type: string
+                  namespace:
+                    type: string
+                  uid:
+                    type: string
+                  vars:
+                    description: Processed vars and varSecrets for the governor.
                     type: object
-            pythonRequirements:
-              description: >-
-                Python requirements from the AnarchyGovernor, frozen in time from when this action was scheduled.
-              type: string
-            failures:
-              description: >-
-                Count of failures this run has experienced.
-              type: integer
-            governor:
-              description: >-
-                Reference to the AnarchyGovernor related to this AnarchyRun.
-              type: object
-              properties:
-                apiVersion:
-                  type: string
-                kind:
-                  type: string
-                name:
-                  type: string
-                namespace:
-                  type: string
-                uid:
-                  type: string
-                vars:
-                  description: Processed vars and varSecrets for the governor.
-                  type: object
-            retryAfter:
-              description: >-
-                UTC timestamp for next retry after failure.
-              type: string
-            subject:
-              description: >-
-                Reference to the AnarchySubject related to this AnarchyRun.
-              type: object
-              properties:
-                apiVersion:
-                  type: string
-                kind:
-                  type: string
-                name:
-                  type: string
-                namespace:
-                  type: string
-                uid:
-                  type: string
-                vars:
-                  description: Processed vars and varSecrets for the subject.
-                  type: object
-            handler:
-              description: >-
-                Event or callback handler information.
-              type: object
-              properties:
-                name:
-                  description: >-
-                    Event or callback handler name.
-                  type: string
-                vars:
-                  description: Processed variables for the handler.
-                  type: object
-            tasks:
-              description: >-
-                Ansible "tasks" for the dynamic ansible play.
-              type: array
-              items:
+              retryAfter:
+                description: >-
+                  UTC timestamp for next retry after failure.
+                type: string
+              subject:
+                description: >-
+                  Reference to the AnarchySubject related to this AnarchyRun.
                 type: object
-            postTasks:
-              description: >-
-                Ansible "post_tasks" for the dynamic ansible play.
-              type: array
-              items:
+                properties:
+                  apiVersion:
+                    type: string
+                  kind:
+                    type: string
+                  name:
+                    type: string
+                  namespace:
+                    type: string
+                  uid:
+                    type: string
+                  vars:
+                    description: Processed vars and varSecrets for the subject.
+                    type: object
+              handler:
+                description: >-
+                  Event or callback handler information.
                 type: object
-            preTasks:
-              description: >-
-                Ansible "pre_tasks" for the dynamic ansible play.
-              type: array
-              items:
-                type: object
-            roles:
-              description: >-
-                Ansible "roles" for the dynamic ansible play.
-              type: array
-              items:
-                oneOf:
-                - type: string
-                - type: object
-            vars:
-              description: >-
-                Collected processed vars from governor, subject, event handler, and action
-                combinding vars and varSecrets values.
-              type: object
-            runPostTimestamp:
-              description: Timestamp of when the run result was received from the runner.
-              type: string
-            runner:
-              description: Runner pod name
-              type: string
-            result:
-              description: Result of Ansible playbook run.
-              type: object
-              properties:
-                plays:
-                  description: >-
-                    List of plays executed in the dynamic playbook.
-                  type: array
-                  items:
+                properties:
+                  name:
                     description: >-
-                      Ansible play information.
+                      Event or callback handler name.
+                    type: string
+                  vars:
+                    description: Processed variables for the handler.
                     type: object
-                    properties:
-                      id:
-                        type: string
-                      name:
-                        description: Play name
-                        type: string
-                      start:
-                        description: Play start timestamp.
-                        type: string
-                      stats:
-                        description: >-
-                          Playbook run statistics. Key is inventory hostname. Normally only
-                          "localhost" will be present unless "add_host" calls were used to
-                          create new host entries.
-                        type: object
-                        additionalProperties:
+              tasks:
+                description: >-
+                  Ansible "tasks" for the dynamic ansible play.
+                type: array
+                items:
+                  type: object
+              postTasks:
+                description: >-
+                  Ansible "post_tasks" for the dynamic ansible play.
+                type: array
+                items:
+                  type: object
+              preTasks:
+                description: >-
+                  Ansible "pre_tasks" for the dynamic ansible play.
+                type: array
+                items:
+                  type: object
+              roles:
+                description: >-
+                  Ansible "roles" for the dynamic ansible play.
+                type: array
+                items:
+                  oneOf:
+                  - type: string
+                  - type: object
+              vars:
+                description: >-
+                  Collected processed vars from governor, subject, event handler, and action
+                  combinding vars and varSecrets values.
+                type: object
+              runPostTimestamp:
+                description: Timestamp of when the run result was received from the runner.
+                type: string
+              runner:
+                description: Runner pod name
+                type: string
+              result:
+                description: Result of Ansible playbook run.
+                type: object
+                properties:
+                  plays:
+                    description: >-
+                      List of plays executed in the dynamic playbook.
+                    type: array
+                    items:
+                      description: >-
+                        Ansible play information.
+                      type: object
+                      properties:
+                        id:
+                          type: string
+                        name:
+                          description: Play name
+                          type: string
+                        start:
+                          description: Play start timestamp.
+                          type: string
+                        stats:
+                          description: >-
+                            Playbook run statistics. Key is inventory hostname. Normally only
+                            "localhost" will be present unless "add_host" calls were used to
+                            create new host entries.
                           type: object
-                          properties:
-                            changed:
-                              type: integer
-                            failures:
-                              type: integer
-                            ignored:
-                              type: integer
-                            ok:
-                              type: integer
-                            rescued:
-                              type: integer
-                            skipped:
-                              type: integer
-                            unreachable:
-                              type: integer
-                      tasks:
-                        description: Record of individual tasks executed within play.
-                        type: array
-                        items:
-                          type: object
-                          properties:
-                            action:
-                              type: string
-                            end:
-                              description: Task end timestamp.
-                              type: string
-                            id:
-                              type: string
-                            name:
-                              type: string
-                            start:
-                              description: Task end timestamp.
-                              type: string
-                            hosts:
-                              description: Per-host task execution information.
-                              type: object
-                              additionalProperties:
-                                description: Task execution information for this host.
+                          additionalProperties:
+                            type: object
+                            properties:
+                              changed:
+                                type: integer
+                              failures:
+                                type: integer
+                              ignored:
+                                type: integer
+                              ok:
+                                type: integer
+                              rescued:
+                                type: integer
+                              skipped:
+                                type: integer
+                              unreachable:
+                                type: integer
+                        tasks:
+                          description: Record of individual tasks executed within play.
+                          type: array
+                          items:
+                            type: object
+                            properties:
+                              action:
+                                type: string
+                              end:
+                                description: Task end timestamp.
+                                type: string
+                              id:
+                                type: string
+                              name:
+                                type: string
+                              start:
+                                description: Task end timestamp.
+                                type: string
+                              hosts:
+                                description: Per-host task execution information.
                                 type: object
-                                properties:
-                                  ok:
-                                    description: Whether the task was successful for tasks without loops.
-                                    type: boolean
-                                  result:
-                                    description: Result of task execution for tasks without loops.
-                                    type: object
-                                  items:
-                                    description: Task items information for tasks with loops
-                                    type: array
-                                    items:
-                                      description: Task item information for tasks with loops
+                                additionalProperties:
+                                  description: Task execution information for this host.
+                                  type: object
+                                  properties:
+                                    ok:
+                                      description: Whether the task was successful for tasks without loops.
+                                      type: boolean
+                                    result:
+                                      description: Result of task execution for tasks without loops.
                                       type: object
-                                      properties:
-                                        label:
-                                          type: string
-                                        ok:
-                                          type: boolean
-                                        result:
-                                          description: Result of task item execution
-                                          type: object
-                rc:
-                  type: integer
-                status:
-                  type: string
+                                    items:
+                                      description: Task items information for tasks with loops
+                                      type: array
+                                      items:
+                                        description: Task item information for tasks with loops
+                                        type: object
+                                        properties:
+                                          label:
+                                            type: string
+                                          ok:
+                                            type: boolean
+                                          result:
+                                            description: Result of task item execution
+                                            type: object
+                  rc:
+                    type: integer
+                  status:
+                    type: string

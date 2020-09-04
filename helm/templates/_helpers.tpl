@@ -30,7 +30,9 @@ Selector labels
 */}}
 {{- define "anarchy.selectorLabels" -}}
 app.kubernetes.io/name: {{ include "anarchy.name" . }}
+{{-   if (ne .Release.Name "RELEASE-NAME") }}
 app.kubernetes.io/instance: {{ .Release.Name }}
+{{-   end -}}
 {{- end -}}
 
 {{/*

@@ -58,7 +58,7 @@ spec:
             {{ "{{" }} _k8s_info_cluster_version.resources[0].spec.channel }}
 
       roles:
-      - k8s_config
+      - role: k8s_config
 
       tasks:
       - name: Schedule next run
