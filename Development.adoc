@@ -7,7 +7,7 @@ Prior to beginning Anarchy development, the Anarchy Custom Resource Definitions 
 If Anarchy is not already installed on your cluster, you can install them with:
 
 ----------------------------
-oc apply -f helm/crds/*.yaml
+oc apply -Rf helm/crds/
 ----------------------------
 
 Anarchy development can be performed in the `odo` OpenShift developer CLI or building with OpenShift build configs.
