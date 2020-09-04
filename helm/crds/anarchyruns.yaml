@@ -162,9 +162,7 @@ spec:
                   Ansible "roles" for the dynamic ansible play.
                 type: array
                 items:
-                  oneOf:
-                  - type: string
-                  - type: object
+                  type: object
               vars:
                 description: >-
                   Collected processed vars from governor, subject, event handler, and action

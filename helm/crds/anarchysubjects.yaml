@@ -73,3 +73,4 @@ spec:
                       description: >-
                         Optional variable name to set. If not provided, then each data key from the
                         secret is treated as a separate variable.
+                      type: string
