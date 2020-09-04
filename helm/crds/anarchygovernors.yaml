@@ -115,13 +115,7 @@ spec:
                         Ansible "roles" for the dynamic ansible play used to run this action.
                       type: array
                       items:
-<<<<<<< HEAD
                         type: object
-=======
-                        oneOf:
-                        - type: string
-                        - type: object
->>>>>>> Update CRDs to apiextensions.k8s.io/v1
                     vars:
                       description: >-
                         Ansible "vars" for the dynamic ansible play used to run this action.
@@ -149,10 +143,7 @@ spec:
                             description: >-
                               Optional variable name to set. If not provided, then each data key from the
                               secret is treated as a separate variable.
-<<<<<<< HEAD
                             type: string
-=======
->>>>>>> Update CRDs to apiextensions.k8s.io/v1
                     callbackNameParameter:
                       description: >-
                         Parameter in callback data used to name the event the callback is for.
@@ -189,12 +180,16 @@ spec:
                             type: array
                             items:
 <<<<<<< HEAD
+<<<<<<< HEAD
                               type: object
 =======
                               oneOf:
                               - type: string
                               - type: object
 >>>>>>> Update CRDs to apiextensions.k8s.io/v1
+=======
+                              type: object
+>>>>>>> Fix CRDs to pass validation
                           vars:
                             description: >-
                               Ansible "vars" for the dynamic ansible play used to run the action callback.
@@ -223,9 +218,13 @@ spec:
                                     Optional variable name to set. If not provided, then each data key from the
                                     secret is treated as a separate variable.
 <<<<<<< HEAD
+<<<<<<< HEAD
                                   type: string
 =======
 >>>>>>> Update CRDs to apiextensions.k8s.io/v1
+=======
+                                  type: string
+>>>>>>> Fix CRDs to pass validation
               subjectEventHandlers:
                 description: >-
                   Actions are used to describe available types of AnarchyActions. These are scheduled
@@ -261,12 +260,16 @@ spec:
                         type: array
                         items:
 <<<<<<< HEAD
+<<<<<<< HEAD
                           type: object
 =======
                           oneOf:
                           - type: string
                           - type: object
 >>>>>>> Update CRDs to apiextensions.k8s.io/v1
+=======
+                          type: object
+>>>>>>> Fix CRDs to pass validation
                       vars:
                         description: >-
                           Ansible "vars" for the dynamic ansible play used to run the event handler.
@@ -295,9 +298,13 @@ spec:
                                 Optional variable name to set. If not provided, then each data key from the
                                 secret is treated as a separate variable.
 <<<<<<< HEAD
+<<<<<<< HEAD
                               type: string
 =======
 >>>>>>> Update CRDs to apiextensions.k8s.io/v1
+=======
+                              type: string
+>>>>>>> Fix CRDs to pass validation
                   update:
                     description: >-
                       Description of how to handle update of AnarchySubjects for this governor.
@@ -327,12 +334,16 @@ spec:
                         type: array
                         items:
 <<<<<<< HEAD
+<<<<<<< HEAD
                           type: object
 =======
                           oneOf:
                           - type: string
                           - type: object
 >>>>>>> Update CRDs to apiextensions.k8s.io/v1
+=======
+                          type: object
+>>>>>>> Fix CRDs to pass validation
                       vars:
                         description: >-
                           Ansible "vars" for the dynamic ansible play used to run the event handler.
@@ -361,9 +372,13 @@ spec:
                                 Optional variable name to set. If not provided, then each data key from the
                                 secret is treated as a separate variable.
 <<<<<<< HEAD
+<<<<<<< HEAD
                               type: string
 =======
 >>>>>>> Update CRDs to apiextensions.k8s.io/v1
+=======
+                              type: string
+>>>>>>> Fix CRDs to pass validation
                   delete:
                     description: >-
                       Description of how to handle deletion of AnarchySubjects for this governor.
