@@ -68,7 +68,7 @@ cd anarchy
 Install with Helm
 
 ----
-helm install anarchy helm/
+helm template anarchy helm/ --include-crds | oc apply -f -
 ----
 
 Check your to make sure the anarchy-operator pod is running and the default runner starts soon after:
@@ -83,7 +83,7 @@ anarchy-runner-default-9767c79b6-vt6b4   1/1     Running   0          12m
 Anarchy can be installed even if you do not have cluster admin privileges. This will require the CRDs and ClusterRoles to already have been installed.
 
 ----
-helm install anarchy helm/ --skip-crds --set clusterroles.create=false
+helm template anarchy helm/ | oc apply -f -
 ----
 
 == Anarchy Design
