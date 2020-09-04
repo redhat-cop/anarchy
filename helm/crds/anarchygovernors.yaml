@@ -98,28 +98,33 @@ spec:
                       type: array
                       items:
                         type: object
+                        x-kubernetes-preserve-unknown-fields: true
                     preTasks:
                       description: >-
                         Ansible "pre_tasks" for the dynamic ansible play used to run this action.
                       type: array
                       items:
                         type: object
+                        x-kubernetes-preserve-unknown-fields: true
                     postTasks:
                       description: >-
                         Ansible "post_tasks" for the dynamic ansible play used to run this action.
                       type: array
                       items:
                         type: object
+                        x-kubernetes-preserve-unknown-fields: true
                     roles:
                       description: >-
                         Ansible "roles" for the dynamic ansible play used to run this action.
                       type: array
                       items:
                         type: object
+                        x-kubernetes-preserve-unknown-fields: true
                     vars:
                       description: >-
                         Ansible "vars" for the dynamic ansible play used to run this action.
                       type: object
+                      x-kubernetes-preserve-unknown-fields: true
                     varSecrets:
                       description: >-
                         List of secrets to use to set variables in the dynamic ansible play for this action.
@@ -162,28 +167,33 @@ spec:
                             type: array
                             items:
                               type: object
+                              x-kubernetes-preserve-unknown-fields: true
                           preTasks:
                             description: >-
                               Ansible "pre_tasks" for the dynamic ansible play used to run the action callback.
                             type: array
                             items:
                               type: object
+                              x-kubernetes-preserve-unknown-fields: true
                           postTasks:
                             description: >-
                               Ansible "post_tasks" for the dynamic ansible play used to run the action callback.
                             type: array
                             items:
                               type: object
+                              x-kubernetes-preserve-unknown-fields: true
                           roles:
                             description: >-
                               Ansible "roles" for the dynamic ansible play used to run the action callback.
                             type: array
                             items:
                               type: object
+                              x-kubernetes-preserve-unknown-fields: true
                           vars:
                             description: >-
                               Ansible "vars" for the dynamic ansible play used to run the action callback.
                             type: object
+                            x-kubernetes-preserve-unknown-fields: true
                           varSecrets:
                             description: >-
                               List of secrets to use to set variables in the dynamic ansible play for the action callback.
@@ -225,28 +235,33 @@ spec:
                         type: array
                         items:
                           type: object
+                          x-kubernetes-preserve-unknown-fields: true
                       preTasks:
                         description: >-
                           Ansible "pre_tasks" for the dynamic ansible play used to run the event handler.
                         type: array
                         items:
                           type: object
+                          x-kubernetes-preserve-unknown-fields: true
                       postTasks:
                         description: >-
                           Ansible "post_tasks" for the dynamic ansible play used to run the event handler.
                         type: array
                         items:
                           type: object
+                          x-kubernetes-preserve-unknown-fields: true
                       roles:
                         description: >-
                           Ansible "roles" for the dynamic ansible play used to run the event handler.
                         type: array
                         items:
                           type: object
+                          x-kubernetes-preserve-unknown-fields: true
                       vars:
                         description: >-
                           Ansible "vars" for the dynamic ansible play used to run the event handler.
                         type: object
+                        x-kubernetes-preserve-unknown-fields: true
                       varSecrets:
                         description: >-
                           List of secrets to use to set variables in the dynamic ansible play for the event handler.
@@ -282,28 +297,33 @@ spec:
                         type: array
                         items:
                           type: object
+                          x-kubernetes-preserve-unknown-fields: true
                       preTasks:
                         description: >-
                           Ansible "pre_tasks" for the dynamic ansible play used to run the event handler.
                         type: array
                         items:
                           type: object
+                          x-kubernetes-preserve-unknown-fields: true
                       postTasks:
                         description: >-
                           Ansible "post_tasks" for the dynamic ansible play used to run the event handler.
                         type: array
                         items:
                           type: object
+                          x-kubernetes-preserve-unknown-fields: true
                       roles:
                         description: >-
                           Ansible "roles" for the dynamic ansible play used to run the event handler.
                         type: array
                         items:
                           type: object
+                          x-kubernetes-preserve-unknown-fields: true
                       vars:
                         description: >-
                           Ansible "vars" for the dynamic ansible play used to run the event handler.
                         type: object
+                        x-kubernetes-preserve-unknown-fields: true
                       varSecrets:
                         description: >-
                           List of secrets to use to set variables in the dynamic ansible play for the event handler.
@@ -341,28 +361,33 @@ spec:
                         type: array
                         items:
                           type: object
+                          x-kubernetes-preserve-unknown-fields: true
                       preTasks:
                         description: >-
                           Ansible "pre_tasks" for the dynamic ansible play used to run the event handler.
                         type: array
                         items:
                           type: object
+                          x-kubernetes-preserve-unknown-fields: true
                       postTasks:
                         description: >-
                           Ansible "post_tasks" for the dynamic ansible play used to run the event handler.
                         type: array
                         items:
                           type: object
+                          x-kubernetes-preserve-unknown-fields: true
                       roles:
                         description: >-
                           Ansible "roles" for the dynamic ansible play used to run the event handler.
                         type: array
                         items:
                           type: object
+                          x-kubernetes-preserve-unknown-fields: true
                       vars:
                         description: >-
                           Ansible "vars" for the dynamic ansible play used to run the event handler.
                         type: object
+                        x-kubernetes-preserve-unknown-fields: true
                       varSecrets:
                         description: >-
                           List of secrets to use to set variables in the dynamic ansible play for the event handler.
@@ -391,6 +416,7 @@ spec:
                 description: >-
                   Ansible "vars" for the dynamic ansible play used to run the event handler.
                 type: object
+                x-kubernetes-preserve-unknown-fields: true
               varSecrets:
                 description: >-
                   List of secrets to use to set variables in the dynamic ansible play for the event handler.

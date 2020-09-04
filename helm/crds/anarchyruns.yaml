@@ -65,6 +65,7 @@ spec:
                   vars:
                     description: Processed variables for the action.
                     type: object
+                    x-kubernetes-preserve-unknown-fields: true
               ansibleGalaxyRequirements:
                 description: >-
                   List of Ansible Galaxy requirements from the AnarchyGovernor, frozen in time from when
@@ -75,10 +76,12 @@ spec:
                     type: array
                     items:
                       type: object
+                      x-kubernetes-preserve-unknown-fields: true
                   collections:
                     type: array
                     items:
                       type: object
+                      x-kubernetes-preserve-unknown-fields: true
               pythonRequirements:
                 description: >-
                   Python requirements from the AnarchyGovernor, frozen in time from when this action was scheduled.
@@ -105,6 +108,7 @@ spec:
                   vars:
                     description: Processed vars and varSecrets for the governor.
                     type: object
+                    x-kubernetes-preserve-unknown-fields: true
               retryAfter:
                 description: >-
                   UTC timestamp for next retry after failure.
@@ -127,6 +131,7 @@ spec:
                   vars:
                     description: Processed vars and varSecrets for the subject.
                     type: object
+                    x-kubernetes-preserve-unknown-fields: true
               handler:
                 description: >-
                   Event or callback handler information.
@@ -139,35 +144,41 @@ spec:
                   vars:
                     description: Processed variables for the handler.
                     type: object
+                    x-kubernetes-preserve-unknown-fields: true
               tasks:
                 description: >-
                   Ansible "tasks" for the dynamic ansible play.
                 type: array
                 items:
                   type: object
+                  x-kubernetes-preserve-unknown-fields: true
               postTasks:
                 description: >-
                   Ansible "post_tasks" for the dynamic ansible play.
                 type: array
                 items:
                   type: object
+                  x-kubernetes-preserve-unknown-fields: true
               preTasks:
                 description: >-
                   Ansible "pre_tasks" for the dynamic ansible play.
                 type: array
                 items:
                   type: object
+                  x-kubernetes-preserve-unknown-fields: true
               roles:
                 description: >-
                   Ansible "roles" for the dynamic ansible play.
                 type: array
                 items:
                   type: object
+                  x-kubernetes-preserve-unknown-fields: true
               vars:
                 description: >-
                   Collected processed vars from governor, subject, event handler, and action
                   combinding vars and varSecrets values.
                 type: object
+                x-kubernetes-preserve-unknown-fields: true
               runPostTimestamp:
                 description: Timestamp of when the run result was received from the runner.
                 type: string
@@ -249,6 +260,7 @@ spec:
                                     result:
                                       description: Result of task execution for tasks without loops.
                                       type: object
+                                      x-kubernetes-preserve-unknown-fields: true
                                     items:
                                       description: Task items information for tasks with loops
                                       type: array
@@ -263,6 +275,7 @@ spec:
                                           result:
                                             description: Result of task item execution
                                             type: object
+                                            x-kubernetes-preserve-unknown-fields: true
                   rc:
                     type: integer
                   status:

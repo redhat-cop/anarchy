@@ -50,6 +50,7 @@ spec:
                   Variables for the subject. These are used as Ansible variables during runs
                   and may also be updated by ansible runs.
                 type: object
+                x-kubernetes-preserve-unknown-fields: true
               varSecrets:
                 description: >-
                   List of secrets to use to set variables in the dynamic ansible play for the subject.
