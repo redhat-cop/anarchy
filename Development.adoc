@@ -88,12 +88,8 @@ Deploy new Anarchy image from build with helm template:
 
 --------------------------------------------------------------------------------
 helm template helm/ \
-<<<<<<< HEAD
 --set=image.repository=$(oc get imagestream anarchy -o jsonpath='{.status.tags[?(@.tag=="latest")].items[0].dockerImageReference}') \
 | oc apply -f -
-=======
---set=image.repository=$(oc get imagestream anarchy -o jsonpath='{.status.tags[?(@.tag=="latest")].items[0].dockerImageReference}')
->>>>>>> Fix CRDs to pass validation
 --------------------------------------------------------------------------------
 
 Run test playbook
