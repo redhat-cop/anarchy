@@ -115,9 +115,7 @@ spec:
                         Ansible "roles" for the dynamic ansible play used to run this action.
                       type: array
                       items:
-                        oneOf:
-                        - type: string
-                        - type: object
+                        type: object
                     vars:
                       description: >-
                         Ansible "vars" for the dynamic ansible play used to run this action.
@@ -145,6 +143,7 @@ spec:
                             description: >-
                               Optional variable name to set. If not provided, then each data key from the
                               secret is treated as a separate variable.
+                            type: string
                     callbackNameParameter:
                       description: >-
                         Parameter in callback data used to name the event the callback is for.
@@ -180,9 +179,7 @@ spec:
                               Ansible "roles" for the dynamic ansible play used to run the action callback.
                             type: array
                             items:
-                              oneOf:
-                              - type: string
-                              - type: object
+                              type: object
                           vars:
                             description: >-
                               Ansible "vars" for the dynamic ansible play used to run the action callback.
@@ -210,6 +207,7 @@ spec:
                                   description: >-
                                     Optional variable name to set. If not provided, then each data key from the
                                     secret is treated as a separate variable.
+                                  type: string
               subjectEventHandlers:
                 description: >-
                   Actions are used to describe available types of AnarchyActions. These are scheduled
@@ -244,9 +242,7 @@ spec:
                           Ansible "roles" for the dynamic ansible play used to run the event handler.
                         type: array
                         items:
-                          oneOf:
-                          - type: string
-                          - type: object
+                          type: object
                       vars:
                         description: >-
                           Ansible "vars" for the dynamic ansible play used to run the event handler.
@@ -274,6 +270,7 @@ spec:
                               description: >-
                                 Optional variable name to set. If not provided, then each data key from the
                                 secret is treated as a separate variable.
+                              type: string
                   update:
                     description: >-
                       Description of how to handle update of AnarchySubjects for this governor.
@@ -302,9 +299,7 @@ spec:
                           Ansible "roles" for the dynamic ansible play used to run the event handler.
                         type: array
                         items:
-                          oneOf:
-                          - type: string
-                          - type: object
+                          type: object
                       vars:
                         description: >-
                           Ansible "vars" for the dynamic ansible play used to run the event handler.
@@ -332,6 +327,7 @@ spec:
                               description: >-
                                 Optional variable name to set. If not provided, then each data key from the
                                 secret is treated as a separate variable.
+                              type: string
                   delete:
                     description: >-
                       Description of how to handle deletion of AnarchySubjects for this governor.
@@ -362,9 +358,7 @@ spec:
                           Ansible "roles" for the dynamic ansible play used to run the event handler.
                         type: array
                         items:
-                          oneOf:
-                          - type: string
-                          - type: object
+                          type: object
                       vars:
                         description: >-
                           Ansible "vars" for the dynamic ansible play used to run the event handler.
@@ -392,6 +386,7 @@ spec:
                               description: >-
                                 Optional variable name to set. If not provided, then each data key from the
                                 secret is treated as a separate variable.
+                              type: string
               vars:
                 description: >-
                   Ansible "vars" for the dynamic ansible play used to run the event handler.
@@ -419,3 +414,4 @@ spec:
                       description: >-
                         Optional variable name to set. If not provided, then each data key from the
                         secret is treated as a separate variable.
+                      type: string

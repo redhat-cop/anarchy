@@ -3,6 +3,13 @@
 Anarchy development is primarily aimed at development within an OpenShift cluster.
 Any recent version of OpenShift will be suitable.
 
+Prior to beginning Anarchy development, the Anarchy Custom Resource Definitions (CRDs) must be installed.
+If Anarchy is not already installed on your cluster, you can install them with:
+
+----------------------------
+oc apply -f helm/crds/*.yaml
+----------------------------
+
 Anarchy development can be performed in the `odo` OpenShift developer CLI or building with OpenShift build configs.
 Use of `odo` is recommended for fast iterative development, but all changes should be tested against a build with Anarchy components running in separate deployments before opening a pull request.
 
@@ -77,22 +84,12 @@ Build the anarchy image from local source:
 oc start-build -wF anarchy --from-dir=.
 ---------------------------------------
 
-Deploy Anarchy images from build:
+Deploy new Anarchy image from build with helm template:
 
 --------------------------------------------------------------------------------
-oc process -f deploy-template.yaml \
--p ANARCHY_IMAGE=$(oc get imagestream anarchy -o jsonpath='{.status.tags[?(@.tag=="latest")].items[0].dockerImageReference}') \
-| oc apply -f -
---------------------------------------------------------------------------------
-
-Or deploy with helm:
-
---------------------------------------------------------------------------------
-helm install --namespace $(oc project -q) anarchy helm/ \
+helm template helm/ \
 --set=image.repository=$(oc get imagestream anarchy -o jsonpath='{.status.tags[?(@.tag=="latest")].items[0].dockerImageReference}')
 --------------------------------------------------------------------------------
-
-NOTE: Use `helm upgrade` if already deployed.
 
 Run test playbook
 
