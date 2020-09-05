@@ -75,10 +75,12 @@ spec:
                     type: array
                     items:
                       type: object
+                      x-kubernetes-preserve-unknown-fields: true
                   collections:
                     type: array
                     items:
                       type: object
+                      x-kubernetes-preserve-unknown-fields: true
               pythonRequirements:
                 description: >-
                   Python requirements to install with pip into virtual environment. Format should be

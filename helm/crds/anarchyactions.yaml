@@ -88,3 +88,34 @@ spec:
                     type: string
                   uid:
                     type: string
+          status:
+            description: >-
+              AnarchyAction status.
+            type: object
+            properties:
+              callbackEvents:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    name:
+                      type: string
+                    data:
+                      type: object
+                      x-kubernetes-preserve-unknown-fields: true
+                    name:
+                      type: string
+              runRef:
+                type: object
+                properties:
+                  apiVersion:
+                    type: string
+                  kind:
+                    type: string
+                  name:
+                    type: string
+                  namespace:
+                    type: string
+                  uid:
+              runScheduled:
+                type: string

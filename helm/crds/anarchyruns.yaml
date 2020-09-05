@@ -189,93 +189,96 @@ spec:
                 description: Result of Ansible playbook run.
                 type: object
                 properties:
-                  plays:
-                    description: >-
-                      List of plays executed in the dynamic playbook.
-                    type: array
-                    items:
-                      description: >-
-                        Ansible play information.
-                      type: object
-                      properties:
-                        id:
-                          type: string
-                        name:
-                          description: Play name
-                          type: string
-                        start:
-                          description: Play start timestamp.
-                          type: string
-                        stats:
+                  ansibleRun:
+                    type: object
+                    properties:
+                      plays:
+                        description: >-
+                          List of plays executed in the dynamic playbook.
+                        type: array
+                        items:
                           description: >-
-                            Playbook run statistics. Key is inventory hostname. Normally only
-                            "localhost" will be present unless "add_host" calls were used to
-                            create new host entries.
+                            Ansible play information.
                           type: object
-                          additionalProperties:
-                            type: object
-                            properties:
-                              changed:
-                                type: integer
-                              failures:
-                                type: integer
-                              ignored:
-                                type: integer
-                              ok:
-                                type: integer
-                              rescued:
-                                type: integer
-                              skipped:
-                                type: integer
-                              unreachable:
-                                type: integer
-                        tasks:
-                          description: Record of individual tasks executed within play.
-                          type: array
-                          items:
-                            type: object
-                            properties:
-                              action:
-                                type: string
-                              end:
-                                description: Task end timestamp.
-                                type: string
-                              id:
-                                type: string
-                              name:
-                                type: string
-                              start:
-                                description: Task end timestamp.
-                                type: string
-                              hosts:
-                                description: Per-host task execution information.
+                          properties:
+                            id:
+                              type: string
+                            name:
+                              description: Play name
+                              type: string
+                            start:
+                              description: Play start timestamp.
+                              type: string
+                            stats:
+                              description: >-
+                                Playbook run statistics. Key is inventory hostname. Normally only
+                                "localhost" will be present unless "add_host" calls were used to
+                                create new host entries.
+                              type: object
+                              additionalProperties:
                                 type: object
-                                additionalProperties:
-                                  description: Task execution information for this host.
-                                  type: object
-                                  properties:
-                                    ok:
-                                      description: Whether the task was successful for tasks without loops.
-                                      type: boolean
-                                    result:
-                                      description: Result of task execution for tasks without loops.
+                                properties:
+                                  changed:
+                                    type: integer
+                                  failures:
+                                    type: integer
+                                  ignored:
+                                    type: integer
+                                  ok:
+                                    type: integer
+                                  rescued:
+                                    type: integer
+                                  skipped:
+                                    type: integer
+                                  unreachable:
+                                    type: integer
+                            tasks:
+                              description: Record of individual tasks executed within play.
+                              type: array
+                              items:
+                                type: object
+                                properties:
+                                  action:
+                                    type: string
+                                  end:
+                                    description: Task end timestamp.
+                                    type: string
+                                  id:
+                                    type: string
+                                  name:
+                                    type: string
+                                  start:
+                                    description: Task end timestamp.
+                                    type: string
+                                  hosts:
+                                    description: Per-host task execution information.
+                                    type: object
+                                    additionalProperties:
+                                      description: Task execution information for this host.
                                       type: object
-                                      x-kubernetes-preserve-unknown-fields: true
-                                    items:
-                                      description: Task items information for tasks with loops
-                                      type: array
-                                      items:
-                                        description: Task item information for tasks with loops
-                                        type: object
-                                        properties:
-                                          label:
-                                            type: string
-                                          ok:
-                                            type: boolean
-                                          result:
-                                            description: Result of task item execution
+                                      properties:
+                                        ok:
+                                          description: Whether the task was successful for tasks without loops.
+                                          type: boolean
+                                        result:
+                                          description: Result of task execution for tasks without loops.
+                                          type: object
+                                          x-kubernetes-preserve-unknown-fields: true
+                                        items:
+                                          description: Task items information for tasks with loops
+                                          type: array
+                                          items:
+                                            description: Task item information for tasks with loops
                                             type: object
-                                            x-kubernetes-preserve-unknown-fields: true
+                                            properties:
+                                              label:
+                                                type: string
+                                              ok:
+                                                type: boolean
+                                              result:
+                                                description: Result of task item execution
+                                                type: object
+                                                x-kubernetes-preserve-unknown-fields: true
                   rc:
                     type: integer
                   status:

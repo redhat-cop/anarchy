@@ -75,3 +75,30 @@ spec:
                         Optional variable name to set. If not provided, then each data key from the
                         secret is treated as a separate variable.
                       type: string
+          status:
+            description: >-
+              AnarchySubject status.
+            type: object
+            properties:
+              deleteHandlersStarted:
+                type: string
+              runs:
+                type: object
+                properties:
+                  active:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        apiVersion:
+                          type: string
+                        kind:
+                          type: string
+                        name:
+                          type: string
+                        namespace:
+                          type: string
+                        uid:
+                          type: string
+                  deleteHandlersStarted:
+                    type: string
