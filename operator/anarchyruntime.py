@@ -55,20 +55,13 @@ class AnarchyRuntime(object):
             self.operator_domain = os.environ.get('ANARCHY_DOMAIN', 'anarchy.gpte.redhat.com')
 
     def __init_kube_apis(self):
-        if os.path.exists('/run/secrets/kubernetes.io/serviceaccount/token'):
-            f = open('/run/secrets/kubernetes.io/serviceaccount/token')
-            kube_auth_token = f.read()
-            kube_config = kubernetes.client.Configuration()
-            kube_config.api_key['authorization'] = 'Bearer ' + kube_auth_token
-            kube_config.host = os.environ['KUBERNETES_PORT'].replace('tcp://', 'https://', 1)
-            kube_config.ssl_ca_cert = '/run/secrets/kubernetes.io/serviceaccount/ca.crt'
+        if os.path.exists('/run/secrets/kubernetes.io/serviceaccount'):
+            kubernetes.config.load_incluster_config()
         else:
             kubernetes.config.load_kube_config()
-            kube_config = None
-
-        self.api_client = kubernetes.client.ApiClient(kube_config)
-        self.core_v1_api = kubernetes.client.CoreV1Api(self.api_client)
-        self.custom_objects_api = kubernetes.client.CustomObjectsApi(self.api_client)
+        self.core_v1_api = kubernetes.client.CoreV1Api()
+        self.custom_objects_api = kubernetes.client.CustomObjectsApi()
+        self.api_client = self.core_v1_api.api_client
 
     def __init_namespace(self, operator_namespace):
         if operator_namespace:
