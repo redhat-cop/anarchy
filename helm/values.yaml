@@ -3,6 +3,9 @@ image:
   repository: quay.io/redhat-cop/anarchy
   pullPolicy: IfNotPresent
 
+# Deploy Anarchy, as opposed to only defining the CRDs and ClusterRoles
+deploy: true
+
 envVars: {}
 
 namespace:
