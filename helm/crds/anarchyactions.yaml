@@ -17,6 +17,25 @@ spec:
     storage: true
     subresources:
       status: {}
+    additionalPrinterColumns:
+    - name: Governor
+      type: string
+      jsonPath: .spec.governorRef.name
+    - name: Subject
+      type: string
+      jsonPath: .spec.subjectRef.name
+    - name: Action
+      type: string
+      jsonPath: .spec.action
+    - name: After
+      type: string
+      jsonPath: .spec.after
+    - name: Run
+      type: string
+      jsonPath: .status.runRef.name
+    - name: Age
+      type: date
+      jsonPath: .metadata.creationTimestamp
     schema:
       openAPIV3Schema:
         description: >-

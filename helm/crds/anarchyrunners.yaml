@@ -17,6 +17,16 @@ spec:
     storage: true
     subresources:
       status: {}
+    additionalPrinterColumns:
+    - name: Min
+      type: string
+      jsonPath: .spec.minReplicas
+    - name: Max
+      type: string
+      jsonPath: .spec.maxReplicas
+    - name: Age
+      type: date
+      jsonPath: .metadata.creationTimestamp
     schema:
       openAPIV3Schema:
         description: >-

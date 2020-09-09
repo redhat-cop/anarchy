@@ -17,6 +17,25 @@ spec:
     storage: true
     subresources:
       status: {}
+    additionalPrinterColumns:
+    - name: Governor
+      type: string
+      description: The governor for the subject
+      jsonPath: .spec.governor
+    - name: Current State
+      type: string
+      description: The current_state variable value.
+      jsonPath: .spec.vars.current_state
+    - name: Desired State
+      type: string
+      description: The desired_state variable value.
+      jsonPath: .spec.vars.desired_state
+    - name: Age
+      type: date
+      jsonPath: .metadata.creationTimestamp
+    - name: Delete
+      type: date
+      jsonPath: .metadata.deletionTimestamp
     schema:
       openAPIV3Schema:
         description: >-

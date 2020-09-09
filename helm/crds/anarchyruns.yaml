@@ -15,6 +15,27 @@ spec:
   - name: v1
     served: true
     storage: true
+    additionalPrinterColumns:
+    - name: Governor
+      type: string
+      jsonPath: .spec.governor.name
+    - name: Subject
+      type: string
+      jsonPath: .spec.subject.name
+    - name: Action
+      type: string
+      jsonPath: .spec.action.name
+    - name: Event
+      type: string
+      jsonPath: .spec.handler.name
+    - name: Runner
+      type: string
+      description: Runner state
+      jsonPath: >-
+        .metadata.labels['anarchy\.gpte\.redhat\.com/runner']
+    - name: Age
+      type: date
+      jsonPath: .metadata.creationTimestamp
     schema:
       openAPIV3Schema:
         description: >-
