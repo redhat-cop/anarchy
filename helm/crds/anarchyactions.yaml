@@ -135,5 +135,6 @@ spec:
                   namespace:
                     type: string
                   uid:
+                    type: string
               runScheduled:
                 type: string
