@@ -54,9 +54,7 @@ Anarchy is using [Kopf](https://github.com/zalando-incubator/kopf) and needs the
 oc apply -f https://raw.githubusercontent.com/zalando-incubator/kopf/master/peering.yaml
 ----
 
-=== Using Helm
-
-Helm v3 support only.
+=== Install with Helm
 
 Clone this repo to your local workstation and change directory:
 
