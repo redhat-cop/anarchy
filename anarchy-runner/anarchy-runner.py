@@ -162,13 +162,19 @@ class AnarchyRunner(object):
             ansible_run.config.env['VIRTUAL_ENV'] = virtual_env
             ansible_run.config.command[0] = virtual_env + '/bin/ansible-playbook'
         ansible_run.run()
-        self.post_result(anarchy_run, {
-            'rc': ansible_run.rc,
-            'status': ansible_run.status,
-            'ansibleRun': yaml.safe_load(
+        ansible_run_result = dict(
+            rc = ansible_run.rc,
+            status = ansible_run.status,
+        )
+        try:
+            ansible_run['ansibleRun'] = yaml.safe_load(
                 open(self.ansible_private_dir + '/anarchy-result.yaml').read()
             )
-        })
+        except FileNotFoundError:
+            # Failure without writing anarchy-result yaml!
+            pass
+
+        self.post_result(anarchy_run, ansible_run_result)
 
     def setup_python_venv(self, anarchy_run):
         requirements = anarchy_run['spec'].get('pythonRequirements', None)
