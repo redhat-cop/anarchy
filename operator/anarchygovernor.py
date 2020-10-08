@@ -216,7 +216,7 @@ class AnarchyGovernor(object):
         if time_interval:
             return parse_time_interval(time_interval)
         else:
-            return timedelta(days=7)
+            return timedelta(days=1)
 
     @property
     def remove_successful_runs_after(self):
@@ -224,7 +224,7 @@ class AnarchyGovernor(object):
         if time_interval:
             return parse_time_interval(time_interval)
         else:
-            return timedelta(days=7)
+            return timedelta(days=1)
 
     @property
     def resource_version(self):
