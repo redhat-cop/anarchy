@@ -517,6 +517,13 @@ def main_loop():
         while runtime.is_active:
             AnarchyAction.start_actions(runtime)
 
+            if runner_check_interval < time.time() - last_runner_check:
+                try:
+                    AnarchyRunner.manage_runners(runtime)
+                    last_runner_check = time.time()
+                except:
+                    operator_logger.exception('Error in AnarchyRunner.manage_runners!')
+
             if cleanup_interval < time.time() - last_cleanup:
                 try:
                     AnarchyGovernor.cleanup(runtime)
@@ -530,13 +537,6 @@ def main_loop():
                     last_run_check = time.time()
                 except:
                     operator_logger.exception('Error in AnarchyRun.manage_active_runs!')
-
-            if runner_check_interval < time.time() - last_runner_check:
-                try:
-                    AnarchyRunner.manage_runners(runtime)
-                    last_runner_check = time.time()
-                except:
-                    operator_logger.exception('Error in AnarchyRunner.manage_runners!')
 
             time.sleep(1)
 
