@@ -213,7 +213,7 @@ class AnarchySubject(object):
                     if i != 0:
                         operator_logger.warning(
                             'Removing AnarchyRun %s in AnarchySubject %s, but it was not listed first!',
-                            anarchy_run.name, self.name
+                            run_name, self.name
                         )
                     break
             if not run_ref:

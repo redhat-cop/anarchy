@@ -146,8 +146,26 @@ class AnarchyRunner(object):
         anarchy_subject.update(anarchy_run['spec']['subject'])
 
         run_name = anarchy_run['metadata']['name']
-        virtual_env = self.setup_python_venv(anarchy_run)
-        self.setup_ansible_galaxy_requirements(anarchy_run)
+        try:
+            virtual_env = self.setup_python_venv(anarchy_run)
+        except subprocess.CalledProcessError as e:
+            self.post_result(anarchy_run, dict(
+                rc = 1,
+                status = 'failed',
+                statusMessage = "Failed Python virtualenv setup:\n" + e.stdout,
+            ))
+            return
+
+        try:
+            self.setup_ansible_galaxy_requirements(anarchy_run)
+        except subprocess.CalledProcessError as e:
+            self.post_result(anarchy_run, dict(
+                rc = 1,
+                status = 'failed',
+                statusMessage = "Failed ansible-galaxy setup:\n" + e.stdout,
+            ))
+            return
+
         self.clean_runner_dir()
         self.write_runner_vars(anarchy_run, anarchy_subject, anarchy_governor)
         self.write_runner_playbook(anarchy_run)
@@ -167,7 +185,7 @@ class AnarchyRunner(object):
             status = ansible_run.status,
         )
         try:
-            ansible_run['ansibleRun'] = yaml.safe_load(
+            ansible_run_result['ansibleRun'] = yaml.safe_load(
                 open(self.ansible_private_dir + '/anarchy-result.yaml').read()
             )
         except FileNotFoundError:
@@ -190,10 +208,15 @@ class AnarchyRunner(object):
             env = os.environ.copy()
             env['VIRTUAL_ENV'] = virtual_env
             env['PATH'] = '{}/bin:{}'.format(virtual_env, env['PATH'])
-            subprocess.run(
-                [virtual_env + '/bin/pip3', 'install', '-r', requirements_file],
-                check=True, env=env
-            )
+            try:
+                subprocess.check_output(
+                    [virtual_env + '/bin/pip3', 'install', '-r', requirements_file],
+                    stderr=subprocess.STDOUT, env=env
+                )
+            except Exception as e:
+                shutil.rmtree(virtual_env)
+                raise
+
             if not os.path.exists(virtual_env + '/bin/ansible-playbook'):
                 with open(virtual_env + '/bin/ansible-playbook', 'w') as ofh:
                     ofh.write("#!{}/bin/python\n".format(virtual_env))
@@ -224,10 +247,20 @@ class AnarchyRunner(object):
             os.unlink(ansible_roles_dir)
         os.symlink(requirements_dir + '/collections', ansible_collections_dir)
         os.symlink(requirements_dir + '/roles', ansible_roles_dir)
-        if requirements and 'collections' in requirements:
-            subprocess.run(['ansible-galaxy', 'collection', 'install', '-r', requirements_file], check=True)
-        if requirements:
-            subprocess.run(['ansible-galaxy', 'role', 'install', '-r', requirements_file], check=True)
+        try:
+            if requirements and 'collections' in requirements:
+                subprocess.check_output(
+                    ['ansible-galaxy', 'collection', 'install', '-r', requirements_file],
+                    stderr=subprocess.STDOUT
+                )
+            if requirements:
+                subprocess.check_output(
+                    ['ansible-galaxy', 'role', 'install', '-r', requirements_file],
+                    stderr=subprocess.STDOUT
+                )
+        except Exception as e:
+            shutil.rmtree(requirements_dir)
+            raise
 
     def sleep(self):
         time.sleep(self.polling_interval)
