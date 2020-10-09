@@ -1,10 +1,11 @@
 #!/bin/bash
 
 VERSION=$1
+CURRENT_VERSION=$(git tag | grep ^v[0-9] | sort -V | tail -1)
 
 if [[  -z "${VERSION}" ]]; then
-    echo "Usage: $0 VERSION"
-    exit 1
+    VERSION="${CURRENT_VERSION%.*}.$((${CURRENT_VERSION/*./} + 1))"
+    echo "New version is: ${VERSION}"
 fi
 
 if [[ ! $VERSION =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
