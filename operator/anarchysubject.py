@@ -1,5 +1,8 @@
+from base64 import b64decode, b64encode
 from datetime import datetime
-from anarchyutil import k8s_ref
+from anarchyutil import deep_update, k8s_ref
+import hashlib
+import json
 import kubernetes
 import logging
 import os
@@ -102,6 +105,12 @@ class AnarchySubject(object):
         return self.metadata['resourceVersion']
 
     @property
+    def spec_sha256(self):
+        return b64encode(hashlib.sha256(json.dumps(
+            self.spec, sort_keys=True, separators=(',',':')
+        ).encode('utf-8')).digest()).decode('utf-8')
+
+    @property
     def uid(self):
         return self.metadata['uid']
 
@@ -191,7 +200,10 @@ class AnarchySubject(object):
         '''
         Handle update to AnarchySubject spec.
         '''
-        self.process_subject_event_handlers(runtime, 'update')
+        spec_sha256_annotation = self.metadata.get('annotations', {}).get(runtime.operator_domain + '/spec-sha256')
+        if not spec_sha256_annotation \
+        or spec_sha256_annotation != self.spec_sha256:
+            self.process_subject_event_handlers(runtime, 'update')
 
     def remove_active_run_from_status(self, anarchy_run, runtime):
         # Support passing run by object or name
@@ -245,11 +257,21 @@ class AnarchySubject(object):
         '''
         resource_patch = {}
         result = None
-        if 'metadata' in patch:
-            resource_patch['metadata'] = patch['metadata']
-        if 'spec' in patch:
-            resource_patch['spec'] = patch['spec']
-        if resource_patch:
+
+        if 'metadata' in patch or 'spec' in patch:
+            if 'metadata' in patch:
+                resource_patch['metadata'] = patch['metadata']
+            if 'spec' in patch:
+                resource_patch['spec'] = patch['spec']
+                deep_update(self.spec, patch['spec'])
+            if patch.get('skip_update_processing', False):
+                # Set spec-sha256 annotation to indicate skip processing
+                if 'metadata' not in resource_patch:
+                    resource_patch['metadata'] = {}
+                if 'annotations' not in resource_patch['metadata']:
+                    resource_patch['metadata']['annotations'] = {}
+                resource_patch['metadata']['annotations'][runtime.operator_domain + '/spec-sha256'] = self.spec_sha256
+
             result = runtime.custom_objects_api.patch_namespaced_custom_object(
                 runtime.operator_domain, runtime.api_version, runtime.operator_namespace,
                 'anarchysubjects', self.name, resource_patch

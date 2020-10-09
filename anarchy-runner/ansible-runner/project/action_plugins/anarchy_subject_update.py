@@ -8,6 +8,7 @@ import re
 import requests
 
 from ansible.plugins.action import ActionBase
+from ansible.module_utils.parsing.convert_bool import boolean
 
 class ActionModule(ActionBase):
     def run(self, tmp=None, task_vars=None, **_):
@@ -26,6 +27,8 @@ class ActionModule(ActionBase):
             patch['spec'] = module_args['spec']
         if 'status' in module_args:
             patch['status'] = module_args['status']
+        if boolean(module_args.get('skip_update_processing', False), strict=False):
+            patch['skip_update_processing'] = True
 
         response = requests.patch(
             anarchy_url + '/run/subject/' + anarchy_subject_name,
