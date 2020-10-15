@@ -43,6 +43,11 @@ spec:
             type: string
           metadata:
             type: object
+            properties:
+              name:
+                type: string
+                maxLength: 63
+                pattern: ^[a-z0-9A-Z]([a-z0-9A-Z\-._]*[a-z0-9A-Z])?$
           spec:
             description: >-
               Definition of the AnarchyRunner.
