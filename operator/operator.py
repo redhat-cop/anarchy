@@ -94,11 +94,6 @@ def handle_subject_update(body, old, new, **_):
     except AssertionError as e:
         operator_logger.warning('AnarchySubject %s invalid: %s', body['metadata']['name'], e)
 
-@kopf.timer(runtime.operator_domain, runtime.api_version, 'anarchysubjects', idle=60, interval=60)
-def handle_subject_timer(body, **_):
-    subject = AnarchySubject(body)
-    subject.set_active_run_to_pending_from_status(runtime)
-
 @kopf.on.event(runtime.operator_domain, runtime.api_version, 'anarchysubjects')
 def handle_subject_event(event, logger, **_):
     '''

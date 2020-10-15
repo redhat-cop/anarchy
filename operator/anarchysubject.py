@@ -391,44 +391,6 @@ class AnarchySubject(object):
                 else:
                     raise
 
-    def set_active_run_to_pending_from_status(self, runtime):
-        '''
-        Set next AnarchyRun to pending from status
-        '''
-        while True:
-            run_ref = self.active_run_ref
-            if not run_ref:
-                return
-
-            run_name = run_ref['name']
-            run_namespace = run_ref['namespace']
-            try:
-                run = runtime.custom_objects_api.get_namespaced_custom_object(
-                    runtime.operator_domain, runtime.api_version, run_namespace, 'anarchyruns', run_name
-                )
-                runner_label_value = run['metadata']['labels'][runtime.runner_label]
-
-                if runner_label_value == 'queued':
-                    operator_logger.info('Setting AnarchyRun %s to pending for AnarchySubject %s', run_name, self.name)
-                    runtime.custom_objects_api.patch_namespaced_custom_object(
-                        runtime.operator_domain, runtime.api_version, run_namespace, 'anarchyruns', run_name,
-                        {'metadata': {'labels': { runtime.runner_label: 'pending' } } }
-                    )
-                    return
-                elif runner_label_value == 'successful':
-                    self.remove_active_run_from_status(run_name, runtime)
-
-            except kubernetes.client.rest.ApiException as e:
-                if e.status == 404:
-                    operator_logger.warning(
-                        'AnarchyRun %s for AnarchySubject %s was deleted before execution',
-                        run_name, self.name
-                    )
-                    self.remove_active_run(run_ref, runtime)
-                    self.set_active_run_to_pending(runtime)
-                else:
-                    raise
-
     def to_dict(self, runtime):
         return dict(
             apiVersion = runtime.api_group_version,
