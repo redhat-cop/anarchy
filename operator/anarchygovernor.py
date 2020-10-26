@@ -377,13 +377,6 @@ class AnarchyGovernor(object):
             labels[runtime.event_label] = event_name
 
         if anarchy_action:
-            run_spec['action'] = {
-                'apiVersion': runtime.api_group_version,
-                'kind': 'AnarchyAction',
-                'name': anarchy_action.name,
-                'namespace': anarchy_action.namespace,
-                'uid': anarchy_action.uid
-            }
             if event_name:
                 generate_name = '{}-{}-'.format(anarchy_action.name, event_name)
             else:

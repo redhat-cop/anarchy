@@ -236,7 +236,7 @@ class AnarchyRunner(object):
         Return runner token, used to authenticate callbacks.
         Default to use object uid if token is not set.
         '''
-        return self.spec['token']
+        return self.spec.get('token', self.uid)
 
     @property
     def uid(self):

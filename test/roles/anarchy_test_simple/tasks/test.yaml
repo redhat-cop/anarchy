@@ -284,8 +284,6 @@
         after: "{{ '10s' | anarchy_after_timestamp }}"
         subjectRef:
           name: test-simple-1
-        vars:
-          fail_first_run: true
 
 - name: Pause for AnarchyAction initial handling
   pause:

@@ -185,12 +185,18 @@ class AnarchyRunner(object):
             status = ansible_run.status,
         )
         try:
-            ansible_run_result['ansibleRun'] = yaml.safe_load(
+            run_data = yaml.safe_load(
                 open(self.ansible_private_dir + '/anarchy-result.yaml').read()
             )
-        except FileNotFoundError:
-            # Failure without writing anarchy-result yaml!
-            pass
+            ansible_run_result['ansibleRun'] = run_data
+            if ansible_run.status == 'successful':
+                ansible_run_result['statusMessage'] = ''
+            else:
+                # Get 'msg' from last task of last play on localhost for failure message
+                run_msg = run_data['plays'][-1]['tasks'][-1]['hosts']['localhost'].get('result', {}).get('msg', '')
+                ansible_run_result['statusMessage'] = run_msg
+        except Exception:
+            logging.exception('Failure processing anarchy-result yaml')
 
         self.post_result(anarchy_run, ansible_run_result)
 

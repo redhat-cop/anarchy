@@ -268,10 +268,17 @@ def post_run(run_name):
         ))
 
     anarchy_run.post_result(result, runner_pod.metadata.name, runtime)
-    if result['status'] == 'successful' \
-    and run_name == anarchy_subject.active_run_name:
-        anarchy_subject.remove_active_run_from_status(anarchy_run, runtime)
-        anarchy_subject.set_active_run_to_pending(runtime)
+    if run_name == anarchy_subject.active_run_name:
+        if result['status'] == 'successful':
+                anarchy_subject.remove_active_run_from_status(anarchy_run, runtime)
+                anarchy_subject.set_active_run_to_pending(runtime)
+        else:
+            anarchy_subject.set_run_failure_in_status(anarchy_run, runtime)
+    else:
+        operator_logger.warning(
+            'AnarchyRun %s post to Anarchysubject %s, but was not the active run!',
+            anarchy_run.name, anarchy_run.subject_name
+        )
 
     return flask.jsonify({'success':True})
 

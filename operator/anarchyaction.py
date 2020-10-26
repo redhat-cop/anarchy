@@ -135,6 +135,14 @@ class AnarchyAction(object):
     def uid(self):
         return self.metadata['uid']
 
+    @property
+    def vars(self):
+        return self.spec.get('vars', {})
+
+    @property
+    def var_secrets(self):
+        return self.spec.get('varSecrets', [])
+
     def add_run_to_status(self, anarchy_run, runtime):
         try:
             runtime.custom_objects_api.patch_namespaced_custom_object_status(
@@ -228,7 +236,8 @@ class AnarchyAction(object):
             ('governor', governor),
             ('subject', subject),
             ('actionConfig', action_config),
-            ('handler', handler)
+            ('action', self),
+            ('handler', handler),
         )
         run_vars = {
             'anarchy_action_name': self.name,
@@ -314,7 +323,8 @@ class AnarchyAction(object):
         context = (
             ('governor', governor),
             ('subject', subject),
-            ('actionConfig', action_config)
+            ('actionConfig', action_config),
+            ('action', self),
         )
         run_vars = {
             'anarchy_action_name': self.name,

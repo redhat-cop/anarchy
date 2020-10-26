@@ -96,6 +96,14 @@ class AnarchyRun(object):
         return self.metadata['namespace']
 
     @property
+    def result_status(self):
+        return self.spec.get('result', {}).get('status')
+
+    @property
+    def result_status_message(self):
+        return self.spec.get('result', {}).get('statusMessage')
+
+    @property
     def retry_after(self):
         return self.spec.get('retryAfter')
 

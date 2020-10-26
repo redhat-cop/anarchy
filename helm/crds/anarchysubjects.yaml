@@ -80,7 +80,7 @@ spec:
                 type: array
                 items:
                   description: >-
-                    Secret used to set variables in the dynamic ansible play for the event handler.
+                    Secret used to set variables in the dynamic ansible play for the subject.
                     Secret values are merged into values from "vars".
                   type: object
                   required:
@@ -106,6 +106,10 @@ spec:
             properties:
               deleteHandlersStarted:
                 type: string
+              runStatus:
+                type: string
+              runStatusMessage:
+                type: string
               runs:
                 type: object
                 properties:
@@ -124,5 +128,3 @@ spec:
                           type: string
                         uid:
                           type: string
-                  deleteHandlersStarted:
-                    type: string

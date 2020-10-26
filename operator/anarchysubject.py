@@ -222,9 +222,13 @@ class AnarchySubject(object):
             for i in range(len(status_runs_active)):
                 if status_runs_active[i]['name'] == run_name:
                     run_ref = status_runs_active.pop(i)
-                    if i != 0:
+                    if i == 0:
+                        # Clear any run status from active run
+                        anarchy_subject['status'].pop('runStatus', None)
+                        anarchy_subject['status'].pop('runStatusMessage', None)
+                    else:
                         operator_logger.warning(
-                            'Removing AnarchyRun %s in AnarchySubject %s, but it was not listed first!',
+                            'Removing AnarchyRun %s in AnarchySubject %s, but it was not the active run!',
                             run_name, self.name
                         )
                     break
@@ -390,6 +394,17 @@ class AnarchySubject(object):
                     self.remove_active_run(run_ref, runtime)
                 else:
                     raise
+    def set_run_failure_in_status(self, anarchy_run, runtime):
+        resource = runtime.custom_objects_api.patch_namespaced_custom_object_status(
+            runtime.operator_domain, runtime.api_version, runtime.operator_namespace,
+            'anarchysubjects', self.name, {
+                'status': {
+                    'runStatus': anarchy_run.result_status,
+                    'runStatusMessage': anarchy_run.result_status_message,
+                }
+            }
+        )
+        self.refresh_from_resource(resource)
 
     def to_dict(self, runtime):
         return dict(
