@@ -1,0 +1,59 @@
+{{- if .Values.deploy -}}
+{{- range $runner := .Values.runners -}}
+{{- with $serviceAccountName := (hasKey $runner "serviceAccountName") | ternary $runner.serviceAccountName (printf "%s-runner-%s" (include "anarchy.name" $) $runner.name) -}}
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: {{ $serviceAccountName }}
+  namespace: {{ include "anarchy.namespaceName" $ }}
+---
+apiVersion: anarchy.gpte.redhat.com/v1
+kind: AnarchyRunner
+metadata:
+  name: {{ $runner.name }}
+  namespace: {{ include "anarchy.namespaceName" $ }}
+spec:
+{{- if $runner.maxReplicas }}
+  maxReplicas: {{ $runner.maxReplicas }}
+{{- end }}
+{{- if $runner.minReplicas }}
+  minReplicas: 10
+{{- else }}
+  minReplicas: 1
+{{- end }}
+  podTemplate:
+    spec:
+      containers:
+      - name: runner
+        resources: 
+          {{- toYaml $runner.resources | nindent 10 }}
+      serviceAccountName: {{ $serviceAccountName }}
+{{- if $runner.token }}
+      token: {{ $runner.token }}
+{{- end }}
+{{- with $runner.clusterRoleRules }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: {{ include "anarchy.namespaceName" $ }}:{{ $serviceAccountName }}
+rules:
+{{ toYaml .  }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: {{ include "anarchy.namespaceName" $ }}:{{ $serviceAccountName }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: {{ include "anarchy.namespaceName" $ }}:{{ $serviceAccountName }}
+subjects:
+- kind: ServiceAccount
+  name: {{ $serviceAccountName }}
+  namespace: {{ include "anarchy.namespaceName" $ }}
+{{- end }}
+{{- end -}}
+{{- end -}}
+{{- end }}
