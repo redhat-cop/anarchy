@@ -2,6 +2,7 @@ apiVersion: anarchy.gpte.redhat.com/v1
 kind: AnarchyGovernor
 metadata:
   name: gitops
+  namespace: {{ include "anarchy.namespaceName" . }}
 spec:
   runner: default
   ansibleGalaxyRequirements:
