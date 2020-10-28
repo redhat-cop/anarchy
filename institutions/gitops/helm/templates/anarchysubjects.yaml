@@ -8,5 +8,25 @@ metadata:
 spec:
   governor: gitops
   vars:
-    {{- toYaml $subject.vars | nindent 4 }}
+  {{- toYaml $subject.vars | nindent 4 }}
+  {{- if $subject.varSecrets -}}
+  varSecrets:
+    {{- range $secret := $subject.varSecrets -}}
+  - name: {{ $secret.name }}
+    {{- end }}
+  {{- end }}
+  {{- range $secret := $subject.varSecrets -}}
+    {{- if $secret.stringData -}}
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: {{ $secret.name }}
+  namespace: {{ include "anarchy.namespaceName" . }}
+data:
+      {{- range $k, $v := $secret.stringData }}
+  {{ $k }}: {{ $v | toJson | b64enc }}
+      {{- end }}
+    {{- end }}
+  {{- end }}
 {{- end }}
