@@ -1,0 +1,12 @@
+{{- range $subject := .Values.subjects -}}
+---
+apiVersion: anarchy.gpte.redhat.com/v1
+kind: AnarchySubject
+metadata:
+  name: {{ $subject.name }}
+  namespace: {{ include "anarchy.namespaceName" . }}
+spec:
+  governor: gitops
+  vars:
+    {{- toYaml $subject.vars | nindent 4 }}
+{{- end }}

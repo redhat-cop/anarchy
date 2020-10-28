@@ -3,11 +3,18 @@ image:
   repository: quay.io/redhat-cop/anarchy
   pullPolicy: IfNotPresent
 
+# Deploy Anarchy, as opposed to only defining the CRDs and ClusterRoles
+deploy: true
+
 envVars: {}
 
-namespace: anarchy-k8s-config
+namespace:
+  create: true
+  name: anarchy-k8s-config
 
-anarchyDeploy: true
+# Install ClusterRoles
+clusterroles:
+  create: true
 
 imagePullSecrets: []
 nameOverride: ""
@@ -28,6 +35,18 @@ service:
     api: 5000
     metrics: 8000
 
+ingress:
+  enabled: false
+  kind: Ingress
+  annotations: {}
+  hosts:
+  - host: anarchy.apps.example.com
+    paths: []
+  tls:
+  - secretName: anarchy-tls
+    hosts:
+    - anarchy.apps.example.com
+
 resources: {}
 
 nodeSelector: {}
@@ -36,9 +55,28 @@ tolerations: []
 
 affinity: {}
 
+runners:
+- name: default
+  resources:
+    limits:
+      cpu: "1"
+      memory: 256Mi
+    requests:
+      cpu: 100m
+      memory: 256Mi
+  clusterRoleRules:
+  - apiGroups:
+    - '*'
+    resources:
+    - '*'
+    verbs:
+    - '*'
+
+subjects: []
+
 k8s_config:
   repo: https://github.com/redhat-cop/k8s_config.git
-  version: v0.4.4
+  version: v0.4.6
   run_interval: 1h
 
 k8s_cluster_info: {}
