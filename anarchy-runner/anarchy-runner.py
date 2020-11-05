@@ -152,7 +152,7 @@ class AnarchyRunner(object):
             self.post_result(anarchy_run, dict(
                 rc = 1,
                 status = 'failed',
-                statusMessage = "Failed Python virtualenv setup:\n" + e.stdout,
+                statusMessage = "Failed Python virtualenv setup:\n" + e.stdout.decode('utf-8'),
             ))
             return
 
@@ -162,7 +162,7 @@ class AnarchyRunner(object):
             self.post_result(anarchy_run, dict(
                 rc = 1,
                 status = 'failed',
-                statusMessage = "Failed ansible-galaxy setup:\n" + e.stdout,
+                statusMessage = "Failed ansible-galaxy setup:\n" + e.stdout.decode('utf-8'),
             ))
             return
 
