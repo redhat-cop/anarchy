@@ -18,7 +18,7 @@ spec:
   maxReplicas: {{ $runner.maxReplicas }}
 {{- end }}
 {{- if $runner.minReplicas }}
-  minReplicas: 10
+  minReplicas: {{ $runner.minReplicas }}
 {{- else }}
   minReplicas: 1
 {{- end }}
