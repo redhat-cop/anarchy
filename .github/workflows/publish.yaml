@@ -17,7 +17,10 @@ jobs:
       id: get_version
       run: |
         # Version is based on a semantic version tag
-        VERSION=${GITHUB_REF#refs/tags/}
+        TAG=${GITHUB_REF#refs/tags/}
+        VERSION=${TAG/-*/}
+        echo "::set-output name=TAG::${TAG}"
+        echo "::set-output name=VERSION::${VERSION}"
         # Publish to latest, minor, and patch tags
         TAGS=('latest' "${VERSION}" "${VERSION%.*}")
         # Set IMAGE_TAGS output for use in next step
@@ -31,6 +34,7 @@ jobs:
 
     - name: Build and publish image
       uses: docker/build-push-action@v1
+      if: "!contains(steps.get_version.outputs.VERSION, '-')"
       with:
         registry: ${{ secrets.REGISTRY_URI }}
         repository: ${{ secrets.REGISTRY_REPOSITORY }}/anarchy
