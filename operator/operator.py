@@ -142,16 +142,16 @@ def named_action_callback(anarchy_action_name, callback_name):
 def handle_action_callback(anarchy_action_name, callback_name):
     if not flask.request.json:
         flask.abort(400)
-        return
     anarchy_action = AnarchyAction.get(anarchy_action_name, runtime)
     if not anarchy_action:
         operator_logger.warning("AnarchyAction %s not found for callback", anarchy_action_name)
         flask.abort(404)
-        return
     if not anarchy_action.check_callback_token(flask.request.headers.get('Authorization', '')):
         operator_logger.warning("Invalid callback token for AnarchyAction %s", anarchy_action_name)
         flask.abort(403)
-        return
+    if anarchy_action.completed_timestamp:
+        operator_logger.warning("Invalid callback to completed AnarchyAction %s", anarchy_action_name)
+        flask.abort(400)
     anarchy_action.process_callback(runtime, callback_name, flask.request.json)
     return flask.jsonify({'status': 'ok'})
 
@@ -160,7 +160,6 @@ def get_run():
     anarchy_runner, runner_pod = check_runner_auth(flask.request.headers.get('Authorization', ''))
     if not anarchy_runner:
         flask.abort(400)
-        return
 
     run_value = runner_pod.metadata.labels.get(runtime.run_label)
     if run_value:
@@ -255,7 +254,7 @@ def post_run(run_name):
     anarchy_subject = anarchy_run.get_subject(runtime)
     if not anarchy_subject:
         operator_logger.warning(
-            'AnarchyRun %s post to deleted Anarchysubject %s!',
+            'AnarchyRun %s post to deleted AnarchySubject %s!',
             anarchy_run.name, anarchy_run.subject_name
         )
         return flask.jsonify({'success': True, 'msg': 'AnarchySubject not found'})
@@ -263,20 +262,28 @@ def post_run(run_name):
     try:
         result = flask.request.json['result']
     except KeyError:
-        return flask.abort(400, flask.jsonify(
+        flask.abort(400, flask.jsonify(
             {'success': False, 'error': 'Invalid run data'}
         ))
 
     anarchy_run.post_result(result, runner_pod.metadata.name, runtime)
     if run_name == anarchy_subject.active_run_name:
         if result['status'] == 'successful':
-                anarchy_subject.remove_active_run_from_status(anarchy_run, runtime)
-                anarchy_subject.set_active_run_to_pending(runtime)
+            anarchy_subject.remove_active_run_from_status(anarchy_run, runtime)
+            anarchy_subject.set_active_run_to_pending(runtime)
+            if anarchy_run.action_name:
+                anarchy_action = AnarchyAction.get(anarchy_run.action_name, runtime)
+                anarchy_governor = anarchy_subject.get_governor(runtime)
+                action_config = anarchy_governor.action_config(anarchy_action.action)
+                if not action_config.explicit_completion:
+                    if anarchy_action.name == anarchy_subject.active_action_name:
+                        anarchy_subject.remove_active_action(anarchy_action, runtime)
+                    anarchy_action.set_completed_timestamp(runtime)
         else:
             anarchy_subject.set_run_failure_in_status(anarchy_run, runtime)
     else:
         operator_logger.warning(
-            'AnarchyRun %s post to Anarchysubject %s, but was not the active run!',
+            'AnarchyRun %s post to AnarchySubject %s, but was not the active run!',
             anarchy_run.name, anarchy_run.subject_name
         )
 
@@ -287,7 +294,6 @@ def patch_or_delete_subject(subject_name):
     anarchy_runner, runner_pod = check_runner_auth(flask.request.headers.get('Authorization', ''))
     if not anarchy_runner:
         flask.abort(400)
-        return
 
     if subject_name != runner_pod.metadata.labels.get(runtime.subject_label):
         operator_logger.warning(
@@ -295,7 +301,6 @@ def patch_or_delete_subject(subject_name):
             anarchy_runner.name, runner_pod.metadata.name, subject_name
         )
         flask.abort(400)
-        return
 
     anarchy_subject = AnarchySubject.get(subject_name, runtime)
     if not anarchy_subject:
@@ -304,13 +309,11 @@ def patch_or_delete_subject(subject_name):
             anarchy_runner.name, runner_pod.metadata.name, flask.request.method, subject_name
         )
         flask.abort(400)
-        return
 
     if flask.request.method == 'PATCH':
         if not 'patch' in flask.request.json:
             operator_logger.warning('No patch in AnarchySubject %s post', subject_name)
             flask.abort(400)
-            return
         result = anarchy_subject.patch(flask.request.json['patch'], runtime)
     elif flask.request.method == 'DELETE':
         result = anarchy_subject.delete(flask.request.json.get('remove_finalizers', False), runtime)
@@ -318,11 +321,10 @@ def patch_or_delete_subject(subject_name):
     return flask.jsonify({'success': True, 'result': result})
 
 @api.route('/run/subject/<string:subject_name>/actions', methods=['POST'])
-def post_subject_action(subject_name):
+def run_subject_action_post(subject_name):
     anarchy_runner, runner_pod = check_runner_auth(flask.request.headers.get('Authorization', ''))
     if not anarchy_runner:
         flask.abort(400)
-        return
 
     if subject_name != runner_pod.metadata.labels.get(runtime.subject_label):
         operator_logger.warning(
@@ -330,7 +332,6 @@ def post_subject_action(subject_name):
             anarchy_runner.name, runner_pod.metadata.name, subject_name
         )
         flask.abort(400)
-        return
 
     anarchy_subject = AnarchySubject.get(subject_name, runtime)
     if not anarchy_subject:
@@ -339,7 +340,6 @@ def post_subject_action(subject_name):
             anarchy_runner.name, runner_pod.metadata.name, subject_name
         )
         flask.abort(400)
-        return
 
     anarchy_governor = anarchy_subject.get_governor(runtime)
     if not anarchy_governor:
@@ -348,7 +348,6 @@ def post_subject_action(subject_name):
             anarchy_runner.name, runner_pod, subject_name, anarchy_subject.governor_name
         )
         flask.abort(400)
-        return
 
     action_name = flask.request.json.get('action', None)
     after_timestamp = flask.request.json.get('after', None)
@@ -356,11 +355,9 @@ def post_subject_action(subject_name):
     if not action_name and not cancel_actions:
         operator_logger.warning('No action or cancel given for scheduling action')
         flask.abort(400)
-        return
     if after_timestamp and not re.match(r'\d\d\d\d-\d\d-\d\dT\d\d:\d\d:\d\dZ', after_timestamp):
         operator_logger.warning('Invalide datetime format "%s" given for action after value', after_timestamp)
         flask.abort(400)
-        return
 
     if action_name not in cancel_actions:
         cancel_actions.append(action_name)
@@ -422,8 +419,60 @@ def post_subject_action(subject_name):
 
     return flask.jsonify({'success': True, 'result': result})
 
+@api.route('/run/subject/<string:subject_name>/actions/<string:action_name>', methods=['PATCH'])
+def run_subject_action_patch(subject_name, action_name):
+    """
+    Callback from runner to update AnarchyAction associated with AnarchySubject assigned to runner.
+
+    The only function of this method currently is to pass JSON, `{"complete": true}` to mark the
+    action as completed.
+    """
+    anarchy_runner, runner_pod = check_runner_auth(flask.request.headers.get('Authorization', ''))
+    if not anarchy_runner:
+        flask.abort(400)
+
+    if subject_name != runner_pod.metadata.labels.get(runtime.subject_label):
+        operator_logger.warning(
+            'AnarchyRunner %s Pod %s cannot update actions for AnarchySubject %s!',
+            anarchy_runner.name, runner_pod.metadata.name, subject_name
+        )
+        flask.abort(400)
+
+    anarchy_action = AnarchyAction.get(action_name, runtime)
+    if not anarchy_action:
+        operator_logger.warning(
+            'AnarchyRunner %s Pod %s attempted to update action on deleted AnarchyAction %s!',
+            anarchy_runner.name, runner_pod.metadata.name, action_name
+        )
+        flask.abort(400)
+
+    anarchy_subject = AnarchySubject.get(subject_name, runtime)
+    if not anarchy_subject:
+        operator_logger.warning(
+            'AnarchyRunner %s Pod %s attempted to update action on deleted AnarchySubject %s!',
+            anarchy_runner.name, runner_pod.metadata.name, subject_name
+        )
+        flask.abort(400)
+
+    anarchy_governor = anarchy_subject.get_governor(runtime)
+    if not anarchy_governor:
+        operator_logger.warning(
+            'AnarchyRunner %s Pod %s cannot post action to AnarchySubject %s, unable to find AnarchyGovernor %s!',
+            anarchy_runner.name, runner_pod, subject_name, anarchy_subject.governor_name
+        )
+        flask.abort(400)
+
+    if flask.request.json.get('complete', False):
+        anarchy_subject.remove_active_action(anarchy_action, runtime)
+        anarchy_action.set_completed_timestamp(runtime)
+
+    return flask.jsonify({'success': True, 'result': anarchy_action.to_dict(runtime)})
+
 
 def check_runner_auth(auth_header):
+    """
+    Verify bearer token sent by anarchy runner in API call.
+    """
     match = re.match(r'Bearer ([^:]+):([^:]+):(.*)', auth_header)
     if not match:
         return None, None

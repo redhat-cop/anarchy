@@ -62,6 +62,19 @@ spec:
         failed_when: >-
           "module is required" in r_mysql_info.msg
 
+    callback_test:
+      explicitCompletion: true
+      tasks:
+      - name: Print message
+        debug:
+          msg: Starting callback test
+      callbackNameParameter: event
+      callbackHandlers:
+        done:
+          tasks:
+          - name: Explicitly complete action
+            anarchy_complete_action: {}
+
     destroy:
       tasks:
       - name: Print message

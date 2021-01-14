@@ -53,7 +53,20 @@ class AnarchyGovernor(object):
 
         @property
         def callback_name_parameter(self):
+            """
+            Optional configuration setting to allow the action callback name to be
+            specified in the callback data rather than as a URL component to the
+            API.
+            """
             return self.spec.get('callbackNameParameter', None)
+
+        @property
+        def explicit_completion(self):
+            """
+            Boolean flag indicating whether actions using this action config require
+            an explicit api call be marked complete. Defaults to False.
+            """
+            return self.spec.get('explicitCompletion', False)
 
         @property
         def post_tasks(self):
@@ -291,7 +304,7 @@ class AnarchyGovernor(object):
                 # If run is already deleted then action may be deleted
                 if e.status != 404:
                     raise
-            
+
             try:
                 runtime.custom_objects_api.delete_namespaced_custom_object(
                     runtime.operator_domain, runtime.api_version, runtime.operator_namespace, 'anarchyactions', action_name

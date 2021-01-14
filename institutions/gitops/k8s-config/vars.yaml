@@ -5,7 +5,7 @@ k8s_resources:
 - name: Anarchy install
   openshift_template:
     url: https://raw.githubusercontent.com/redhat-cop/anarchy/{{ anarchy_version }}/install-template.yaml
-    
+
 - namespace: anarchy-k8s-config
   resources:
   - name: Anarchy k8s-config deployment

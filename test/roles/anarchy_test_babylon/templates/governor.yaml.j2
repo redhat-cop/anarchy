@@ -10,6 +10,9 @@ metadata:
     anarchy.gpte.redhat.com/test: babylon
 spec:
   ansibleGalaxyRequirements:
+    collections:
+    - name: awx.awx
+      version: 15.0.1
     roles:
     - name: babylon_anarchy_governor
       src: {{ ('git+' ~ anarchy_test_babylon_anarchy_governor_repo) | to_json }}
@@ -23,6 +26,9 @@ spec:
     # Job variables to pass to Ansible Tower job runner (dark tower)
     job_vars:
       __meta__:
+        deployer:
+          scm_url: https://github.com/redhat-cop/agnosticd.git
+          scm_ref: development
         tower:
           organization: {{ anarchy_test_babylon_account | to_json }}
       job_var_from_governor: governor
@@ -48,6 +54,7 @@ spec:
   actions:
     # anarchy_action_name
     provision:
+      explicitCompletion: true
       roles:
       - role: babylon_anarchy_governor
       callbackHandlers:
@@ -58,6 +65,7 @@ spec:
           roles:
           - role: babylon_anarchy_governor
     stop:
+      explicitCompletion: true
       roles:
       - role: babylon_anarchy_governor
       callbackHandlers:
@@ -68,6 +76,7 @@ spec:
           roles:
           - role: babylon_anarchy_governor
     start:
+      explicitCompletion: true
       roles:
       - role: babylon_anarchy_governor
       callbackHandlers:
@@ -78,6 +87,7 @@ spec:
           roles:
           - role: babylon_anarchy_governor
     destroy:
+      explicitCompletion: true
       roles:
       - role: babylon_anarchy_governor
       callbackHandlers:

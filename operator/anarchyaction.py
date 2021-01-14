@@ -100,6 +100,11 @@ class AnarchyAction(object):
         return self.spec.get('callbackToken', '')
 
     @property
+    def completed_timestamp(self):
+        if self.status:
+            return self.status.get('completedTimestamp')
+
+    @property
     def governor(self):
         return AnarchyGovernor.get(self.spec['governorRef']['name'])
 
@@ -262,6 +267,21 @@ class AnarchyAction(object):
         self.spec = resource['spec']
         self.status = resource.get('status')
 
+    def set_completed_timestamp(self, runtime):
+        try:
+            resource = runtime.custom_objects_api.patch_namespaced_custom_object_status(
+                runtime.operator_domain, runtime.api_version, runtime.operator_namespace, 'anarchyactions', self.name,
+                {
+                    'status': {
+                        'completedTimestamp': datetime.utcnow().strftime('%FT%TZ')
+                    }
+                }
+            )
+            self.refresh_from_resource(resource)
+        except kubernetes.client.rest.ApiException as e:
+            if e.status != 404:
+                raise
+
     def set_owner(self, runtime):
         '''
         Anarchy when using on.event when an anarchyaction is added and modified
@@ -311,8 +331,13 @@ class AnarchyAction(object):
         )
 
     def start(self, runtime):
-        AnarchyAction.cache_remove(self)
         subject = self.get_subject(runtime)
+
+        # Attempt to set active action for subject
+        if not subject.set_active_action(self, runtime):
+            return
+
+        AnarchyAction.cache_remove(self)
         governor = subject.get_governor(runtime)
 
         action_config = governor.action_config(self.action)

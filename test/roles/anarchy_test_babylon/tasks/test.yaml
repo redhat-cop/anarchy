@@ -24,9 +24,8 @@
   - r_test_1_provision.resources[0].spec.action == 'provision'
   - r_test_1_provision.resources[0].status is defined
   - r_test_1_provision.resources[0].status.callbackEvents is defined
-  - r_test_1_provision.resources[0].status.callbackEvents | length == 2
-  - r_test_1_provision.resources[0].status.callbackEvents[0].name == 'started'
-  - r_test_1_provision.resources[0].status.callbackEvents[1].name == 'complete'
+  - r_test_1_provision.resources[0].status.callbackEvents | length == 1
+  - r_test_1_provision.resources[0].status.callbackEvents[0].name == 'complete'
   retries: 20
   delay: 5
 
@@ -42,7 +41,6 @@
   - r_test_1_subject.resources[0].spec.vars.current_state == 'started'
   - r_test_1_subject.resources[0].status.towerJobs is defined
   - r_test_1_subject.resources[0].status.towerJobs.provision is defined
-  - r_test_1_subject.resources[0].status.towerJobs.provision.launchJob is defined
   - r_test_1_subject.resources[0].status.towerJobs.provision.deployerJob is defined
   retries: 5
   delay: 5

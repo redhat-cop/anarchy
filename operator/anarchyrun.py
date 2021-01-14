@@ -76,6 +76,12 @@ class AnarchyRun(object):
         pass
 
     @property
+    def action_name(self):
+        action = self.spec.get('action')
+        if action:
+            return action['name']
+
+    @property
     def creation_timestamp(self):
         return self.metadata.get('creationTimestamp')
 
