@@ -493,7 +493,7 @@
   retries: 20
   delay: 5
 
-- name: Verify AnarchyAction test-simple-1-callback-test completed
+- name: Verify AnarchyAction test-simple-1-callback-test finished
   k8s_info:
     api_version: anarchy.gpte.redhat.com/v1
     kind: AnarchyAction
@@ -503,7 +503,8 @@
   vars:
     _action: "{{ r_get_action.resources[0] }}"
   failed_when: >-
-    '' == _action.status.completedTimestamp | default('')
+    '' == _action.status.finishedTimestamp | default('') or
+    'successful' != _action.status.state | default('')
   until: r_get_action is success
   retries: 10
   delay: 5

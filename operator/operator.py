@@ -149,8 +149,8 @@ def handle_action_callback(anarchy_action_name, callback_name):
     if not anarchy_action.check_callback_token(flask.request.headers.get('Authorization', '')):
         operator_logger.warning("Invalid callback token for AnarchyAction %s", anarchy_action_name)
         flask.abort(403)
-    if anarchy_action.completed_timestamp:
-        operator_logger.warning("Invalid callback to completed AnarchyAction %s", anarchy_action_name)
+    if anarchy_action.finished_timestamp:
+        operator_logger.warning("Invalid callback to finished AnarchyAction %s", anarchy_action_name)
         flask.abort(400)
     anarchy_action.process_callback(runtime, callback_name, flask.request.json)
     return flask.jsonify({'status': 'ok'})
@@ -275,10 +275,12 @@ def post_run(run_name):
                 anarchy_action = AnarchyAction.get(anarchy_run.action_name, runtime)
                 anarchy_governor = anarchy_subject.get_governor(runtime)
                 action_config = anarchy_governor.action_config(anarchy_action.action)
-                if not action_config.explicit_completion:
+                if result.get('continue'):
+                    anarchy_action.schedule_continuation(result['continue'], runtime)
+                elif action_config.finish_on_successful_run:
                     if anarchy_action.name == anarchy_subject.active_action_name:
                         anarchy_subject.remove_active_action(anarchy_action, runtime)
-                    anarchy_action.set_completed_timestamp(runtime)
+                    anarchy_action.set_finished('successful', runtime)
         else:
             anarchy_subject.set_run_failure_in_status(anarchy_run, runtime)
     else:
@@ -424,8 +426,8 @@ def run_subject_action_patch(subject_name, action_name):
     """
     Callback from runner to update AnarchyAction associated with AnarchySubject assigned to runner.
 
-    The only function of this method currently is to pass JSON, `{"complete": true}` to mark the
-    action as completed.
+    The only function of this method currently is to pass JSON, `{"successful": true}` or
+    `{"failed": true}` to mark the action as finished.
     """
     anarchy_runner, runner_pod = check_runner_auth(flask.request.headers.get('Authorization', ''))
     if not anarchy_runner:
@@ -462,9 +464,15 @@ def run_subject_action_patch(subject_name, action_name):
         )
         flask.abort(400)
 
-    if flask.request.json.get('complete', False):
+    finished_state = None
+    if flask.request.json.get('successful', False):
+        finished_state = 'successful'
+    elif flask.request.json.get('failed', False):
+        finished_state = 'failed'
+
+    if finished_state != None:
         anarchy_subject.remove_active_action(anarchy_action, runtime)
-        anarchy_action.set_completed_timestamp(runtime)
+        anarchy_action.set_finished(finished_state, runtime)
 
     return flask.jsonify({'success': True, 'result': anarchy_action.to_dict(runtime)})
 

@@ -63,7 +63,7 @@ spec:
           "module is required" in r_mysql_info.msg
 
     callback_test:
-      explicitCompletion: true
+      finishOnSuccessfulRun: false
       tasks:
       - name: Print message
         debug:
@@ -73,7 +73,25 @@ spec:
         done:
           tasks:
           - name: Explicitly complete action
-            anarchy_complete_action: {}
+            anarchy_finish_action: {}
+
+    continuation_test:
+      tasks:
+      - name: Print message
+        debug:
+          msg: In continuation test
+      - name: Manage continuation
+        when: not continued | default(false)
+        block:
+        - name: Record change
+          anarchy_subject_update:
+            skip_update_processing: true
+            spec:
+              vars:
+                continued: true
+        - name: Schedule continution
+          anarchy_continue_action:
+            after: 30s
 
     destroy:
       tasks:

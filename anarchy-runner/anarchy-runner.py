@@ -29,6 +29,7 @@ class AnarchyRunner(object):
         self.pod_name = os.environ.get('POD_NAME', os.environ.get('HOSTNAME', None))
         self.runner_name = os.environ.get('RUNNER_NAME', None)
         self.polling_interval = int(os.environ.get('POLLING_INTERVAL', 5))
+        self.output_dir = os.environ.get('OUTPUT_DIR', '/opt/app-root/anarchy-runner/output')
         self.runner_dir = os.environ.get('RUNNER_DIR', '/opt/app-root/anarchy-runner/ansible-runner')
         self.ansible_private_dir = os.environ.get('RUNNER_DIR', '/opt/app-root/anarchy-runner/.ansible')
         self.runner_token = os.environ.get('RUNNER_TOKEN', None)
@@ -89,6 +90,14 @@ class AnarchyRunner(object):
                 }
             }]
         }))
+
+    def clean_output_dir(self):
+        for item in os.listdir(self.output_dir):
+            path = os.path.join(self.output_dir, item)
+            if os.path.isdir(path):
+                shutil.rmtree(path)
+            else:
+                os.remove(path)
 
     def clean_runner_dir(self):
         artifacts_dir = os.path.join(self.runner_dir, 'artifacts')
@@ -166,6 +175,7 @@ class AnarchyRunner(object):
             ))
             return
 
+        self.clean_output_dir()
         self.clean_runner_dir()
         self.write_runner_vars(anarchy_run, anarchy_subject, anarchy_governor)
         self.write_runner_playbook(anarchy_run)
@@ -180,14 +190,13 @@ class AnarchyRunner(object):
             ansible_run.config.env['VIRTUAL_ENV'] = virtual_env
             ansible_run.config.command[0] = virtual_env + '/bin/ansible-playbook'
         ansible_run.run()
+
         ansible_run_result = dict(
             rc = ansible_run.rc,
             status = ansible_run.status,
         )
         try:
-            run_data = yaml.safe_load(
-                open(self.ansible_private_dir + '/anarchy-result.yaml').read()
-            )
+            run_data = yaml.safe_load(open(self.output_dir + '/anarchy-result.yaml'))
             ansible_run_result['ansibleRun'] = run_data
             if ansible_run.status == 'successful':
                 ansible_run_result['statusMessage'] = ''
@@ -196,7 +205,14 @@ class AnarchyRunner(object):
                 run_msg = run_data['plays'][-1]['tasks'][-1]['hosts']['localhost'].get('result', {}).get('msg', '')
                 ansible_run_result['statusMessage'] = run_msg
         except Exception:
-            logging.exception('Failure processing anarchy-result yaml')
+            logging.exception('Failure processing anarchy-result.yaml')
+
+        try:
+            continue_file_path = os.path.join(self.output_dir + '/continue.yaml')
+            if os.path.exists(continue_file_path):
+                ansible_run_result['continue'] = yaml.safe_load(open(continue_file_path))
+        except Exception:
+            logging.exception('Failure reading continue.yaml')
 
         self.post_result(anarchy_run, ansible_run_result)
 
@@ -293,6 +309,7 @@ class AnarchyRunner(object):
             'anarchy_governor_name': anarchy_run['spec']['governor']['name'],
             'anarchy_namespace': self.anarchy_namespace,
             'anarchy_operator_domain': self.domain,
+            'anarchy_output_dir': self.output_dir,
             'anarchy_run': anarchy_run,
             'anarchy_run_name': anarchy_run['metadata']['name'],
             'anarchy_run_pod_name': self.pod_name,

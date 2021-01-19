@@ -1,10 +1,11 @@
-from datetime import datetime
 import copy
 import kubernetes
 import logging
 import os
 import time
 import kopf
+
+from datetime import datetime, timedelta
 
 from anarchygovernor import AnarchyGovernor
 from anarchysubject import AnarchySubject
@@ -100,9 +101,9 @@ class AnarchyAction(object):
         return self.spec.get('callbackToken', '')
 
     @property
-    def completed_timestamp(self):
+    def finished_timestamp(self):
         if self.status:
-            return self.status.get('completedTimestamp')
+            return self.status.get('finishedTimestamp')
 
     @property
     def governor(self):
@@ -267,13 +268,60 @@ class AnarchyAction(object):
         self.spec = resource['spec']
         self.status = resource.get('status')
 
-    def set_completed_timestamp(self, runtime):
+    def schedule_continuation(self, args, runtime):
+        after_seconds = args.get('after', 0)
+        try:
+            runtime.custom_objects_api.patch_namespaced_custom_object(
+                runtime.operator_domain, runtime.api_version, runtime.operator_namespace, 'anarchyactions', self.name,
+                {
+                    'metadata': {
+                        'labels': {
+                            runtime.run_label: None
+                        }
+                    },
+                    'spec': {
+                        'after': (datetime.utcnow() + timedelta(seconds=after_seconds)).strftime('%FT%TZ'),
+                    },
+                }
+            )
+            resource = runtime.custom_objects_api.patch_namespaced_custom_object_status(
+                runtime.operator_domain, runtime.api_version, runtime.operator_namespace, 'anarchyactions', self.name,
+                {
+                    'status': {
+                        'runScheduled': None
+                    }
+                }
+            )
+            self.refresh_from_resource(resource)
+        except kubernetes.client.rest.ApiException as e:
+            # If error is 404, not found, then subject or action must have been deleted
+            if e.status != 404:
+                raise
+
+    def set_finished(self, state, runtime):
+        try:
+            resource = runtime.custom_objects_api.patch_namespaced_custom_object(
+                runtime.operator_domain, runtime.api_version, runtime.operator_namespace, 'anarchyactions', self.name,
+                {
+                    'metadata': {
+                        'labels': {
+                            runtime.finished_label: state
+                        }
+                    }
+                }
+            )
+            self.refresh_from_resource(resource)
+        except kubernetes.client.rest.ApiException as e:
+            if e.status != 404:
+                raise
+
         try:
             resource = runtime.custom_objects_api.patch_namespaced_custom_object_status(
                 runtime.operator_domain, runtime.api_version, runtime.operator_namespace, 'anarchyactions', self.name,
                 {
                     'status': {
-                        'completedTimestamp': datetime.utcnow().strftime('%FT%TZ')
+                        'finishedTimestamp': datetime.utcnow().strftime('%FT%TZ'),
+                        'state': state
                     }
                 }
             )
@@ -331,6 +379,10 @@ class AnarchyAction(object):
         )
 
     def start(self, runtime):
+        if self.status:
+            operator_logger.warning('START %s %s %s', self.name, self.after_datetime.strftime('%FT%TZ'), self.status.get('runScheduled', '-none-'))
+        else:
+            operator_logger.warning('START %s %s %s', self.name, self.after_datetime.strftime('%FT%TZ'), '-')
         subject = self.get_subject(runtime)
 
         # Attempt to set active action for subject

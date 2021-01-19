@@ -54,7 +54,7 @@ spec:
   actions:
     # anarchy_action_name
     provision:
-      explicitCompletion: true
+      finishOnSuccessfulRun: false
       roles:
       - role: babylon_anarchy_governor
       callbackHandlers:
@@ -65,7 +65,7 @@ spec:
           roles:
           - role: babylon_anarchy_governor
     stop:
-      explicitCompletion: true
+      finishOnSuccessfulRun: false
       roles:
       - role: babylon_anarchy_governor
       callbackHandlers:
@@ -76,7 +76,7 @@ spec:
           roles:
           - role: babylon_anarchy_governor
     start:
-      explicitCompletion: true
+      finishOnSuccessfulRun: false
       roles:
       - role: babylon_anarchy_governor
       callbackHandlers:
@@ -87,7 +87,7 @@ spec:
           roles:
           - role: babylon_anarchy_governor
     destroy:
-      explicitCompletion: true
+      finishOnSuccessfulRun: false
       roles:
       - role: babylon_anarchy_governor
       callbackHandlers:

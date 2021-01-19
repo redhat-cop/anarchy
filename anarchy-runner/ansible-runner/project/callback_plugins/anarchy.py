@@ -6,31 +6,32 @@ from ansible.plugins.callback.default import CallbackModule as CallbackModule_de
 
 import datetime
 import json
+import os
 
 DOCUMENTATION = '''
-    callback: anarchy
-    type: stdout
-    short_description: Anarchy stdout plugin
-    version_added: n/a
+callback: anarchy
+type: stdout
+short_description: Anarchy stdout plugin
+version_added: n/a
+description:
+- This is the output plugin for Anarchy
+extends_documentation_fragment:
+- default_callback
+requirements:
+- set as stdout in configuration
+options:
+  anarchy_output_dir:
+    name: Directory in which to write output files.
     description:
-      - This is the output plugin for Anarchy
-    extends_documentation_fragment:
-      - default_callback
-    requirements:
-      - set as stdout in configuration
-    options:
-      anarchy_result_file:
-        name: Location to write play result YAML
-        description:
-          - "The anarchy output callback writes YAML to record details from the play"
-        type: string
-        default: playbook-result.yaml
-        version_added: n/a
-        env:
-          - name: ANSIBLE_ANARCHY_RESULT_FILE
-        ini:
-          - key: anarchy_result_file
-            section: defaults
+    - "The anarchy output callback writes YAML to record details from the play"
+    type: string
+    default: playbook-result.yaml
+    version_added: n/a
+    env:
+    - name: ANSIBLE_ANARCHY_OUTPUT_DIR
+    ini:
+    - key: anarchy_output_dir
+      section: defaults
 '''
 
 def current_time():
@@ -62,8 +63,9 @@ class CallbackModule(CallbackModule_default):
         self.anarchy_result_fh = None
 
     def anarchy_open_result_file(self):
+        result_file_path = os.path.join(self.get_option('anarchy_output_dir'), 'anarchy-result.yaml')
         if not self.anarchy_result_fh:
-            self.anarchy_result_fh = open(self.get_option('anarchy_result_file'), 'w')
+            self.anarchy_result_fh = open(result_file_path, 'w')
             self.anarchy_result_fh.write("---\nplays:\n")
 
     def anarchy_record_play_start(self, play):
@@ -79,7 +81,13 @@ class CallbackModule(CallbackModule_default):
             json.dumps(current_time())
         ))
 
-    def anarchy_record_run(self, result, extra):
+    def anarchy_record_run_start(self, host, task):
+        if host.name not in self.anarchy_task_hosts:
+            self.anarchy_task_hosts[host.name] = {}
+        if task.args:
+            self.anarchy_task_hosts[host.name]['args'] = task.args
+
+    def anarchy_record_run_result(self, result, extra):
         host = result._host.name
         if host not in self.anarchy_task_hosts:
             self.anarchy_task_hosts[host] = {}
@@ -97,6 +105,7 @@ class CallbackModule(CallbackModule_default):
         else:
             items = self.anarchy_task_hosts[host]['items']
         item = extra.copy()
+        item['item'] = self._get_item_label(result._result)
         item['result'] = munge_result(result)
         items.append(item)
 
@@ -118,33 +127,53 @@ class CallbackModule(CallbackModule_default):
         for host, host_data in self.anarchy_task_hosts.items():
             self.anarchy_result_fh.write('      {}:\n'.format(host))
             for k, v in host_data.items():
-                if k not in ('items', 'result'):
+                if k not in ('items', 'args', 'result'):
                     self.anarchy_result_fh.write('        {}: {}\n'.format(
                         k, json.dumps(v)
                     ))
-            self.anarchy_result_fh.write('        result:\n')
-            for k, v in host_data['result'].items():
-                self.anarchy_result_fh.write('          {}: {}\n'.format(
-                    k, json.dumps(v)
-                ))
+
+            if 'args' in host_data:
+                self.anarchy_result_fh.write('        args:\n')
+                for k, v in host_data['args'].items():
+                    self.anarchy_result_fh.write('          {}: {}\n'.format(
+                        k, json.dumps(v)
+                    ))
+
+            if 'result' in host_data:
+                self.anarchy_result_fh.write('        result:\n')
+                for k, v in host_data['result'].items():
+                    self.anarchy_result_fh.write('          {}: {}\n'.format(
+                        k, json.dumps(v)
+                    ))
 
             if 'items' in host_data:
                 self.anarchy_result_fh.write('        items:\n')
                 for item in host_data['items']:
                     first = True
-                    self.anarchy_result_fh.write('        - label: {}\n'.format(item['label']))
+                    self.anarchy_result_fh.write('        - item: {}\n'.format(
+                        json.dumps(item['item'])
+                    ))
                     for k, v in item.items():
-                        if k not in ('label', 'result'):
+                        if k not in ('item', 'result'):
                             self.anarchy_result_fh.write('          {}: {}\n'.format(
                                 k, json.dumps(v)
                             ))
-                    self.anarchy_result_fh.write('          result:\n')
-                    for k, v in item['result'].items():
-                        if not k.startswith('_'):
-                            self.anarchy_result_fh.write('            {}: {}\n'.format(
-                                k, json.dumps(v)
-                            ))
-                            first = False
+                    if 'args' in item:
+                        self.anarchy_result_fh.write('          args:\n')
+                        for k, v in item['args'].items():
+                            if not k.startswith('_'):
+                                self.anarchy_result_fh.write('            {}: {}\n'.format(
+                                    k, json.dumps(v)
+                                ))
+                                first = False
+                    if 'result' in item:
+                        self.anarchy_result_fh.write('          result:\n')
+                        for k, v in item['result'].items():
+                            if not k.startswith('_'):
+                                self.anarchy_result_fh.write('            {}: {}\n'.format(
+                                    k, json.dumps(v)
+                                ))
+                                first = False
 
 
     def anarchy_record_task_start(self, task):
@@ -184,32 +213,30 @@ class CallbackModule(CallbackModule_default):
             self.anarchy_record_task_end()
         self.anarchy_record_task_start(task)
 
+    def v2_runner_on_start(self, host, task):
+        super().v2_runner_on_start(host, task)
+        self.anarchy_record_run_start(host, task)
+
     def v2_runner_item_on_failed(self, result):
         super().v2_runner_item_on_failed(result)
-        self.anarchy_record_item(
-            result, dict(failed=True, label=self._get_item_label(result._result))
-        )
+        self.anarchy_record_item(result, dict(failed=True))
 
     def v2_runner_item_on_ok(self, result):
         super().v2_runner_item_on_ok(result)
-        self.anarchy_record_item(
-            result, dict(ok=True, label=self._get_item_label(result._result))
-        )
+        self.anarchy_record_item(result, dict(ok=True))
 
     def v2_runner_item_on_skipped(self, result):
         super().v2_runner_item_on_ok(result)
-        self.anarchy_record_item(
-            result, dict(skipped=True, label=self._get_item_label(result._result))
-        )
+        self.anarchy_record_item(result, dict(skipped=True))
 
     def v2_runner_on_failed(self, result, ignore_errors=False):
         super().v2_runner_on_failed(result, ignore_errors)
-        self.anarchy_record_run(result, dict(failed=True))
+        self.anarchy_record_run_result(result, dict(failed=True))
 
     def v2_runner_on_ok(self, result):
         super().v2_runner_on_ok(result)
-        self.anarchy_record_run(result, dict(ok=True))
+        self.anarchy_record_run_result(result, dict(ok=True))
 
     def v2_runner_on_skipped(self, result):
         super().v2_runner_on_skipped(result)
-        self.anarchy_record_run(result, dict(skipped=True))
+        self.anarchy_record_run_result(result, dict(skipped=True))

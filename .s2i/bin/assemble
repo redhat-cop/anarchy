@@ -21,12 +21,14 @@ chmod ug=rw,o= \
 
 mkdir -p \
   /opt/app-root/anarchy-runner/.ansible \
+  /opt/app-root/anarchy-runner/output \
   /opt/app-root/anarchy-runner/ansible-runner/artifacts \
   /opt/app-root/anarchy-runner/ansible-runner/env \
   /opt/app-root/anarchy-runner/ansible-runner/inventory/group_vars/all
 
 chmod ug=rwx,o= \
   /opt/app-root/anarchy-runner/.ansible \
+  /opt/app-root/anarchy-runner/output \
   /opt/app-root/anarchy-runner/ansible-runner/artifacts \
   /opt/app-root/anarchy-runner/ansible-runner/env \
   /opt/app-root/anarchy-runner/ansible-runner/inventory/group_vars/all

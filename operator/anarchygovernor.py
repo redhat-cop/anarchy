@@ -61,12 +61,12 @@ class AnarchyGovernor(object):
             return self.spec.get('callbackNameParameter', None)
 
         @property
-        def explicit_completion(self):
+        def finish_on_successful_run(self):
             """
-            Boolean flag indicating whether actions using this action config require
-            an explicit api call be marked complete. Defaults to False.
+            Boolean flag indicating whether actions using this action config are
+            automatically marked finished after a successful run. Defaults to True.
             """
-            return self.spec.get('explicitCompletion', False)
+            return self.spec.get('finishOnSuccessfulRun', True)
 
         @property
         def post_tasks(self):
