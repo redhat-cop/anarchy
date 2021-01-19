@@ -524,6 +524,76 @@
   retries: 10
   delay: 5
 
+- name: Create AnarchyAction to test action continuation
+  k8s:
+    apply: true
+    state: present
+    definition:
+      apiVersion: anarchy.gpte.redhat.com/v1
+      kind: AnarchyAction
+      metadata:
+        name: test-simple-1-continuation-test
+        namespace:  "{{ anarchy_namespace }}"
+      spec:
+        action: continuation_test
+        subjectRef:
+          name: test-simple-1
+
+- name: Check first AnarchyRun for test-simple-1-continuation-test
+  k8s_info:
+    api_version: anarchy.gpte.redhat.com/v1
+    kind: AnarchyRun
+    namespace: "{{ anarchy_namespace }}"
+    label_selectors:
+    - anarchy.gpte.redhat.com/subject=test-simple-1
+    - anarchy.gpte.redhat.com/action=test-simple-1-continuation-test
+  register: r_get_run
+  vars:
+    _run: "{{ r_get_run.resources[0] }}"
+  failed_when: >-
+    _run.spec.result.status | default('') != 'successful'
+  until: r_get_run is success
+  retries: 20
+  delay: 5
+
+- name: Pause briefely for AnarchyRun processing
+  pause:
+    seconds: 2
+
+- name: Check that test-simple-1-continuation-test is not finished
+  k8s_info:
+    api_version: anarchy.gpte.redhat.com/v1
+    kind: AnarchyAction
+    namespace: "{{ anarchy_namespace }}"
+    name: test-simple-1-continuation-test
+  register: r_get_action
+  vars:
+    _action: "{{ r_get_action.resources[0] }}"
+  failed_when: >-
+    _action.status.finishedTimestamp | default('') != ''
+  until: r_get_action is success
+  retries: 20
+  delay: 5
+
+- name: Pause for second AnarchyRun
+  pause:
+    seconds: 30
+
+- name: Check that test-simple-1-continuation-test is finished
+  k8s_info:
+    api_version: anarchy.gpte.redhat.com/v1
+    kind: AnarchyAction
+    namespace: "{{ anarchy_namespace }}"
+    name: test-simple-1-continuation-test
+  register: r_get_action
+  vars:
+    _action: "{{ r_get_action.resources[0] }}"
+  failed_when: >-
+    _action.status.finishedTimestamp | default('') == ''
+  until: r_get_action is success
+  retries: 20
+  delay: 5
+
 - when: anarchy_test_delete_subjects | bool
   block:
   - name: Delete AnarchySubject test-simple-1
