@@ -177,6 +177,8 @@ class AnarchyAction(object):
                 }
             )
             self.refresh_from_resource(resource)
+            # Remove action from cache as it will not appear in watch when run label is set
+            AnarchyAction.cache_remove(self.name)
         except kubernetes.client.rest.ApiException as e:
             # If error is 404, not found, then subject or action must have been deleted
             if e.status != 404:

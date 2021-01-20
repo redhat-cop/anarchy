@@ -25,6 +25,7 @@ domain = os.environ.get('ANARCHY_DOMAIN', 'anarchy.gpte.redhat.com')
 
 callback_url = None
 callback_token = None
+simulate_job_result = None
 
 def init():
     global logger
@@ -211,11 +212,12 @@ def api_v2_job_templates_get():
 
 @api.route('/api/v2/job_templates/<string:job_template_id>/', methods=['PATCH'])
 def api_v2_job_templates_patch(job_template_id):
-    global callback_url, callback_token
+    global callback_url, callback_token, simulate_job_result
     extra_vars = flask.request.json.get('extra_vars')
     if not extra_vars:
         flask.abort(400, description='extra_vars not passed')
     extra_vars = json.loads(extra_vars)
+    simulate_job_result = extra_vars.get('simulate_job_result', 'successful')
     __meta__ = extra_vars.get('__meta__')
     if not __meta__:
         flask.abort(400, description='__meta__ not in extra_vars')
@@ -239,22 +241,35 @@ def api_v2_job_templates_patch(job_template_id):
 
 @api.route('/api/v2/job_templates/<string:job_template_id>/launch/', methods=['POST'])
 def api_v2_job_templates_job_runner_launch_post(job_template_id):
-    global callback_url, callback_token
+    global callback_url, callback_token, simulate_job_result
 
     job_id = random.randint(1,10000000)
-    schedule_callback(
-        after=time.time() + 10,
-        event='complete',
-        job_id=job_id,
-        msg='completed',
-        token=callback_token,
-        url=callback_url
-    )
+    if simulate_job_result == 'successful':
+        schedule_callback(
+            after=time.time() + 10,
+            event='complete',
+            job_id=job_id,
+            msg='completed',
+            token=callback_token,
+            url=callback_url
+        )
     return flask.jsonify({
         "id": job_id,
         "job": job_id,
         "status": '',
     }), 201
+
+@api.route('/api/v2/jobs/<string:job_id>/launch/', methods=['GET'])
+def api_v2_jobs_get(job_id):
+    if simulate_job_result == 'successful':
+        return flask.jsonify({
+            "status": "running",
+        }), 200
+    else:
+        return flask.jsonify({
+            "status": simulate_job_result,
+        }), 200
+
 
 @api.route('/runner/<string:runner_queue_name>/<string:runner_name>', methods=['GET', 'POST'])
 def runner_get(runner_queue_name, runner_name):
