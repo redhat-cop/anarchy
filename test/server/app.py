@@ -259,17 +259,42 @@ def api_v2_job_templates_job_runner_launch_post(job_template_id):
         "status": '',
     }), 201
 
-@api.route('/api/v2/jobs/<string:job_id>/launch/', methods=['GET'])
-def api_v2_jobs_get(job_id):
+def job_data(job_id):
+    data = {
+        "status": "running",
+        "related": {
+            "cancel": "/api/v2/jobs/{}/cancel/".format(job_id),
+        },
+        "type": "job_template",
+        "url": "/api/v2/jobs/{}/".format(job_id),
+    }
     if simulate_job_result == 'successful':
-        return flask.jsonify({
-            "status": "running",
-        }), 200
+        data['status'] = 'successful'
     else:
-        return flask.jsonify({
-            "status": simulate_job_result,
-        }), 200
+        data['status'] = simulate_job_result
+    return data
 
+@api.route('/api/v2/jobs/', methods=['GET'])
+def api_v2_jobs_get():
+    job_id = flask.request.args['id']
+    return flask.jsonify({
+        "count": 1,
+        "results": [ job_data(job_id) ]
+    }), 200
+
+@api.route('/api/v2/jobs/<string:job_id>/', methods=['GET'])
+def api_v2_jobs_id_get(job_id):
+    return flask.jsonify(job_data(job_id))
+
+@api.route('/api/v2/jobs/<string:job_id>/cancel/', methods=['GET'])
+def api_v2_jobs_cancel_get(job_id):
+    return flask.jsonify({
+        "can_cancel": True
+    }), 200
+
+@api.route('/api/v2/jobs/<string:job_id>/cancel/', methods=['POST'])
+def api_v2_jobs_cancel_post(job_id):
+    return flask.jsonify({}), 202
 
 @api.route('/runner/<string:runner_queue_name>/<string:runner_name>', methods=['GET', 'POST'])
 def runner_get(runner_queue_name, runner_name):

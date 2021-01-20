@@ -381,10 +381,6 @@ class AnarchyAction(object):
         )
 
     def start(self, runtime):
-        if self.status:
-            operator_logger.warning('START %s %s %s', self.name, self.after_datetime.strftime('%FT%TZ'), self.status.get('runScheduled', '-none-'))
-        else:
-            operator_logger.warning('START %s %s %s', self.name, self.after_datetime.strftime('%FT%TZ'), '-')
         subject = self.get_subject(runtime)
 
         # Attempt to set active action for subject
