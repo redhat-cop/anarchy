@@ -48,9 +48,9 @@ spec:
                 description: >-
                   AnsibleRunner that should process AnsibleRuns for this governor.
                 type: string
-              removeSuccessfulActions:
+              removeFinishedActions:
                 description: >-
-                  Specification for removing AnarchyActions after successful completion.
+                  Specification for removing AnarchyActions after they are finished.
                 type: object
                 properties:
                   after:

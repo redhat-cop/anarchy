@@ -136,15 +136,6 @@ class AnarchySubject(object):
     def var_secrets(self):
         return self.spec.get('varSecrets', [])
 
-    def add_finalizer(self, runtime):
-        finalizers = self.metadata.get('finalizers', [])
-        if runtime.operator_domain not in finalizers:
-            resource = runtime.custom_objects_api.patch_namespaced_custom_object(
-                runtime.operator_domain, runtime.api_version, runtime.operator_namespace, 'anarchysubjects', self.name,
-                {'metadata': {'finalizers': finalizers + [runtime.operator_domain] } }
-            )
-            self.refresh_from_resource(resource)
-
     def add_run_to_status(self, anarchy_run, runtime):
         '''
         Add AnarchyRun to AnarchySubject status.
@@ -191,7 +182,7 @@ class AnarchySubject(object):
         return governor
 
     def handle_create(self, runtime):
-        self.add_finalizer(runtime)
+        self.initialize_metadata(runtime)
         self.process_subject_event_handlers(runtime, 'create')
 
     def handle_delete(self, runtime):
@@ -215,6 +206,23 @@ class AnarchySubject(object):
         if not spec_sha256_annotation \
         or spec_sha256_annotation != self.spec_sha256:
             self.process_subject_event_handlers(runtime, 'update')
+
+    def initialize_metadata(self, runtime):
+        finalizers = self.metadata.get('finalizers', [])
+        if runtime.operator_domain not in finalizers:
+            finalizers.append(runtime.operator_domain)
+        resource = runtime.custom_objects_api.patch_namespaced_custom_object(
+            runtime.operator_domain, runtime.api_version, runtime.operator_namespace, 'anarchysubjects', self.name,
+            {
+                'metadata': {
+                    'finalizers': finalizers,
+                    'labels': {
+                        runtime.governor_label: self.governor_name
+                    }
+                }
+            }
+        )
+        self.refresh_from_resource(resource)
 
     def remove_active_run_from_status(self, anarchy_run, runtime):
         # Support passing run by object or name
