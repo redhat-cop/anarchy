@@ -594,6 +594,132 @@
   retries: 20
   delay: 5
 
+- name: Create failure test
+  k8s:
+    apply: true
+    state: present
+    definition:
+      apiVersion: anarchy.gpte.redhat.com/v1
+      kind: AnarchyAction
+      metadata:
+        name: test-simple-1-failure-test
+        namespace:  "{{ anarchy_namespace }}"
+      spec:
+        action: configure
+        subjectRef:
+          name: test-simple-1
+        vars:
+          fail_run: true
+
+- name: Wait for AnarchyRun failure
+  k8s_info:
+    api_version: anarchy.gpte.redhat.com/v1
+    kind: AnarchyRun
+    namespace:  "{{ anarchy_namespace }}"
+    label_selectors:
+    - anarchy.gpte.redhat.com/action=test-simple-1-failure-test
+    - anarchy.gpte.redhat.com/runner=failed
+    - anarchy.gpte.redhat.com/subject=test-simple-1
+  register: r_get_test_simple_1_failure_test_run
+  failed_when: r_get_test_simple_1_failure_test_run.resources | default([]) | length != 1
+  until: r_get_test_simple_1_failure_test_run is success
+  retries: 10
+  delay: 5
+
+- name: Verify AnarchySubject status.runStatus and status.runStatusMessage
+  k8s_info:
+    api_version: anarchy.gpte.redhat.com/v1
+    kind: AnarchySubject
+    name: test-simple-1
+    namespace:  "{{ anarchy_namespace }}"
+  register: r_get_test_simple_1
+  vars:
+    _subject: "{{ r_get_test_simple_1.resources[0] }}"
+  failed_when: >-
+    _subject.status.runStatus | default('') != 'failed' or
+    _subject.status.runStatusMessage | default('') != 'Failed run as requested'
+  until: r_get_test_simple_1 is success
+  retries: 10
+  delay: 5
+
+- name: Update test-simple-1
+  k8s:
+    api_version: anarchy.gpte.redhat.com/v1
+    kind: AnarchySubject
+    name: test-simple-1
+    namespace:  "{{ anarchy_namespace }}"
+    definition:
+      spec:
+        vars:
+          a_var_from_subject: 0
+
+- name: Verify update AnarchyRun in queued state
+  k8s_info:
+    api_version: anarchy.gpte.redhat.com/v1
+    kind: AnarchyRun
+    namespace:  "{{ anarchy_namespace }}"
+    label_selectors:
+    - anarchy.gpte.redhat.com/event=update
+    - anarchy.gpte.redhat.com/runner=queued
+    - anarchy.gpte.redhat.com/subject=test-simple-1
+  register: r_get_test_simple_1_update_run
+  failed_when: r_get_test_simple_1_update_run.resources | default([]) | length != 1
+  until: r_get_test_simple_1_update_run is success
+  retries: 10
+  delay: 5
+
+- name: Delete test-simple-1-failure-test AnarchyAction
+  k8s:
+    api_version: anarchy.gpte.redhat.com/v1
+    kind: AnarchyAction
+    name: test-simple-1-failure-test
+    namespace:  "{{ anarchy_namespace }}"
+    state: absent
+
+- name: Verify that update AnarchyRun is now able to run
+  k8s_info:
+    api_version: anarchy.gpte.redhat.com/v1
+    kind: AnarchyRun
+    namespace:  "{{ anarchy_namespace }}"
+    name: "{{ r_get_test_simple_1_update_run.resources[0].metadata.name }}"
+  register: r_get_test_simple_1_update_run_again
+  vars:
+    _run: "{{ r_get_test_simple_1_update_run_again.resources[0] }}"
+  failed_when: >-
+    _run.metadata.labels['anarchy.gpte.redhat.com/runner'] == 'queued'
+  until: r_get_test_simple_1_update_run_again is success
+  retries: 20
+  delay: 5
+
+- name: Verify all runs successful for test-simple-1
+  k8s_info:
+    api_version: anarchy.gpte.redhat.com/v1
+    kind: AnarchyRun
+    namespace:  "{{ anarchy_namespace }}"
+    label_selectors:
+    - anarchy.gpte.redhat.com/subject=test-simple-1
+    - anarchy.gpte.redhat.com/runner!=successful
+  register: r_get_test_simple_1_runs
+  failed_when: >-
+    r_get_test_simple_1_runs.resources | length != 0
+  until: r_get_test_simple_1_runs is success
+  retries: 20
+  delay: 5
+
+- name: Verify that test-simple-1 status has no active runs
+  k8s_info:
+    api_version: anarchy.gpte.redhat.com/v1
+    kind: AnarchySubject
+    name: test-simple-1
+    namespace:  "{{ anarchy_namespace }}"
+  register: r_get_test_simple_1
+  vars:
+    _subject: "{{ r_get_test_simple_1.resources[0] }}"
+  failed_when: _subject.status.runs.active | length != 0
+  until: r_get_test_simple_1 is success
+  retries: 20
+  delay: 5
+
 - when: anarchy_test_delete_subjects | bool
   block:
   - name: Delete AnarchySubject test-simple-1

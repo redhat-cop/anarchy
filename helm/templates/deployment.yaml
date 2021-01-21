@@ -33,9 +33,9 @@ spec:
           value: https://{{ (index .Values.ingress.hosts 0).host }}
         {{- end }}
         {{- range $k, $v := .Values.envVars }}
-        - name: {{ $k }}
-          value: {{ $v }}
-        {{- end }}
+        - name: {{ $k | quote }}
+          value: {{ $v | quote }}
+        {{ end }}
         {{- if .Values.image.repository | contains ":" }}
         image: {{ .Values.image.repository }}
         {{- else }}

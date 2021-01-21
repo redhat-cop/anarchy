@@ -106,6 +106,8 @@ class AnarchyGovernor(object):
     @staticmethod
     def cleanup(runtime):
         for governor in list(AnarchyGovernor.cache.values()):
+            operator_logger.debug("Starting cleanup for AnarchyGovernor %s", governor.name)
+            governor.cleanup_subjects(runtime)
             governor.cleanup_actions(runtime)
             governor.cleanup_runs(runtime)
 
@@ -263,6 +265,79 @@ class AnarchyGovernor(object):
             return AnarchyGovernor.ActionConfig(name, wildcard_action.spec, self)
         else:
             return None
+
+    def cleanup_subjects(self, runtime):
+        """
+        Cleanup AnarchySubjects, removing references to AnarchyActions or AnarchyRuns that do not exist.
+        """
+        for subject_resource in runtime.custom_objects_api.list_namespaced_custom_object(
+            runtime.operator_domain, runtime.api_version, runtime.operator_namespace, 'anarchysubjects',
+            label_selector='{}={}'.format(runtime.governor_label, self.name)
+        ).get('items', []):
+            subject_name = subject_resource['metadata']['name']
+            subject_namespace = subject_resource['metadata']['namespace']
+            subject_update_required = False
+
+            active_action_ref = subject_resource.get('status', {}).get('activeAction')
+            if active_action_ref:
+                action_name = active_action_ref['name']
+                action_namespace = active_action_ref['namespace']
+                try:
+                    runtime.custom_objects_api.get_namespaced_custom_object(
+                        runtime.operator_domain, runtime.api_version, action_namespace, 'anarchyactions', action_name
+                    )
+                except kubernetes.client.rest.ApiException as e:
+                    if e.status == 404:
+                        operator_logger.info(
+                            'Clearing AnarchyAction %s from AnarchySubject %s status.activeAction',
+                            action_name, subject_name
+                        )
+                        subject_resource['status']['activeAction'] = None
+                        subject_update_required = True
+                    else:
+                        raise
+
+            lost_first_active_run = False
+            active_runs = []
+            for i, active_run_ref in enumerate(subject_resource.get('status', {}).get('runs', {}).get('active', [])):
+                run_name = active_run_ref['name']
+                run_namespace = active_run_ref['namespace']
+                try:
+                    runtime.custom_objects_api.get_namespaced_custom_object(
+                        runtime.operator_domain, runtime.api_version, run_namespace, 'anarchyruns', run_name
+                    )
+                    active_runs.append(active_run_ref)
+                except kubernetes.client.rest.ApiException as e:
+                    if e.status == 404:
+                        operator_logger.info(
+                            'Removing deleted AnarchyRun %s from AnarchySubject %s status.runs.active',
+                            run_name, subject_name
+                        )
+                        subject_update_required = True
+                        lost_first_active_run = i == 0
+                    else:
+                        raise
+
+            if subject_update_required:
+                try:
+                    subject_resource['status']['runs']['active'] = active_runs
+                    resource = runtime.custom_objects_api.replace_namespaced_custom_object_status(
+                        runtime.operator_domain, runtime.api_version, subject_namespace, 'anarchysubjects', subject_name, subject_resource
+                    )
+                except kubernetes.client.rest.ApiException as e:
+                    if e.status == 404 \
+                    or e.status == 409:
+                        pass
+                    else:
+                        raise
+
+                if lost_first_active_run and len(active_runs) > 0:
+                    run_name = active_runs[0]['name']
+                    run_namespace = active_runs[0]['namespace']
+                    runtime.custom_objects_api.patch_namespaced_custom_object(
+                        runtime.operator_domain, runtime.api_version, run_namespace, 'anarchyruns', run_name,
+                        {'metadata': {'labels': { runtime.runner_label: 'pending' } } }
+                    )
 
     def cleanup_actions(self, runtime):
         """

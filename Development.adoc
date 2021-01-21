@@ -88,6 +88,7 @@ Deploy new Anarchy image from build with helm template:
 
 --------------------------------------------------------------------------------
 helm template helm/ \
+--set=envVars.CLEANUP_INTERVAL="10" \
 --set=image.repository=$(oc get imagestream anarchy -o jsonpath='{.status.tags[?(@.tag=="latest")].items[0].dockerImageReference}') \
 | oc apply -f -
 --------------------------------------------------------------------------------

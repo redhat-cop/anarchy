@@ -32,6 +32,9 @@ spec:
     - name: Run
       type: string
       jsonPath: .status.runRef.name
+    - name: Finished
+      type: date
+      jsonPath: .status.finishedTimestamp
     - name: Age
       type: date
       jsonPath: .metadata.creationTimestamp
