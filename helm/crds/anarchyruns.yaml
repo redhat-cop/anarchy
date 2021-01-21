@@ -285,6 +285,14 @@ spec:
                                         ok:
                                           description: Whether the task was successful for tasks without loops.
                                           type: boolean
+                                        failed:
+                                          type: boolean
+                                        skipped:
+                                          type: boolean
+                                        args:
+                                          description: Arguments for task
+                                          type: object
+                                          x-kubernetes-preserve-unknown-fields: true
                                         result:
                                           description: Result of task execution for tasks without loops.
                                           type: object
@@ -296,9 +304,13 @@ spec:
                                             description: Task item information for tasks with loops
                                             type: object
                                             properties:
-                                              label:
+                                              item:
                                                 type: string
                                               ok:
+                                                type: boolean
+                                              failed:
+                                                type: boolean
+                                              skipped:
                                                 type: boolean
                                               result:
                                                 description: Result of task item execution

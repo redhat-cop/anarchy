@@ -53,7 +53,20 @@ class AnarchyGovernor(object):
 
         @property
         def callback_name_parameter(self):
+            """
+            Optional configuration setting to allow the action callback name to be
+            specified in the callback data rather than as a URL component to the
+            API.
+            """
             return self.spec.get('callbackNameParameter', None)
+
+        @property
+        def finish_on_successful_run(self):
+            """
+            Boolean flag indicating whether actions using this action config are
+            automatically marked finished after a successful run. Defaults to True.
+            """
+            return self.spec.get('finishOnSuccessfulRun', True)
 
         @property
         def post_tasks(self):
@@ -211,8 +224,8 @@ class AnarchyGovernor(object):
         return self.spec.get('pythonRequirements', None)
 
     @property
-    def remove_successful_actions_after(self):
-        time_interval = self.spec.get('removeSuccessfulActions', {}).get('after')
+    def remove_finished_actions_after(self):
+        time_interval = self.spec.get('removeFinishedActions', {}).get('after')
         if time_interval:
             return parse_time_interval(time_interval)
         else:
@@ -252,46 +265,27 @@ class AnarchyGovernor(object):
             return None
 
     def cleanup_actions(self, runtime):
-        time_interval = self.remove_successful_actions_after
+        """
+        Delete AnarchyActions that have finished a while ago, configured by spec.removeFinishedActions.after
+        """
+        time_interval = self.remove_finished_actions_after
         if not isinstance(time_interval, timedelta):
             return
         for action_resource in runtime.custom_objects_api.list_namespaced_custom_object(
             runtime.operator_domain, runtime.api_version, runtime.operator_namespace, 'anarchyactions',
-            label_selector='{}={},{}'.format(runtime.governor_label, self.name, runtime.run_label)
+            label_selector='{}={},{}'.format(runtime.governor_label, self.name, runtime.finished_label)
         ).get('items', []):
             action_name = action_resource['metadata']['name']
-            run_name = action_resource.get('status', {}).get('runRef', {}).get('name')
-            run_scheduled_timestamp = action_resource.get('status', {}).get('runScheduled')
-            if not run_name or not run_scheduled_timestamp:
-                operator_logger.warning(
-                    'AnarchyAction %s has label %s but status does not have runRef or runScheduled',
-                    action_name, runtime.run_label
-                )
+            # If action has no finishedTimestamp than do not delete
+            finished_timestamp = action_resource.get('status', {}).get('finishedTimestamp')
+            if not finished_timestamp:
                 continue
 
-            run_scheduled_datetime = datetime.strptime(run_scheduled_timestamp, '%Y-%m-%dT%H:%M:%SZ')
-
-            # If run has not be scheduled longer ago than the interval then do not delete
-            if run_scheduled_datetime + time_interval > datetime.utcnow():
+            # If action has not finished longer ago than the interval then do not delete
+            finished_datetime = datetime.strptime(finished_timestamp, '%Y-%m-%dT%H:%M:%SZ')
+            if finished_datetime + time_interval > datetime.utcnow():
                 continue
 
-            try:
-                run_resource = runtime.custom_objects_api.get_namespaced_custom_object(
-                    runtime.operator_domain, runtime.api_version, runtime.operator_namespace, 'anarchyruns', run_name
-                )
-                # If run has not posted a successful result longer ago than the interval then do not delete
-                if run_resource['metadata']['labels'][runtime.runner_label] != 'successful':
-                    continue
-
-                # If run has not posted a result longer ago than the interval then do not delete
-                run_post_datetime = datetime.strptime(run_resource['spec']['runPostTimestamp'], '%Y-%m-%dT%H:%M:%SZ')
-                if run_post_datetime + time_interval > datetime.utcnow():
-                    continue
-            except kubernetes.client.rest.ApiException as e:
-                # If run is already deleted then action may be deleted
-                if e.status != 404:
-                    raise
-            
             try:
                 runtime.custom_objects_api.delete_namespaced_custom_object(
                     runtime.operator_domain, runtime.api_version, runtime.operator_namespace, 'anarchyactions', action_name
@@ -301,6 +295,9 @@ class AnarchyGovernor(object):
                     raise
 
     def cleanup_runs(self, runtime):
+        """
+        Delete AnarchyRuns that have posted results a while ago, configured by spec.removeSuccessfulRuns.after
+        """
         time_interval = self.remove_successful_runs_after
         if not isinstance(time_interval, timedelta):
             return
@@ -309,16 +306,23 @@ class AnarchyGovernor(object):
             label_selector='{}={},{}=successful'.format(runtime.governor_label, self.name, runtime.runner_label)
         ).get('items', []):
             run_name = run_resource['metadata']['name']
+            # If run has no runPostTimestamp than do not delete
+            run_post_timestamp = run_resource.get('spec', {}).get('runPostTimestamp')
+            if not run_post_timestamp:
+                continue
+
             # If run has not posted a result longer ago than the interval then do not delete
-            run_post_datetime = datetime.strptime(run_resource['spec']['runPostTimestamp'], '%Y-%m-%dT%H:%M:%SZ')
-            if run_post_datetime + time_interval < datetime.utcnow():
-                try:
-                    runtime.custom_objects_api.delete_namespaced_custom_object(
-                        runtime.operator_domain, runtime.api_version, runtime.operator_namespace, 'anarchyruns', run_name
-                    )
-                except kubernetes.client.rest.ApiException as e:
-                    if e.status != 404:
-                        raise
+            run_post_datetime = datetime.strptime(run_post_timestamp, '%Y-%m-%dT%H:%M:%SZ')
+            if run_post_datetime + time_interval > datetime.utcnow():
+                continue
+
+            try:
+                runtime.custom_objects_api.delete_namespaced_custom_object(
+                    runtime.operator_domain, runtime.api_version, runtime.operator_namespace, 'anarchyruns', run_name
+                )
+            except kubernetes.client.rest.ApiException as e:
+                if e.status != 404:
+                    raise
 
     def get_parameters(self, runtime, api, anarchy_subject, action_config):
         parameters = {}

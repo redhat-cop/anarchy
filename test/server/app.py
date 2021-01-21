@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 
 import base64
-import datetime
 import flask
 import gevent.pywsgi
 import json
@@ -17,9 +16,16 @@ import threading
 import time
 import yaml
 
+from copy import deepcopy
+from datetime import datetime, timedelta
+
 api = flask.Flask('rest')
 callbacks = {}
 domain = os.environ.get('ANARCHY_DOMAIN', 'anarchy.gpte.redhat.com')
+
+callback_url = None
+callback_token = None
+simulate_job_result = None
 
 def init():
     global logger
@@ -64,66 +70,231 @@ def callback_loop():
             del callbacks[key]
         time.sleep(1)
 
-@api.route('/api/v2/job_templates/job-runner/launch/', methods=['POST'])
-def launch():
-    logger.info("Call to job job-runner launch")
+@api.route('/api/v2/tokens/', methods=['POST'])
+def api_v2_tokens_post():
+    return flask.jsonify({
+        "application": 1,
+        "created": datetime.utcnow().isoformat() + 'Z',
+        "expires": (datetime.utcnow() + timedelta(days=1)).isoformat() + 'Z',
+        "id": 11111111,
+        "token": "s3cr3tT0k3n"
+    }), 201
 
-    try:
-        assert flask.request.json, \
-            'no json data provided'
-        extra_vars = flask.request.json.get('extra_vars', None)
-        assert extra_vars, 'extra_vars not provided'
-        job_vars = extra_vars.get('job_vars', None)
-        assert job_vars, 'job_vars not provided in extra_vars'
-        job_meta = job_vars.get('__meta__', None)
-        assert job_meta, '__meta__ not provided in extra_vars.job_vars'
-        callback = job_meta.get('callback', None)
-        assert callback, 'callback not provided in extra_vars.job_vars.__meta__'
-        callback_token = callback.get('token', None)
-        callback_url = callback.get('url', None)
-        assert callback_token, 'callback_token not provided in extra_vars.job_vars.__meta__.callback'
-        assert callback_url, 'callback_url not provided in extra_vars.job_vars.__meta__.callback'
-        deployer = job_meta.get('deployer', None)
-        assert deployer, 'deployer not provided in extra_vars.job_vars.__meta__'
-        deployer_entry_point = deployer.get('entry_point', None)
-        assert deployer_entry_point, 'entry_point not provided in extra_vars.job_vars.__meta__.deployer'
-        tower = job_meta.get('tower', None)
-        assert tower, 'tower not provided in extra_vars.job_vars.__meta__'
-        tower_action = tower.get('action', None)
-        assert tower_action, 'action not provided in extra_vars.job_vars.__meta__.tower'
-        aws_access_key_id = job_vars.get('aws_access_key_id', None)
-        assert aws_access_key_id, 'aws_access_key_id not provided in extra_vars.job_vars'
-        assert aws_access_key_id == 'th3k3y', 'aws_access_key_id not correct'
-        aws_secret_access_key = job_vars.get('aws_secret_access_key', None)
-        assert aws_secret_access_key, 'aws_secret_access_key not provided in extra_vars.job_vars'
-        assert aws_secret_access_key == 'th34cc355', 'aws_secret_access_key not correct'
-    except Exception as e:
-        logger.exception("Invalid parameters passed to job-runner launch: " + str(e))
-        flask.abort(400)
+@api.route('/api/v2/tokens/<string:token_id>/', methods=['DELETE'])
+def api_v2_tokens_delete(token_id):
+    return flask.jsonify({}), 204
 
+@api.route('/api/v2/organizations/', methods=['GET'])
+def api_v2_organizations_get():
+    name = flask.request.args.get('name', 'default')
+    return flask.jsonify({
+        "count": 1,
+        "next": None,
+        "previous": None,
+        "results": [{
+            "created": datetime.utcnow().isoformat() + 'Z',
+            "id": 1,
+            "description": name,
+            "max_hosts": 0,
+            "name": name,
+            "type": "organization",
+            "url": "/api/v2/organizations/1/",
+        }]
+    }), 200
+
+@api.route('/api/v2/organizations/<string:org_id>/', methods=['PATCH'])
+def api_v2_organizations_patch(org_id):
+    return flask.jsonify({
+        "created": datetime.utcnow().isoformat() + 'Z',
+        "id": org_id,
+        "description": "default",
+        "max_hosts": 0,
+        "name": "default",
+        "type": "organization",
+        "url": "/api/v2/organizations/1/",
+    }), 200
+
+@api.route('/api/v2/inventories/', methods=['GET'])
+def api_v2_inventories_get():
+    org_id = flask.request.args.get('organization')
+    name = flask.request.args.get('name', 'default default')
+    return flask.jsonify({
+        "count": 1,
+        "next": None,
+        "previous": None,
+        "results": [{
+            "created": datetime.utcnow().isoformat() + 'Z',
+            "description": "",
+            "host_filter": None,
+            "id": 1,
+            "kind": "",
+            "name": name,
+            "organization": org_id,
+            "type": "inventory",
+            "url": "/api/v2/inventories/1/",
+        }]
+    }), 200
+
+@api.route('/api/v2/inventories/<string:inventory_id>/', methods=['PATCH'])
+def api_v2_inventories_patch(inventory_id):
+    return flask.jsonify({
+        "created": datetime.utcnow().isoformat() + 'Z',
+        "description": "",
+        "host_filter": None,
+        "id": inventory_id,
+        "kind": "",
+        "name": "default default",
+        "organization": 1,
+        "type": "inventory",
+        "url": "/api/v2/inventories/1/",
+    }), 200
+
+@api.route('/api/v2/projects/', methods=['GET'])
+def api_v2_projects_get():
+    org_id = flask.request.args.get('organization')
+    name = flask.request.args.get('name', 'default default')
+    return flask.jsonify({
+        "count": 1,
+        "next": None,
+        "previous": None,
+        "results": [{
+            "created": datetime.utcnow().isoformat() + 'Z',
+            "custom_virtualenv": None,
+            "id": 1,
+            "name": name,
+            "organization": org_id,
+            "scm_branch": "development",
+            "scm_clean": False,
+            "scm_delete_on_update": False,
+            "scm_refspec": "",
+            "scm_type": "git",
+            "scm_url": "https://github.com/redhat-cop/agnosticd.git",
+            "scm_update_cache_timeout": 30,
+            "scm_update_on_launch": True,
+            "summary_fields": {},
+            "timeout": 0,
+            "type": "project",
+            "url": "/api/v2/projects/1/",
+        }]
+    }), 200
+
+@api.route('/api/v2/projects/<string:project_id>/', methods=['PATCH'])
+def api_v2_projects_patch(project_id):
+    ret = deepcopy(flask.request.json)
+    ret['created']: datetime.utcnow().isoformat() + 'Z'
+    ret['modified']: datetime.utcnow().isoformat() + 'Z'
+    ret['id'] = project_id
+    ret['summary_fields'] = dict()
+    ret['url'] = '/api/v2/projects/{}/'.format(project_id)
+    return flask.jsonify(ret), 200
+
+@api.route('/api/v2/job_templates/', methods=['GET'])
+def api_v2_job_templates_get():
+    name = flask.request.args.get('name')
+    results = []
+    if name:
+        results.append({
+            "ask_inventory_on_launch": True,
+            "id": 1,
+            "name": name,
+            "related": {
+                "launch": "/api/v2/job_templates/1/launch/",
+            },
+            "type": "job_template",
+            "url": "/api/v2/job_templates/1/",
+        })
+    return flask.jsonify({
+        "count": len(results),
+        "next": None,
+        "previous": None,
+        "results": results,
+    }), 200
+
+@api.route('/api/v2/job_templates/<string:job_template_id>/', methods=['PATCH'])
+def api_v2_job_templates_patch(job_template_id):
+    global callback_url, callback_token, simulate_job_result
+    extra_vars = flask.request.json.get('extra_vars')
+    if not extra_vars:
+        flask.abort(400, description='extra_vars not passed')
+    extra_vars = json.loads(extra_vars)
+    simulate_job_result = extra_vars.get('simulate_job_result', 'successful')
+    __meta__ = extra_vars.get('__meta__')
+    if not __meta__:
+        flask.abort(400, description='__meta__ not in extra_vars')
+    callback = __meta__.get('callback')
+    if not callback:
+        flask.abort(400, description='callback not in extra_vars.__meta__')
+    callback_token = callback.get('token')
+    if not callback_token:
+        flask.abort(400, description='token not in extra_vars.__meta__.callback')
+    callback_url = callback.get('url')
+    if not callback_url:
+        flask.abort(400, description='url not in extra_vars.__meta__.callback')
+    ret = deepcopy(flask.request.json)
+    ret['created']: datetime.utcnow().isoformat() + 'Z'
+    ret['id'] = job_template_id
+    ret['modified'] = datetime.utcnow().isoformat() + 'Z'
+    ret['type'] = 'job_template'
+    ret['url'] = '/api/v2/job_templates/{}/'.format(job_template_id)
     logger.info("Callback URL %s", callback_url)
+    return flask.jsonify(ret), 200
+
+@api.route('/api/v2/job_templates/<string:job_template_id>/launch/', methods=['POST'])
+def api_v2_job_templates_job_runner_launch_post(job_template_id):
+    global callback_url, callback_token, simulate_job_result
 
     job_id = random.randint(1,10000000)
-    schedule_callback(
-        after=time.time() + 1,
-        event='started',
-        job_id=job_id,
-        msg='started ' + tower_action,
-        token=callback_token,
-        url=callback_url
-    )
-    schedule_callback(
-        after=time.time() + 10,
-        event='complete',
-        job_id=job_id,
-        msg='completed ' + tower_action,
-        token=callback_token,
-        url=callback_url
-    )
+    if simulate_job_result == 'successful':
+        schedule_callback(
+            after=time.time() + 10,
+            event='complete',
+            job_id=job_id,
+            msg='completed',
+            token=callback_token,
+            url=callback_url
+        )
     return flask.jsonify({
         "id": job_id,
-        "job": job_id
+        "job": job_id,
+        "status": '',
     }), 201
+
+def job_data(job_id):
+    data = {
+        "status": "running",
+        "related": {
+            "cancel": "/api/v2/jobs/{}/cancel/".format(job_id),
+        },
+        "type": "job_template",
+        "url": "/api/v2/jobs/{}/".format(job_id),
+    }
+    if simulate_job_result == 'successful':
+        data['status'] = 'successful'
+    else:
+        data['status'] = simulate_job_result
+    return data
+
+@api.route('/api/v2/jobs/', methods=['GET'])
+def api_v2_jobs_get():
+    job_id = flask.request.args['id']
+    return flask.jsonify({
+        "count": 1,
+        "results": [ job_data(job_id) ]
+    }), 200
+
+@api.route('/api/v2/jobs/<string:job_id>/', methods=['GET'])
+def api_v2_jobs_id_get(job_id):
+    return flask.jsonify(job_data(job_id))
+
+@api.route('/api/v2/jobs/<string:job_id>/cancel/', methods=['GET'])
+def api_v2_jobs_cancel_get(job_id):
+    return flask.jsonify({
+        "can_cancel": True
+    }), 200
+
+@api.route('/api/v2/jobs/<string:job_id>/cancel/', methods=['POST'])
+def api_v2_jobs_cancel_post(job_id):
+    return flask.jsonify({}), 202
 
 @api.route('/runner/<string:runner_queue_name>/<string:runner_name>', methods=['GET', 'POST'])
 def runner_get(runner_queue_name, runner_name):

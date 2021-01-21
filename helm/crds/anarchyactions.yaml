@@ -73,7 +73,7 @@ spec:
                 type: string
               after:
                 description: >-
-                  Datetime string in for format "YYYY-MM-DDThh:mm:ssZ". AnarchyRun will be created
+                  Timestamp string in for format "YYYY-MM-DDThh:mm:ssZ". AnarchyRun will be created
                   for the AnarchyAction after this time.
                 type: string
               callbackToken:
@@ -158,6 +158,13 @@ spec:
                       x-kubernetes-preserve-unknown-fields: true
                     name:
                       type: string
+              finishedTimestamp:
+                description: >-
+                  Timestamp for when the action is completed.
+                  Once an action is completed no further callbacks are accepted for it and it is subject to cleanup
+                  operations. No subsequent actions are released for run on a subject until previous actions are
+                  completed.
+                type: string
               runRef:
                 type: object
                 properties:
@@ -172,4 +179,6 @@ spec:
                   uid:
                     type: string
               runScheduled:
+                type: string
+              state:
                 type: string

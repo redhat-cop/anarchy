@@ -51,6 +51,20 @@ class AnarchySubject(object):
             'subjects must define governor'
 
     @property
+    def active_action_name(self):
+        ref = self.active_action_ref
+        if ref:
+            return ref['name']
+        else:
+            return None
+
+    @property
+    def active_action_ref(self):
+        if not self.status:
+            return None
+        return self.status.get('activeAction')
+
+    @property
     def active_run_name(self):
         ref = self.active_run_ref
         if ref:
@@ -122,15 +136,6 @@ class AnarchySubject(object):
     def var_secrets(self):
         return self.spec.get('varSecrets', [])
 
-    def add_finalizer(self, runtime):
-        finalizers = self.metadata.get('finalizers', [])
-        if runtime.operator_domain not in finalizers:
-            resource = runtime.custom_objects_api.patch_namespaced_custom_object(
-                runtime.operator_domain, runtime.api_version, runtime.operator_namespace, 'anarchysubjects', self.name,
-                {'metadata': {'finalizers': finalizers + [runtime.operator_domain] } }
-            )
-            self.refresh_from_resource(resource)
-
     def add_run_to_status(self, anarchy_run, runtime):
         '''
         Add AnarchyRun to AnarchySubject status.
@@ -157,7 +162,7 @@ class AnarchySubject(object):
                 if e.status == 409:
                     # Conflict, refresh subject from api and retry
                     if not self.refresh_from_api(runtime):
-                        operator_logger.error('Cannot add run to status, unable to refresh AnarchySubject %s', self.subject_name)
+                        operator_logger.error('Cannot add run to status, unable to refresh AnarchySubject %s', self.name)
                         return
                 else:
                     raise
@@ -176,11 +181,8 @@ class AnarchySubject(object):
             operator_logger.error('Unable to find governor %s', self.governor_name)
         return governor
 
-    def get_anarchy_run(self, runtime):
-        return self.anarchy_runs.get(self.current_anarchy_run, None)
-
     def handle_create(self, runtime):
-        self.add_finalizer(runtime)
+        self.initialize_metadata(runtime)
         self.process_subject_event_handlers(runtime, 'create')
 
     def handle_delete(self, runtime):
@@ -204,6 +206,23 @@ class AnarchySubject(object):
         if not spec_sha256_annotation \
         or spec_sha256_annotation != self.spec_sha256:
             self.process_subject_event_handlers(runtime, 'update')
+
+    def initialize_metadata(self, runtime):
+        finalizers = self.metadata.get('finalizers', [])
+        if runtime.operator_domain not in finalizers:
+            finalizers.append(runtime.operator_domain)
+        resource = runtime.custom_objects_api.patch_namespaced_custom_object(
+            runtime.operator_domain, runtime.api_version, runtime.operator_namespace, 'anarchysubjects', self.name,
+            {
+                'metadata': {
+                    'finalizers': finalizers,
+                    'labels': {
+                        runtime.governor_label: self.governor_name
+                    }
+                }
+            }
+        )
+        self.refresh_from_resource(resource)
 
     def remove_active_run_from_status(self, anarchy_run, runtime):
         # Support passing run by object or name
@@ -250,7 +269,7 @@ class AnarchySubject(object):
                     # Conflict, refresh subject from api and retry
                     first_attempt = False
                     if not self.refresh_from_api(runtime):
-                        operator_logger.info('Cannot remove active run from status, unable to refresh AnarchySubject %s', self.subject_name)
+                        operator_logger.info('Cannot remove active run from status, unable to refresh AnarchySubject %s', self.name)
                         return
                 else:
                     raise
@@ -331,6 +350,63 @@ class AnarchySubject(object):
         self.spec = resource['spec']
         self.status = resource.get('status')
 
+    def remove_active_action(self, action, runtime):
+        """Attempt to remove activeAction in AnarchySubject status.
+        If a different action is already active then no change will be made.
+
+        Parameters
+        ----------
+        action : AnarchyAction
+            The action to remove as active.
+        runtime : AnarchyRuntime
+            Object with runtime configuration and k8s APIs
+
+        Raises
+        ------
+        kubernetes.client.rest.ApiException
+            Exception communicating with the k8s API
+
+        Returns
+        -------
+        bool
+            Indication of whether active action was successfully removed.
+        """
+        while True:
+            if not self.active_action_ref \
+            or self.active_action_ref['name'] != action.name:
+                return
+
+            anarchy_subject = self.to_dict(runtime)
+            anarchy_subject['status'].pop('activeAction', None)
+
+            try:
+                operator_logger.info(
+                    'Removing activeAction %s for AnarchySubject %s',
+                    action.name, self.name
+                )
+                resource = runtime.custom_objects_api.replace_namespaced_custom_object_status(
+                    runtime.operator_domain, runtime.api_version, self.namespace, 'anarchysubjects', self.name, anarchy_subject
+                )
+                self.refresh_from_resource(resource)
+                return True
+            except kubernetes.client.rest.ApiException as e:
+                if e.status == 409:
+                    # Conflict, refresh subject from api and retry
+                    if not self.refresh_from_api(runtime):
+                        operator_logger.error(
+                            'Cannot remove activeAction from status, unable to refresh AnarchySubject %s',
+                            self.name
+                        )
+                        return False
+                elif e.status == 404:
+                    operator_logger.warning(
+                        'Cannot remove activeAction from status, AnarchySubject %s was deleted',
+                        self.name
+                    )
+                    return False
+                else:
+                    raise
+
     def remove_active_run(self, run_ref, runtime):
         while True:
             anarchy_subject = self.to_dict(runtime)
@@ -363,15 +439,107 @@ class AnarchySubject(object):
                     raise
 
     def remove_finalizers(self, runtime):
-        return runtime.custom_objects_api.patch_namespaced_custom_object(
-            runtime.operator_domain, runtime.api_version, runtime.operator_namespace, 'anarchysubjects', self.name,
-            {'metadata': {'finalizers': None } }
+        """Remove finalizers from AnarchySubject metadata to allow delete to complete.
+
+        Parameters
+        ----------
+        runtime : AnarchyRuntime
+            Object with runtime configuration and k8s APIs
+
+        Raises
+        ------
+        kubernetes.client.rest.ApiException
+            Exception communicating with the k8s API
+        """
+        try:
+            return runtime.custom_objects_api.patch_namespaced_custom_object(
+                runtime.operator_domain, runtime.api_version, runtime.operator_namespace, 'anarchysubjects', self.name,
+                {'metadata': {'finalizers': None } }
+            )
+        except kubernetes.client.rest.ApiException as e:
+            if e.status != 404:
+                raise
+
+    def set_active_action(self, action, runtime):
+        """Attempt to set activeAction in AnarchySubject status.
+        If a different action is already active then no change will be made.
+
+        Parameters
+        ----------
+        action : AnarchyAction
+            The action to set as active.
+        runtime : AnarchyRuntime
+            Object with runtime configuration and k8s APIs
+
+        Raises
+        ------
+        kubernetes.client.rest.ApiException
+            Exception communicating with the k8s API
+
+        Returns
+        -------
+        bool
+            Indication of whether active action was set successfully.
+        """
+        set_action_ref = dict(
+            apiVersion = runtime.api_group_version,
+            kind = 'AnarchyAction',
+            name = action.name,
+            namespace = action.namespace,
+            uid = action.uid
         )
+        while True:
+            action_ref = self.active_action_ref
+            if action_ref:
+               if action_ref['uid'] == set_action_ref['uid']:
+                   return True
+               else:
+                   return False
+
+            anarchy_subject = self.to_dict(runtime)
+            if anarchy_subject['status'] == None:
+                anarchy_subject['status'] = dict(
+                    activeAction = set_action_ref
+                )
+            else:
+                anarchy_subject['status']['activeAction'] = set_action_ref
+
+            try:
+                operator_logger.info(
+                    'Setting AnarchyAction %s to active for AnarchySubject %s',
+                    action.name, self.name
+                )
+                resource = runtime.custom_objects_api.replace_namespaced_custom_object_status(
+                    runtime.operator_domain, runtime.api_version, self.namespace, 'anarchysubjects', self.name, anarchy_subject
+                )
+                self.refresh_from_resource(resource)
+                return True
+            except kubernetes.client.rest.ApiException as e:
+                if e.status == 409:
+                    # Conflict, refresh subject from api and retry
+                    if not self.refresh_from_api(runtime):
+                        operator_logger.error(
+                            'Cannot set activeAction in status, unable to refresh AnarchySubject %s',
+                            self.name
+                        )
+                        return False
+                else:
+                    raise
 
     def set_active_run_to_pending(self, runtime):
-        '''
-        Set next AnarchyRun to pending
-        '''
+        """Patch AnarchyRun listed as active in AnarchySubject to pending state.
+        If AnarchyRun is not found then it is removed from the subject.
+
+        Parameters
+        ----------
+        runtime : AnarchyRuntime
+            Object with runtime configuration and k8s APIs
+
+        Raises
+        ------
+        kubernetes.client.rest.ApiException
+            Exception communicating with the k8s API
+        """
         while True:
             run_ref = self.active_run_ref
             if not run_ref:
@@ -394,6 +562,7 @@ class AnarchySubject(object):
                     self.remove_active_run(run_ref, runtime)
                 else:
                     raise
+
     def set_run_failure_in_status(self, anarchy_run, runtime):
         resource = runtime.custom_objects_api.patch_namespaced_custom_object_status(
             runtime.operator_domain, runtime.api_version, runtime.operator_namespace,

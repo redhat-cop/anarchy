@@ -386,6 +386,214 @@
   retries: 20
   delay: 5
 
+- name: Create AnarchyAction to test callback functionality
+  k8s:
+    apply: true
+    state: present
+    definition:
+      apiVersion: anarchy.gpte.redhat.com/v1
+      kind: AnarchyAction
+      metadata:
+        name: test-simple-1-callback-test
+        namespace:  "{{ anarchy_namespace }}"
+      spec:
+        action: callback_test
+        callbackToken: c4llb4ckT0k3n
+        subjectRef:
+          name: test-simple-1
+
+- name: Verify run of AnarchyAction test-simple-1-callback-test
+  k8s_info:
+    api_version: anarchy.gpte.redhat.com/v1
+    kind: AnarchyAction
+    namespace: "{{ anarchy_namespace }}"
+    name: test-simple-1-callback-test
+  register: r_get_action
+  vars:
+    _action: "{{ r_get_action.resources[0] }}"
+  failed_when: >-
+    'runRef' not in _action.status | default({})
+  until: r_get_action is success
+  retries: 10
+  delay: 5
+
+- name: Check AnarchyRun for test-simple-1-fail-first-run
+  k8s_info:
+    api_version: anarchy.gpte.redhat.com/v1
+    kind: AnarchyRun
+    namespace: "{{ anarchy_namespace }}"
+    name: "{{ _run_ref.name }}"
+  register: r_get_run
+  vars:
+    _action: "{{ r_get_action.resources[0] }}"
+    _run_ref: "{{ _action.status.runRef }}"
+    _run: "{{ r_get_run.resources[0] }}"
+  failed_when: >-
+    _run.spec.result.status | default('') != 'successful'
+  until: r_get_run is success
+  retries: 20
+  delay: 5
+
+- name: Verify run of AnarchyAction test-simple-1-callback-test not yet completed
+  k8s_info:
+    api_version: anarchy.gpte.redhat.com/v1
+    kind: AnarchyAction
+    namespace: "{{ anarchy_namespace }}"
+    name: test-simple-1-callback-test
+  register: r_get_action
+  vars:
+    _action: "{{ r_get_action.resources[0] }}"
+  failed_when: >-
+    _action.status.completedTimestamp | default(false)
+  until: r_get_action is success
+  retries: 10
+  delay: 5
+
+- name: Verify AnarchyAction test-simple-1-callback-test still active for AnarchySubject
+  k8s_info:
+    api_version: anarchy.gpte.redhat.com/v1
+    kind: AnarchySubject
+    namespace: "{{ anarchy_namespace }}"
+    name: test-simple-1
+  register: r_get_subject
+  vars:
+    _subject: "{{ r_get_subject.resources[0] }}"
+  failed_when: >-
+    'test-simple-1-callback-test' != _subject.status.activeAction.name | default('')
+  until: r_get_subject is success
+  retries: 10
+  delay: 5
+
+- name: Execute callback for test-simple-1-callback-test
+  uri:
+    url: "{{ anarchy_callback_base_url }}/action/test-simple-1-callback-test"
+    validate_certs: false
+    method: POST
+    headers:
+      Authorization: 'Bearer c4llb4ckT0k3n'
+    body_format: json
+    body:
+      event: done
+
+- name: Check AnarchyRun for test-simple-1-callback-test done event
+  k8s_info:
+    api_version: anarchy.gpte.redhat.com/v1
+    kind: AnarchyRun
+    namespace: "{{ anarchy_namespace }}"
+    label_selectors:
+    - anarchy.gpte.redhat.com/subject=test-simple-1
+    - anarchy.gpte.redhat.com/action=test-simple-1-callback-test
+    - anarchy.gpte.redhat.com/event=done
+  register: r_get_run
+  vars:
+    _run: "{{ r_get_run.resources[0] }}"
+  failed_when: >-
+    _run.spec.result.status | default('') != 'successful'
+  until: r_get_run is success
+  retries: 20
+  delay: 5
+
+- name: Verify AnarchyAction test-simple-1-callback-test finished
+  k8s_info:
+    api_version: anarchy.gpte.redhat.com/v1
+    kind: AnarchyAction
+    namespace: "{{ anarchy_namespace }}"
+    name: test-simple-1-callback-test
+  register: r_get_action
+  vars:
+    _action: "{{ r_get_action.resources[0] }}"
+  failed_when: >-
+    '' == _action.status.finishedTimestamp | default('') or
+    'successful' != _action.status.state | default('')
+  until: r_get_action is success
+  retries: 10
+  delay: 5
+
+- name: Verify no AnarchyAction active for test-simple-1
+  k8s_info:
+    api_version: anarchy.gpte.redhat.com/v1
+    kind: AnarchySubject
+    namespace: "{{ anarchy_namespace }}"
+    name: test-simple-1
+  register: r_get_subject
+  vars:
+    _subject: "{{ r_get_subject.resources[0] }}"
+  failed_when: >-
+    '' != _subject.status.activeAction.name | default('')
+  until: r_get_subject is success
+  retries: 10
+  delay: 5
+
+- name: Create AnarchyAction to test action continuation
+  k8s:
+    apply: true
+    state: present
+    definition:
+      apiVersion: anarchy.gpte.redhat.com/v1
+      kind: AnarchyAction
+      metadata:
+        name: test-simple-1-continuation-test
+        namespace:  "{{ anarchy_namespace }}"
+      spec:
+        action: continuation_test
+        subjectRef:
+          name: test-simple-1
+
+- name: Check first AnarchyRun for test-simple-1-continuation-test
+  k8s_info:
+    api_version: anarchy.gpte.redhat.com/v1
+    kind: AnarchyRun
+    namespace: "{{ anarchy_namespace }}"
+    label_selectors:
+    - anarchy.gpte.redhat.com/subject=test-simple-1
+    - anarchy.gpte.redhat.com/action=test-simple-1-continuation-test
+  register: r_get_run
+  vars:
+    _run: "{{ r_get_run.resources[0] }}"
+  failed_when: >-
+    _run.spec.result.status | default('') != 'successful'
+  until: r_get_run is success
+  retries: 20
+  delay: 5
+
+- name: Pause briefely for AnarchyRun processing
+  pause:
+    seconds: 2
+
+- name: Check that test-simple-1-continuation-test is not finished
+  k8s_info:
+    api_version: anarchy.gpte.redhat.com/v1
+    kind: AnarchyAction
+    namespace: "{{ anarchy_namespace }}"
+    name: test-simple-1-continuation-test
+  register: r_get_action
+  vars:
+    _action: "{{ r_get_action.resources[0] }}"
+  failed_when: >-
+    _action.status.finishedTimestamp | default('') != ''
+  until: r_get_action is success
+  retries: 20
+  delay: 5
+
+- name: Pause for second AnarchyRun
+  pause:
+    seconds: 30
+
+- name: Check that test-simple-1-continuation-test is finished
+  k8s_info:
+    api_version: anarchy.gpte.redhat.com/v1
+    kind: AnarchyAction
+    namespace: "{{ anarchy_namespace }}"
+    name: test-simple-1-continuation-test
+  register: r_get_action
+  vars:
+    _action: "{{ r_get_action.resources[0] }}"
+  failed_when: >-
+    _action.status.finishedTimestamp | default('') == ''
+  until: r_get_action is success
+  retries: 20
+  delay: 5
+
 - when: anarchy_test_delete_subjects | bool
   block:
   - name: Delete AnarchySubject test-simple-1

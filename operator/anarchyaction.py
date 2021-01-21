@@ -1,10 +1,11 @@
-from datetime import datetime
 import copy
 import kubernetes
 import logging
 import os
 import time
 import kopf
+
+from datetime import datetime, timedelta
 
 from anarchygovernor import AnarchyGovernor
 from anarchysubject import AnarchySubject
@@ -100,6 +101,11 @@ class AnarchyAction(object):
         return self.spec.get('callbackToken', '')
 
     @property
+    def finished_timestamp(self):
+        if self.status:
+            return self.status.get('finishedTimestamp')
+
+    @property
     def governor(self):
         return AnarchyGovernor.get(self.spec['governorRef']['name'])
 
@@ -171,6 +177,8 @@ class AnarchyAction(object):
                 }
             )
             self.refresh_from_resource(resource)
+            # Remove action from cache as it will not appear in watch when run label is set
+            AnarchyAction.cache_remove(self.name)
         except kubernetes.client.rest.ApiException as e:
             # If error is 404, not found, then subject or action must have been deleted
             if e.status != 404:
@@ -262,6 +270,68 @@ class AnarchyAction(object):
         self.spec = resource['spec']
         self.status = resource.get('status')
 
+    def schedule_continuation(self, args, runtime):
+        after_seconds = args.get('after', 0)
+        try:
+            runtime.custom_objects_api.patch_namespaced_custom_object(
+                runtime.operator_domain, runtime.api_version, runtime.operator_namespace, 'anarchyactions', self.name,
+                {
+                    'metadata': {
+                        'labels': {
+                            runtime.run_label: None
+                        }
+                    },
+                    'spec': {
+                        'after': (datetime.utcnow() + timedelta(seconds=after_seconds)).strftime('%FT%TZ'),
+                    },
+                }
+            )
+            resource = runtime.custom_objects_api.patch_namespaced_custom_object_status(
+                runtime.operator_domain, runtime.api_version, runtime.operator_namespace, 'anarchyactions', self.name,
+                {
+                    'status': {
+                        'runScheduled': None
+                    }
+                }
+            )
+            self.refresh_from_resource(resource)
+        except kubernetes.client.rest.ApiException as e:
+            # If error is 404, not found, then subject or action must have been deleted
+            if e.status != 404:
+                raise
+
+    def set_finished(self, state, runtime):
+        try:
+            resource = runtime.custom_objects_api.patch_namespaced_custom_object(
+                runtime.operator_domain, runtime.api_version, runtime.operator_namespace, 'anarchyactions', self.name,
+                {
+                    'metadata': {
+                        'labels': {
+                            runtime.finished_label: state
+                        }
+                    }
+                }
+            )
+            self.refresh_from_resource(resource)
+        except kubernetes.client.rest.ApiException as e:
+            if e.status != 404:
+                raise
+
+        try:
+            resource = runtime.custom_objects_api.patch_namespaced_custom_object_status(
+                runtime.operator_domain, runtime.api_version, runtime.operator_namespace, 'anarchyactions', self.name,
+                {
+                    'status': {
+                        'finishedTimestamp': datetime.utcnow().strftime('%FT%TZ'),
+                        'state': state
+                    }
+                }
+            )
+            self.refresh_from_resource(resource)
+        except kubernetes.client.rest.ApiException as e:
+            if e.status != 404:
+                raise
+
     def set_owner(self, runtime):
         '''
         Anarchy when using on.event when an anarchyaction is added and modified
@@ -311,8 +381,13 @@ class AnarchyAction(object):
         )
 
     def start(self, runtime):
-        AnarchyAction.cache_remove(self)
         subject = self.get_subject(runtime)
+
+        # Attempt to set active action for subject
+        if not subject.set_active_action(self, runtime):
+            return
+
+        AnarchyAction.cache_remove(self)
         governor = subject.get_governor(runtime)
 
         action_config = governor.action_config(self.action)

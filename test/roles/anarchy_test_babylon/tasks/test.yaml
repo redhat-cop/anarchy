@@ -24,9 +24,8 @@
   - r_test_1_provision.resources[0].spec.action == 'provision'
   - r_test_1_provision.resources[0].status is defined
   - r_test_1_provision.resources[0].status.callbackEvents is defined
-  - r_test_1_provision.resources[0].status.callbackEvents | length == 2
-  - r_test_1_provision.resources[0].status.callbackEvents[0].name == 'started'
-  - r_test_1_provision.resources[0].status.callbackEvents[1].name == 'complete'
+  - r_test_1_provision.resources[0].status.callbackEvents | length == 1
+  - r_test_1_provision.resources[0].status.callbackEvents[0].name == 'complete'
   retries: 20
   delay: 5
 
@@ -42,7 +41,6 @@
   - r_test_1_subject.resources[0].spec.vars.current_state == 'started'
   - r_test_1_subject.resources[0].status.towerJobs is defined
   - r_test_1_subject.resources[0].status.towerJobs.provision is defined
-  - r_test_1_subject.resources[0].status.towerJobs.provision.launchJob is defined
   - r_test_1_subject.resources[0].status.towerJobs.provision.deployerJob is defined
   retries: 5
   delay: 5
@@ -116,5 +114,65 @@
     register: r_get_test_babylon_1_subject
     failed_when: r_get_test_babylon_1_subject.resources | default([]) | length != 0
     until: r_get_test_babylon_1_subject is success
+    retries: 20
+    delay: 5
+
+- name: Create AnarchySubject test-babylon-2
+  k8s:
+    apply: true
+    state: present
+    definition: "{{ lookup('template', 'subject.yaml.j2') | from_yaml }}"
+  vars:
+    _name: test-babylon-2
+    _vars:
+      desired_state: started
+      tower_job_check_interval: 10s
+      job_vars:
+        simulate_job_result: failed
+
+- name: Wait for test-babylon-2 subject provision-failed
+  k8s_info:
+    api_version: anarchy.gpte.redhat.com/v1
+    kind: AnarchySubject
+    name: test-babylon-2
+    namespace: "{{ anarchy_namespace }}"
+  register: r_test_subject
+  until:
+  - r_test_subject.resources[0].metadata.labels.state | default('') == 'provision-failed'
+  - r_test_subject.resources[0].spec.vars.current_state | default('')  == 'provision-failed'
+  retries: 20
+  delay: 5
+
+- name: Update AnarchySubject test-babylon-2 simulate_job_result
+  k8s:
+    api_version: anarchy.gpte.redhat.com/v1
+    kind: AnarchySubject
+    name: test-babylon-2
+    namespace: "{{ anarchy_namespace }}"
+    definition:
+      spec:
+        vars:
+          job_vars:
+            simulate_job_result: successful
+
+- when: anarchy_test_delete_subjects | bool
+  block:
+  - name: Delete test-babylon-2 subject
+    k8s:
+      state: absent
+      api_version: anarchy.gpte.redhat.com/v1
+      kind: AnarchySubject
+      name: test-babylon-2
+      namespace: "{{ anarchy_namespace }}"
+
+  - name: Verify AnarchySubject delete for test-babylon-2
+    k8s_info:
+      api_version: anarchy.gpte.redhat.com/v1
+      kind: AnarchySubject
+      name: test-babylon-2
+      namespace: "{{ anarchy_namespace }}"
+    register: r_get_test_babylon_2_subject
+    failed_when: r_get_test_babylon_2_subject.resources | default([]) | length != 0
+    until: r_get_test_babylon_2_subject is success
     retries: 20
     delay: 5
