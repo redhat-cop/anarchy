@@ -6,7 +6,8 @@ image:
 # Deploy Anarchy, as opposed to only defining the CRDs and ClusterRoles
 deploy: true
 
-envVars: {}
+envVars:
+  CLEANUP_INTERVAL: 300
 
 namespace:
   create: true
