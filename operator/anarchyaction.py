@@ -301,6 +301,7 @@ class AnarchyAction(object):
                 raise
 
     def set_finished(self, state, runtime):
+        AnarchyAction.cache_remove(self)
         try:
             resource = runtime.custom_objects_api.patch_namespaced_custom_object(
                 runtime.operator_domain, runtime.api_version, runtime.operator_namespace, 'anarchyactions', self.name,

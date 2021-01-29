@@ -110,25 +110,18 @@ def handle_subject_event(event, logger, **_):
             if subject.is_pending_delete:
                 subject.handle_delete(runtime)
 
-@kopf.on.create(runtime.operator_domain, runtime.api_version, 'anarchyactions', labels={runtime.run_label: kopf.ABSENT})
-@kopf.on.resume(runtime.operator_domain, runtime.api_version, 'anarchyactions', labels={runtime.run_label: kopf.ABSENT})
-@kopf.on.update(runtime.operator_domain, runtime.api_version, 'anarchyactions', labels={runtime.run_label: kopf.ABSENT})
-def handle_action_activity(body, logger, **_):
-    action = AnarchyAction(body)
-    if not action.has_owner:
-        action.set_owner(runtime)
-    elif not action.has_started:
-        if action.after_datetime <= datetime.utcnow():
-            action.start(runtime)
-        else:
-            AnarchyAction.cache_put(action)
-
 @kopf.on.event(runtime.operator_domain, runtime.api_version, 'anarchyactions', labels={runtime.run_label: kopf.ABSENT})
 def handle_action_event(event, logger, **_):
     obj = event.get('object')
     if obj and obj.get('apiVersion') == runtime.api_group_version:
         if event['type'] == 'DELETED':
             AnarchyAction.cache_remove(obj['metadata']['name'])
+        else:
+            action = AnarchyAction(obj)
+            if not action.has_owner:
+                action.set_owner(runtime)
+            elif not action.has_started:
+                AnarchyAction.cache_put(action)
 
 @api.route('/action/<string:anarchy_action_name>', methods=['POST'])
 def action_callback(anarchy_action_name):
