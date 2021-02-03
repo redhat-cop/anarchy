@@ -148,8 +148,11 @@ class AnarchyRunner(object):
             runtime.operator_namespace, label_selector=runtime.runner_label
         ):
             obj = event.get('object')
+            if not obj:
+                continue
 
             if event['type'] == 'ERROR' \
+            and not isinstance(obj, kubernetes.client.V1Pod) \
             and obj['kind'] == 'Status':
                 if obj['status'] == 'Failure':
                     if obj['reason'] in ('Expired', 'Gone'):
