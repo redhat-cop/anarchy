@@ -552,7 +552,7 @@ def watch_peering():
             operator_logger.exception("Error in KopfPeering watch")
             time.sleep(5)
 
-def main_loop():
+def cleanup_loop():
     last_cleanup = 0
     last_run_check = 0
     last_runner_check = 0
@@ -561,14 +561,7 @@ def main_loop():
             while not runtime.is_active:
                 runtime.is_active_condition.wait()
 
-        if runtime.running_all_in_one:
-            start_runner_process()
-        elif not AnarchyRunner.get('default'):
-            init_default_runner()
-
         while runtime.is_active:
-            AnarchyAction.start_actions(runtime)
-
             if runner_check_interval < time.time() - last_runner_check:
                 try:
                     AnarchyRunner.manage_runners(runtime)
@@ -590,6 +583,21 @@ def main_loop():
                 except:
                     operator_logger.exception('Error in AnarchyRun.manage_active_runs!')
 
+            time.sleep(5)
+
+def main_loop():
+    while True:
+        with runtime.is_active_condition:
+            while not runtime.is_active:
+                runtime.is_active_condition.wait()
+
+        if runtime.running_all_in_one:
+            start_runner_process()
+        elif not AnarchyRunner.get('default'):
+            init_default_runner()
+
+        while runtime.is_active:
+            AnarchyAction.start_actions(runtime)
             time.sleep(1)
 
 def main():
@@ -614,6 +622,11 @@ def main():
     threading.Thread(
         name = 'watch_peering',
         target = watch_peering
+    ).start()
+
+    threading.Thread(
+        name = 'cleanup',
+        target = cleanup_loop
     ).start()
 
     threading.Thread(
