@@ -76,7 +76,7 @@ subjects: []
 
 k8s_config:
   repo: https://github.com/redhat-cop/k8s_config.git
-  version: v0.4.7
+  version: v0.5.0
   run_interval: 1h
 
 k8s_cluster_info: {}
