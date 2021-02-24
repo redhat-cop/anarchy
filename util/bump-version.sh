@@ -16,8 +16,8 @@ if [[ ! $TAG =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9]+)?$ ]]; then
     exit 1
 fi
 
-if [[ 'master' != "$(git branch --show-current)" ]]; then
-    echo "Not on master git branch!"
+if [[ 'main' != "$(git branch --show-current)" ]]; then
+    echo "Not on main git branch!"
     exit 1
 fi
 
@@ -41,4 +41,4 @@ sed -i "s/^appVersion: .*/appVersion: ${VERSION:1}/" helm/Chart.yaml institution
 git add helm/Chart.yaml institutions/*/helm/Chart.yaml
 git commit -m "Release $TAG"
 git tag $TAG
-git push origin master $TAG
+git push origin main $TAG

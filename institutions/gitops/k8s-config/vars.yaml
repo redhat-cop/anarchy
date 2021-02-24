@@ -1,5 +1,5 @@
 ---
-anarchy_version: master
+anarchy_version: main
 
 k8s_resources:
 - name: Anarchy install

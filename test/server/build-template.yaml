@@ -8,7 +8,7 @@ metadata:
 
 parameters:
 - name: GIT_REPO
-  value: https://github.com/redhat-gpte-devopsautomation/anarchy-operator.git
+  value: https://github.com/redhat-cop/anarchy.git
 
 objects:
 - apiVersion: image.openshift.io/v1
@@ -35,7 +35,7 @@ objects:
       contextDir: test/server
       git:
         uri: ${GIT_REPO}
-        ref: master
+        ref: main
     strategy:
       type: Docker
       dockerStrategy:
