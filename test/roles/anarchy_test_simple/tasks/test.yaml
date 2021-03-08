@@ -464,7 +464,19 @@
   retries: 10
   delay: 5
 
+- name: Execute callback for test-simple-1-callback-test in odo
+  when: anarchy_odo_pod is defined
+  command: >-
+    oc exec -n {{ anarchy_odo_pod.metadata.namespace }} {{ anarchy_odo_pod.metadata.name }} --
+    curl http://{{ anarchy_odo_pod.metadata.name }}:5000/action/test-simple-1-callback-test
+    -X POST
+    -H 'Accept: application/json'
+    -H 'Authorization: Bearer c4llb4ckT0k3n'
+    -H 'Content-Type: application/json'
+    --data '{"event":"done"}'
+
 - name: Execute callback for test-simple-1-callback-test
+  when: anarchy_odo_pod is not defined
   uri:
     url: "{{ anarchy_callback_base_url }}/action/test-simple-1-callback-test"
     validate_certs: false
@@ -517,7 +529,7 @@
     name: test-simple-1
   register: r_get_subject
   vars:
-    _subject: "{{ r_get_subject.resources[0] }}"
+    _subject: "{{ r_get_subject.resources[0] | default({}) }}"
   failed_when: >-
     '' != _subject.status.activeAction.name | default('')
   until: r_get_subject is success
@@ -549,7 +561,7 @@
     - anarchy.gpte.redhat.com/action=test-simple-1-continuation-test
   register: r_get_run
   vars:
-    _run: "{{ r_get_run.resources[0] }}"
+    _run: "{{ r_get_run.resources[0] | default({}) }}"
   failed_when: >-
     _run.spec.result.status | default('') != 'successful'
   until: r_get_run is success
@@ -568,7 +580,7 @@
     name: test-simple-1-continuation-test
   register: r_get_action
   vars:
-    _action: "{{ r_get_action.resources[0] }}"
+    _action: "{{ r_get_action.resources[0] | default({}) }}"
   failed_when: >-
     _action.status.finishedTimestamp | default('') != ''
   until: r_get_action is success
@@ -587,7 +599,7 @@
     name: test-simple-1-continuation-test
   register: r_get_action
   vars:
-    _action: "{{ r_get_action.resources[0] }}"
+    _action: "{{ r_get_action.resources[0] | default({}) }}"
   failed_when: >-
     _action.status.finishedTimestamp | default('') == ''
   until: r_get_action is success
@@ -634,7 +646,7 @@
     namespace:  "{{ anarchy_namespace }}"
   register: r_get_test_simple_1
   vars:
-    _subject: "{{ r_get_test_simple_1.resources[0] }}"
+    _subject: "{{ r_get_test_simple_1.resources[0] | default({}) }}"
   failed_when: >-
     _subject.status.runStatus | default('') != 'failed' or
     _subject.status.runStatusMessage | default('') != 'Failed run as requested'
@@ -684,7 +696,7 @@
     name: "{{ r_get_test_simple_1_update_run.resources[0].metadata.name }}"
   register: r_get_test_simple_1_update_run_again
   vars:
-    _run: "{{ r_get_test_simple_1_update_run_again.resources[0] }}"
+    _run: "{{ r_get_test_simple_1_update_run_again.resources[0] | default({}) }}"
   failed_when: >-
     _run.metadata.labels['anarchy.gpte.redhat.com/runner'] == 'queued'
   until: r_get_test_simple_1_update_run_again is success

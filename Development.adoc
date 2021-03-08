@@ -6,9 +6,9 @@ Any recent version of OpenShift will be suitable.
 Prior to beginning Anarchy development, the Anarchy Custom Resource Definitions (CRDs) must be installed.
 If Anarchy is not already installed on your cluster, you can install them with:
 
-----------------------------
+-----------------------
 oc apply -Rf helm/crds/
-----------------------------
+-----------------------
 
 Anarchy development can be performed in the `odo` OpenShift developer CLI or building with OpenShift build configs.
 Use of `odo` is recommended for fast iterative development, but all changes should be tested against a build with Anarchy components running in separate deployments before opening a pull request.
@@ -25,54 +25,50 @@ Steps described here for building and testing Anarchy assume you have already in
 
 ## Using odo
 
-The `odo` developer CLI can be installed as described in the OpenShift documentation:
-
+. Install `odo` developer CLI as described in the OpenShift documentation:
 https://docs.openshift.com/container-platform/latest/cli_reference/developer_cli_odo/installing-odo.html[Installing odo]
 
-To run Anarchy with `odo`, first create the `python-kopf` ImageStream definition in the `openshift` namespace using the Red Hat Community of Practice containers-quickstarts repository.
+. Select or create a project namespace for performing Anarchy development:
++
+----------------------
+oc new-project anarchy
+----------------------
 
---------------------------------------------------------------------------------
-oc apply -f https://raw.githubusercontent.com/redhat-cop/containers-quickstarts/master/build-s2i-python-kopf/imagestream.yaml
---------------------------------------------------------------------------------
+. Use `odo create` to setup configuration for beginning work on Anarchy:
++
+---------------------------------
+odo create --devfile devfile.yaml
+---------------------------------
 
-Use `odo create` to setup configuration for beginning work on Anarchy:
+. Process the helm template with set to exclude deployment and apply resource definitions:
++
+--------------------------------
+helm template helm \
+--set deploy=false \
+--set clusterroles.create=true \
+| oc apply -f -
+--------------------------------
 
------------------------------------------------------------------------------
-odo create python-kopf anarchy
------------------------------------------------------------------------------
+. Grant the `anarchy` cluster role to the default service account:
++
+------------------------------------------------------------------------
+oc policy add-role-to-user anarchy --rolebinding-name=anarchy -z default
+------------------------------------------------------------------------
++
+NOTE: At this time `odo` does not support running with an alternate service account.
+Normal deployment does not use the default service account.
 
-Use `odo push` to create an `anarchy-app` DeploymentConfig and Service.
-
+. Use `odo push` to create an `anarchy-app` Deploy Anarchy within odo:
++
 --------
 odo push
 --------
 
-At the time of this writing `odo` cannot create service accounts and so the `anarchy` service account must be created separately after initial push.
-
---------------------------------
-oc create serviceaccount anarchy
---------------------------------
-
-The `anarchy` service account will at least need
-
------------------------------------------------------------------------------
-oc policy add-role-to-user anarchy --rolebinding-name=anarchy -z anarchy
------------------------------------------------------------------------------
-
------------------------------------------------------------------------------
-oc patch dc/anarchy-app \
---patch '{"spec":{"template":{"spec":{"serviceAccountName":"anarchy"}}}}'
------------------------------------------------------------------------------
-
------------------------------------------------------------------------------
-odo push --force-build
------------------------------------------------------------------------------
-
 . Run test playbook
 +
-----
+---------------------------------------
 ansible-playbook test/odo-playbook.yaml
-----
+---------------------------------------
 
 == Building an Anarchy Container Image
 

@@ -224,28 +224,27 @@ class AnarchyRunner(object):
         virtual_env = self.ansible_private_dir + '/pythonvenv-' + requirements_md5
         requirements_file = virtual_env + '/requirements.txt'
         if not os.path.exists(virtual_env):
-            venv.EnvBuilder(system_site_packages=True, with_pip=True).create(virtual_env)
+            # Copy virtualenv from /opt/app-root
+            os.makedirs(virtual_env)
+            shutil.copy('/opt/app-root/pyvenv.cfg', virtual_env + '/pyenv.cfg')
+            shutil.copytree('/opt/app-root/bin', virtual_env + '/bin')
+            shutil.copytree('/opt/app-root/include', virtual_env + '/include')
+            shutil.copytree('/opt/app-root/lib', virtual_env + '/lib')
+            os.symlink('lib', virtual_env + '/lib64')
+
+            # Write requirements.txt
             with open(requirements_file, 'w') as fh:
                 fh.write(requirements)
-            env = os.environ.copy()
-            env['VIRTUAL_ENV'] = virtual_env
-            env['PATH'] = '{}/bin:{}'.format(virtual_env, env['PATH'])
+
+            # Apply requirements to virtualenv
             try:
                 subprocess.check_output(
                     [virtual_env + '/bin/pip3', 'install', '-r', requirements_file],
-                    stderr=subprocess.STDOUT, env=env
+                    stderr=subprocess.STDOUT
                 )
             except Exception as e:
                 shutil.rmtree(virtual_env)
                 raise
-
-            if not os.path.exists(virtual_env + '/bin/ansible-playbook'):
-                with open(virtual_env + '/bin/ansible-playbook', 'w') as ofh:
-                    ofh.write("#!{}/bin/python\n".format(virtual_env))
-                    with open(shutil.which('ansible-playbook')) as ifh:
-                        ofh.write(ifh.read())
-                os.chmod(virtual_env + '/bin/ansible-playbook', 0o755)
-
         return virtual_env
 
     def setup_ansible_galaxy_requirements(self, anarchy_run):

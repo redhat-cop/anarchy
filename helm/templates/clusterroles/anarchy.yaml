@@ -8,7 +8,7 @@ metadata:
     rbac.authorization.k8s.io/aggregate-to-admin: "true"
 rules:
 - apiGroups:
-  - zalando.org
+  - kopf.dev
   resources:
   - kopfpeerings
   verbs:

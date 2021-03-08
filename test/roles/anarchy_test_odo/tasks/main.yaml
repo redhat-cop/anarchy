@@ -8,18 +8,18 @@
   set_fact:
     anarchy_namespace: "{{ r_get_current_project.stdout }}"
 
-- name: Get odo anarchy-app DeploymentConfig
+- name: Get odo anarchy Deployment
   k8s_info:
-    api_version: apps.openshift.io/v1
-    kind: DeploymentConfig
-    name: anarchy-app
+    api_version: apps/v1
+    kind: Deployment
+    name: anarchy
     namespace: "{{ anarchy_namespace }}"
   register: r_get_odo_dc
   failed_when: r_get_odo_dc.resources | length != 1
 
-- name: Set anarchy_odo_deployment_config
+- name: Set anarchy_odo_deployment
   set_fact:
-    anarchy_odo_deployment_config: "{{ r_get_odo_dc.resources[0] }}"
+    anarchy_odo_deployment: "{{ r_get_odo_dc.resources[0] }}"
 
 - name: Get odo anarchy-app Pod
   k8s_info:
@@ -28,7 +28,7 @@
     namespace: "{{ anarchy_namespace }}"
     # For explanation of to_json | from_json json_query work-around: https://github.com/ansible/ansible/issues/27299
     label_selectors: >-
-      {{ anarchy_odo_deployment_config.spec.selector | to_json | from_json | dict2items | json_query("[].join('=',[@.key, @.value])") }}
+      {{ anarchy_odo_deployment.spec.selector.matchLabels | to_json | from_json | dict2items | json_query("[].join('=',[@.key, @.value])") }}
   register: r_get_odo_pod
   failed_when: r_get_odo_pod.resources | length != 1
 
