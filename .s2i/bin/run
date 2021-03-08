@@ -14,7 +14,7 @@ then
   cp /etc/group $NSS_WRAPPER_GROUP
   echo ansible:x:$(id -u):$(id -g):ansible:$HOME:/bin/bash >> $NSS_WRAPPER_PASSWD
 
-  exec python3 $HOME/anarchy-runner.py
+  exec /opt/app-root/bin/python3 $HOME/anarchy-runner.py
 else
   exec /usr/libexec/s2i/run
 fi
