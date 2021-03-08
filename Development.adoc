@@ -1,4 +1,4 @@
-# Anarchy Development
+= Anarchy Development
 
 Anarchy development is primarily aimed at development within an OpenShift cluster.
 Any recent version of OpenShift will be suitable.
@@ -23,7 +23,7 @@ oc apply -f kopfpeerings.crd.yaml
 
 Steps described here for building and testing Anarchy assume you have already installed the Anarchy custom resource definitions and cluster roles.
 
-## Using odo
+== Using odo
 
 . Install `odo` developer CLI as described in the OpenShift documentation:
 https://docs.openshift.com/container-platform/latest/cli_reference/developer_cli_odo/installing-odo.html[Installing odo]
@@ -71,6 +71,8 @@ ansible-playbook test/odo-playbook.yaml
 ---------------------------------------
 
 == Building an Anarchy Container Image
+
+You may wish to build and run Anarchy from a container image so that it deploys runners in separate pods as it does in a normal deployment.
 
 === OpenShift
 

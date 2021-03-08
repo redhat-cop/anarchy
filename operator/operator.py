@@ -78,6 +78,11 @@ def start_runner_process():
     env['RUNNER_TOKEN'] = default_runner.runner_token
     subprocess.Popen(['/opt/app-root/src/.s2i/bin/run'], env=env)
 
+@kopf.on.startup()
+def configure(settings: kopf.OperatorSettings, **_):
+    # Disable scanning for crds and namespaces
+    settings.scanning.disabled = True
+
 @kopf.on.create(runtime.operator_domain, runtime.api_version, 'anarchysubjects')
 def handle_subject_create(body, **_):
     try:
