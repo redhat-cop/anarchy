@@ -197,9 +197,6 @@ class AnarchyRuntime(object):
                         return
                     else:
                         raise Exception("KopfPeering watch failure: reason {}, message {}", obj['reason'], obj['message'])
-            if obj:
-                operator_logger.info(json.dumps(obj))
-                operator_logger.info(self.anarchy_service_name)
 
             if obj \
             and obj.get('apiVersion') == 'kopf.dev/v1' \
