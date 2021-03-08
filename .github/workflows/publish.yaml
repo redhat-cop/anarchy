@@ -15,8 +15,8 @@ jobs:
     - name: Checkout source
       uses: actions/checkout@v2
 
-    - name: Get the version
-      id: get_version
+    - name: Set image tags
+      id: image_tags
       run: |
         # Version is a semantic version tag or semantic version with release number
         # GITHUB_REF will be of the form "refs/tags/v0.1.2" or "refs/tags/v0.1.2-1"
