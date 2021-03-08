@@ -8,7 +8,7 @@ metadata:
 
 parameters:
 - name: KOPF_S2I_IMAGE
-  value: quay.io/redhat-cop/python-kopf-s2i:v0.28
+  value: quay.io/redhat-cop/python-kopf-s2i:v1.29
 - name: GIT_REPO
   value: https://github.com/redhat-cop/anarchy.git
 - name: NAME

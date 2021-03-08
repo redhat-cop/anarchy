@@ -28,7 +28,7 @@ class AnarchyRuntime(object):
         self.pod = self.core_v1_api.read_namespaced_pod(self.pod_name, self.operator_namespace)
         self.running_all_in_one = '' != os.environ.get('ODO_S2I_SCRIPTS_URL', '')
         if self.running_all_in_one:
-            self.anarchy_service_name = os.environ.get('ANARCHY_SERVICE', socket.gethostbyname(os.environ.get('HOSTNAME')))
+            self.anarchy_service_name = os.environ.get('ANARCHY_SERVICE', os.environ.get('HOSTNAME'))
             self.anarchy_service = self.pod
         else:
             self.anarchy_service_name = os.environ.get('ANARCHY_SERVICE', 'anarchy')
@@ -80,7 +80,7 @@ class AnarchyRuntime(object):
             self.callback_base_url = url
             return
         if self.running_all_in_one:
-            self.callback_base_url = 'http://{}:5000'.format(self.anarchy_service_name)
+            self.callback_base_url = 'http://{}:5000'.format(socket.gethostbyname(self.anarchy_service_name))
             return
         try:
             route = self.custom_objects_api.get_namespaced_custom_object(
@@ -185,7 +185,7 @@ class AnarchyRuntime(object):
         '''
         for event in kubernetes.watch.Watch().stream(
             self.custom_objects_api.list_namespaced_custom_object,
-            'zalando.org', 'v1', self.operator_namespace, 'kopfpeerings'
+            'kopf.dev', 'v1', self.operator_namespace, 'kopfpeerings'
         ):
             obj = event.get('object')
 
@@ -199,7 +199,7 @@ class AnarchyRuntime(object):
                         raise Exception("KopfPeering watch failure: reason {}, message {}", obj['reason'], obj['message'])
 
             if obj \
-            and obj.get('apiVersion') == 'zalando.org/v1' \
+            and obj.get('apiVersion') == 'kopf.dev/v1' \
             and obj.get('kind') == 'KopfPeering' \
             and obj['metadata']['name'] == self.anarchy_service_name:
                 with self.is_active_condition:

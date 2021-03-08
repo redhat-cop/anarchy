@@ -70,12 +70,18 @@ def start_runner_process():
     default_runner = AnarchyRunner.get('default')
     if not default_runner:
         default_runner = AnarchyRunner.register(AnarchyRunner.default_runner_definition(runtime))
+    default_runner.pods[runtime.anarchy_service.metadata.name] = runtime.anarchy_service
     env = os.environ.copy()
     env['ANARCHY_COMPONENT'] = 'runner'
     env['ANARCHY_URL'] = 'http://{}:5000'.format(runtime.anarchy_service_name)
     env['RUNNER_NAME'] = 'default'
     env['RUNNER_TOKEN'] = default_runner.runner_token
     subprocess.Popen(['/opt/app-root/src/.s2i/bin/run'], env=env)
+
+@kopf.on.startup()
+def configure(settings: kopf.OperatorSettings, **_):
+    # Disable scanning for crds and namespaces
+    settings.scanning.disabled = True
 
 @kopf.on.create(runtime.operator_domain, runtime.api_version, 'anarchysubjects')
 def handle_subject_create(body, **_):
@@ -154,12 +160,13 @@ def get_run():
     if not anarchy_runner:
         flask.abort(400)
 
-    run_value = runner_pod.metadata.labels.get(runtime.run_label)
-    if run_value:
-        operator_logger.warning(
-            'AnarchyRunner %s Pod %s requesting run, but appears it should still be running %s',
-            anarchy_runner.name, runner_pod.metadata.name, run_value
-        )
+    if not runtime.running_all_in_one:
+        run_value = runner_pod.metadata.labels.get(runtime.run_label)
+        if run_value:
+            operator_logger.warning(
+                'AnarchyRunner %s Pod %s requesting run, but appears it should still be running %s',
+                anarchy_runner.name, runner_pod.metadata.name, run_value
+            )
 
     if runner_pod.metadata.deletion_timestamp:
         operator_logger.debug(
@@ -221,18 +228,19 @@ def post_run(run_name):
     if not anarchy_runner:
         flask.abort(400)
 
-    run_value = runner_pod.metadata.labels.get(runtime.run_label)
-    runtime.core_v1_api.patch_namespaced_pod(
-        runner_pod.metadata.name, runner_pod.metadata.namespace,
-        { 'metadata': { 'labels': { runtime.run_label: '', runtime.subject_label: '' } } }
-    )
-
-    if run_value != run_name:
-        operator_logger.warning(
-            'AnarchyRunner %s Pod %s attempted to post run for %s but run label indicates %s',
-            anarchy_runner.name, runner_pod.metadata.name, run_name, run_value
+    if not runtime.running_all_in_one:
+        run_value = runner_pod.metadata.labels.get(runtime.run_label)
+        runtime.core_v1_api.patch_namespaced_pod(
+            runner_pod.metadata.name, runner_pod.metadata.namespace,
+            { 'metadata': { 'labels': { runtime.run_label: '', runtime.subject_label: '' } } }
         )
-        flask.abort(400)
+
+        if run_value != run_name:
+            operator_logger.warning(
+                'AnarchyRunner %s Pod %s attempted to post run for %s but run label indicates %s',
+                anarchy_runner.name, runner_pod.metadata.name, run_name, run_value
+            )
+            flask.abort(400)
 
     # When an AnarchyRun is handling a delete completion it is normal for the
     # AnarchyRun and AnarchySubject to be deleted before the post is received.
@@ -290,7 +298,8 @@ def patch_or_delete_subject(subject_name):
     if not anarchy_runner:
         flask.abort(400)
 
-    if subject_name != runner_pod.metadata.labels.get(runtime.subject_label):
+    if not runtime.running_all_in_one \
+    and subject_name != runner_pod.metadata.labels.get(runtime.subject_label):
         operator_logger.warning(
             'AnarchyRunner %s Pod %s cannot update AnarchySubject %s!',
             anarchy_runner.name, runner_pod.metadata.name, subject_name
@@ -321,7 +330,8 @@ def run_subject_action_post(subject_name):
     if not anarchy_runner:
         flask.abort(400)
 
-    if subject_name != runner_pod.metadata.labels.get(runtime.subject_label):
+    if not runtime.running_all_in_one \
+    and subject_name != runner_pod.metadata.labels.get(runtime.subject_label):
         operator_logger.warning(
             'AnarchyRunner %s Pod %s cannot update AnarchySubject %s!',
             anarchy_runner.name, runner_pod.metadata.name, subject_name
@@ -426,7 +436,8 @@ def run_subject_action_patch(subject_name, action_name):
     if not anarchy_runner:
         flask.abort(400)
 
-    if subject_name != runner_pod.metadata.labels.get(runtime.subject_label):
+    if not runtime.running_all_in_one \
+    and subject_name != runner_pod.metadata.labels.get(runtime.subject_label):
         operator_logger.warning(
             'AnarchyRunner %s Pod %s cannot update actions for AnarchySubject %s!',
             anarchy_runner.name, runner_pod.metadata.name, subject_name
@@ -492,14 +503,17 @@ def check_runner_auth(auth_header):
         return None, None
 
     pod_runner_token = None
-    for env_var in runner_pod.spec.containers[0].env:
-        if env_var.name == 'RUNNER_TOKEN':
-            pod_runner_token = env_var.value
-            break
+    if runtime.running_all_in_one:
+        pod_runner_token = anarchy_runner.runner_token
+    else:
+        for env_var in runner_pod.spec.containers[0].env:
+            if env_var.name == 'RUNNER_TOKEN':
+                pod_runner_token = env_var.value
+                break
 
-    if not pod_runner_token:
-        operator_logger.warning('Failed auth for AnarchyRunner %s %s, cannot find RUNNER_TOKEN', runner_name, pod_name)
-        return None, None
+        if not pod_runner_token:
+            operator_logger.warning('Failed auth for AnarchyRunner %s %s, cannot find RUNNER_TOKEN', runner_name, pod_name)
+            return None, None
 
     if pod_runner_token == runner_token:
         return anarchy_runner, runner_pod
