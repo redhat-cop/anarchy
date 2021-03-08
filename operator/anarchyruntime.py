@@ -185,7 +185,7 @@ class AnarchyRuntime(object):
         '''
         for event in kubernetes.watch.Watch().stream(
             self.custom_objects_api.list_namespaced_custom_object,
-            'zalando.org', 'v1', self.operator_namespace, 'kopfpeerings'
+            'kopf.dev', 'v1', self.operator_namespace, 'kopfpeerings'
         ):
             obj = event.get('object')
 
@@ -199,7 +199,7 @@ class AnarchyRuntime(object):
                         raise Exception("KopfPeering watch failure: reason {}, message {}", obj['reason'], obj['message'])
 
             if obj \
-            and obj.get('apiVersion') == 'zalando.org/v1' \
+            and obj.get('apiVersion') == 'kopf.dev/v1' \
             and obj.get('kind') == 'KopfPeering' \
             and obj['metadata']['name'] == self.anarchy_service_name:
                 with self.is_active_condition:

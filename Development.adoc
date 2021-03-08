@@ -14,6 +14,12 @@ Anarchy development can be performed in the `odo` OpenShift developer CLI or bui
 Use of `odo` is recommended for fast iterative development, but all changes should be tested against a build with Anarchy components running in separate deployments before opening a pull request.
 
 Anarchy is build on top of https://github.com/redhat-cop/containers-quickstarts/tree/master/build-s2i-python-kopf[Python Kopf source-to-image].
+Kopf requires the CustomResourceDefinition `kopfpeerings.kopf.dev` to govern operations between pods.
+If this CRD is not already available in the cluster it and should be applied with:
+
+---------------------------------
+oc apply -f kopfpeerings.crd.yaml
+---------------------------------
 
 Steps described here for building and testing Anarchy assume you have already installed the Anarchy custom resource definitions and cluster roles.
 

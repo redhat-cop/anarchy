@@ -48,11 +48,11 @@ image::docs/AnarchyCallbackDiagram.png[Anarchy Diagram,748,338]
 
 === Prerequisite
 
-Anarchy is using [Kopf](https://github.com/zalando-incubator/kopf) and needs the kopf peering CRDs installed before installing Anarchy.
+Anarchy is using [Kopf](https://github.com/nolar/kopf) and needs the `kopfpeerings.kopf.dev` CustomResourceDefinition must be configured before deploying Anarchy.
 
-----
-oc apply -f https://raw.githubusercontent.com/nolar/kopf/master/peering.yaml
-----
+---------------------------------
+oc apply -f kopfpeerings.crd.yaml
+---------------------------------
 
 === Install with Helm
 
