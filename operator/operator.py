@@ -521,6 +521,9 @@ def check_runner_auth(auth_header):
     operator_logger.warning('Invalid auth token for AnarchyRunner %s %s', runner_name, runner_pod)
     return None, None
 
+def run_api():
+    http_server = gevent.pywsgi.WSGIServer(('', 5000), api)
+    http_server.serve_forever()
 
 def watch_governors():
     '''
@@ -619,40 +622,55 @@ def main():
     init()
 
     threading.Thread(
+        daemon = True,
+        name = 'api',
+        target = run_api
+    ).start()
+
+    threading.Thread(
+        daemon = True,
         name = 'watch_governors',
         target = watch_governors
     ).start()
 
     threading.Thread(
+        daemon = True,
         name = 'watch_runners',
         target = watch_runners
     ).start()
 
     threading.Thread(
+        daemon = True,
         name = 'watch_runner_pods',
         target = watch_runner_pods
     ).start()
 
     threading.Thread(
+        daemon = True,
         name = 'watch_peering',
         target = watch_peering
     ).start()
 
     threading.Thread(
+        daemon = True,
         name = 'cleanup',
         target = cleanup_loop
     ).start()
 
     threading.Thread(
-        name = 'main',
+        daemon = True,
+        name = 'main_loop',
         target = main_loop
     ).start()
 
     prometheus_client.start_http_server(8000)
-    http_server = gevent.pywsgi.WSGIServer(('', 5000), api)
-    http_server.serve_forever()
 
 if __name__ == '__main__':
     main()
 else:
-    threading.Thread(name='main', target=main).start()
+    # Main function call when running in Kopf
+    threading.Thread(
+        daemon = True,
+        name = 'main',
+        target = main
+    ).start()
