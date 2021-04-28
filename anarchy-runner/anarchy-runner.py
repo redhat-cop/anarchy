@@ -206,6 +206,7 @@ class AnarchyRunner(object):
                 ansible_run_result['statusMessage'] = run_msg
         except Exception:
             logging.exception('Failure processing anarchy-result.yaml')
+            ansible_run_result['statusMessage'] = 'Failure processing anarchy-result.yaml'
 
         try:
             continue_file_path = os.path.join(self.output_dir + '/continue.yaml')
