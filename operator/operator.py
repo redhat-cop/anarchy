@@ -96,14 +96,14 @@ def handle_subject_update(body, old, new, **_):
     try:
         subject = AnarchySubject(body)
         if old['spec'] != new['spec']:
-            subject.handle_spec_update(runtime)
+            subject.handle_spec_update(old, runtime)
     except AssertionError as e:
         operator_logger.warning('AnarchySubject %s invalid: %s', body['metadata']['name'], e)
 
 @kopf.on.event(runtime.operator_domain, runtime.api_version, 'anarchysubjects')
 def handle_subject_event(event, logger, **_):
     '''
-    Anarchy uses on.event instead of on.delete because Anarchy needs custom
+    Anarchy uses on.event instead of on.delete because Anarchy supports custom
     for removing finalizers. The finalizer will be removed immediately if the
     AnarchyGovernor does not have a delete subject event handler. If there is
     a delete subject event handler then it is up to the governor logic to remove

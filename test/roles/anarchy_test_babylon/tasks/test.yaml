@@ -176,3 +176,85 @@
     until: r_get_test_babylon_2_subject is success
     retries: 20
     delay: 5
+
+- name: Create AnarchySubject test-babylon-3
+  k8s:
+    apply: true
+    state: present
+    definition: "{{ lookup('template', 'subject.yaml.j2') | from_yaml }}"
+  vars:
+    _name: test-babylon-3
+    _vars:
+      desired_state: started
+      tower_job_check_interval: 10s
+
+- name: Wait for test-babylon-3 subject started
+  k8s_info:
+    api_version: anarchy.gpte.redhat.com/v1
+    kind: AnarchySubject
+    name: test-babylon-3
+    namespace: "{{ anarchy_namespace }}"
+  register: r_test_subject
+  until:
+  - r_test_subject.resources[0].metadata.labels.state | default('') == 'started'
+  - r_test_subject.resources[0].spec.vars.current_state | default('')  == 'started'
+  retries: 20
+  delay: 5
+
+- name: Update AnarchySubject test-babylon-3 to fail on destroy
+  k8s:
+    api_version: anarchy.gpte.redhat.com/v1
+    kind: AnarchySubject
+    name: test-babylon-3
+    namespace: "{{ anarchy_namespace }}"
+    definition:
+      spec:
+        vars:
+          job_vars:
+            simulate_job_result: failed
+
+- name: Delete test-babylon-3 subject
+  k8s:
+    state: absent
+    api_version: anarchy.gpte.redhat.com/v1
+    kind: AnarchySubject
+    name: test-babylon-3
+    namespace: "{{ anarchy_namespace }}"
+
+- name: Wait for test-babylon-3 subject destroy-failed
+  k8s_info:
+    api_version: anarchy.gpte.redhat.com/v1
+    kind: AnarchySubject
+    name: test-babylon-3
+    namespace: "{{ anarchy_namespace }}"
+  register: r_test_subject
+  until:
+  - r_test_subject.resources[0].metadata.labels.state | default('') == 'destroy-failed'
+  - r_test_subject.resources[0].spec.vars.current_state | default('')  == 'destroy-failed'
+  retries: 20
+  delay: 5
+
+- when: anarchy_test_delete_subjects | bool
+  block:
+  - name: Update AnarchySubject to complete delete
+    k8s:
+      api_version: anarchy.gpte.redhat.com/v1
+      kind: AnarchySubject
+      name: test-babylon-3
+      namespace: "{{ anarchy_namespace }}"
+      definition:
+        spec:
+          vars:
+            force_delete: true
+
+  - name: Verify AnarchySubject delete for test-babylon-3
+    k8s_info:
+      api_version: anarchy.gpte.redhat.com/v1
+      kind: AnarchySubject
+      name: test-babylon-3
+      namespace: "{{ anarchy_namespace }}"
+    register: r_get_test_babylon_3_subject
+    failed_when: r_get_test_babylon_3_subject.resources | default([]) | length != 0
+    until: r_get_test_babylon_3_subject is success
+    retries: 20
+    delay: 5

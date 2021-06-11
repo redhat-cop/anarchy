@@ -47,6 +47,11 @@ spec:
     update:
       roles:
       - role: babylon_anarchy_governor
+      tasks:
+      - name: Force delete
+        when: force_delete | default(false) | bool
+        anarchy_subject_delete:
+          remove_finalizers: true
     delete:
       roles:
       - role: babylon_anarchy_governor
