@@ -99,6 +99,12 @@ class AnarchySubject(object):
         return 'AnarchySubject'
 
     @property
+    def last_handled_configuration(self):
+        last_handled_configuration_json = self.metadata.get('annotations', {}).get('kopf.zalando.org/last-handled-configuration')
+        if last_handled_configuration_json:
+            return json.loads(last_handled_configuration_json)
+
+    @property
     def name(self):
         return self.metadata['name']
 
@@ -192,20 +198,46 @@ class AnarchySubject(object):
         delete, otherwise the finalizers are removed immediately.
         '''
         if self.delete_started:
-            return
-        self.record_delete_started(runtime)
-        event_handled = self.process_subject_event_handlers(runtime, 'delete')
-        if not event_handled:
-            self.remove_finalizers(runtime)
+            # Check if update after delete has started. Kopf update handlers
+            # ignore updates after delete has begun.
+            last_handled_configuration = self.last_handled_configuration
+            if last_handled_configuration and self.spec != last_handled_configuration['spec']:
+                self.handle_spec_update(last_handled_configuration, runtime)
+                # Update kopf last-handled-configuration annotation
+                resource = runtime.custom_objects_api.patch_namespaced_custom_object(
+                    runtime.operator_domain, runtime.api_version, self.namespace, 'anarchysubjects', self.name,
+                    {
+                        'metadata': {
+                            'annotations': {
+                                'kopf.zalando.org/last-handled-configuration': json.dumps({
+                                    'metadata': {
+                                        'annotations': {
+                                            k: v for k, v in self.metadata.get('annotations', {}).items()
+                                            if k != 'kopf.zalando.org/last-handled-configuration'
+                                        },
+                                        'labels': self.metadata.get('labels', {})
+                                    },
+                                    'spec': self.spec,
+                                }),
+                            }
+                        }
+                    }
+                )
+                self.refresh_from_resource(resource)
+        else:
+            self.record_delete_started(runtime)
+            event_handled = self.process_subject_event_handlers(runtime, 'delete')
+            if not event_handled:
+                self.remove_finalizers(runtime)
 
-    def handle_spec_update(self, runtime):
+    def handle_spec_update(self, old, runtime):
         '''
         Handle update to AnarchySubject spec.
         '''
         spec_sha256_annotation = self.metadata.get('annotations', {}).get(runtime.operator_domain + '/spec-sha256')
         if not spec_sha256_annotation \
         or spec_sha256_annotation != self.spec_sha256:
-            self.process_subject_event_handlers(runtime, 'update')
+            self.process_subject_event_handlers(runtime, 'update', old)
 
     def initialize_metadata(self, runtime):
         finalizers = self.metadata.get('finalizers', [])
@@ -306,7 +338,7 @@ class AnarchySubject(object):
             )
         return result
 
-    def process_subject_event_handlers(self, runtime, event_name):
+    def process_subject_event_handlers(self, runtime, event_name, old=None):
         governor = self.get_governor(runtime)
         if not governor:
             operator_logger.warning(
@@ -325,8 +357,10 @@ class AnarchySubject(object):
             ('handler', handler)
         )
         run_vars = {
-            'anarchy_event_name': event_name
+            'anarchy_event_name': event_name,
         }
+        if old:
+            run_vars['anarchy_subject_previous_state'] = old
 
         governor.run_ansible(runtime, handler, run_vars, context, self, None, event_name)
         return True

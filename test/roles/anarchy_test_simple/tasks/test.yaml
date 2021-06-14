@@ -166,6 +166,16 @@
       a_var_from_subject: 42
       a_var_subject_should_override: true
       anarchy_event_name: update
+      anarchy_subject_previous_state:
+        metadata:
+          labels:
+            anarchy.gpte.redhat.com/governor: test-simple
+            anarchy.gpte.redhat.com/test: simple
+        spec:
+          governor: test-simple
+          vars:
+            a_var_from_subject: 23
+            a_var_subject_should_override: true
 
 - name: Get AnarchyAction scheduled by AnarchyRun for update of test-simple-1
   k8s_info:
