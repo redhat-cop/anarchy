@@ -387,7 +387,7 @@ class AnarchyAction(object):
         # Subject may have been deleted, abort run of the action in this case
         if not subject:
             operator_logger.info('Not starting AnarchyAction %s for deleted AnarchySubject %s', self.name, self.subject_name)
-            cache_remove(self)
+            AnarchyAction.cache_remove(self)
             return
 
         # Attempt to set active action for subject
