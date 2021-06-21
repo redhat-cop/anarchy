@@ -10,6 +10,7 @@ jobs:
   publish:
     env:
       IMAGE_NAME: anarchy
+      OPERATOR_IMAGE_NAME: anarchy-operator
     runs-on: ubuntu-latest
     steps:
     - name: Checkout source
@@ -67,6 +68,44 @@ jobs:
         file: Dockerfile
         push: true
         tags: ${{ steps.image_tags.outputs.IMAGE_TAGS }}
+
+    - name: Build and publish commune-operator images
+      id: commune-operator
+      if: steps.image_tags.outputs.IMAGE_TAGS
+      run: |
+        cd commune-operator;
+        IMG='${{ secrets.REGISTRY_URI }}/${{ secrets.REGISTRY_REPOSITORY }}/${{ env.OPERATOR_IMAGE_NAME }}:${{ steps.image_tags.outputs.VERSION }}';
+        IMG_LATEST="{IMG%:v*}:latest"
+        IMG_MAJOR_VERSION="{IMG%.*.*}"
+        IMG_MINOR_VERSION="{IMG%.*}"
+        BUNDLE_IMG='${{ secrets.REGISTRY_URI }}/${{ secrets.REGISTRY_REPOSITORY }}/${{ env.OPERATOR_IMAGE_NAME }}:bundle-${{ steps.image_tags.outputs.VERSION }}';
+        BUNDLE_IMG_LATEST="{BUNDLE_IMG%-v*}-latest"
+        BUNDLE_IMG_MAJOR_VERSION="{BUNDLE_IMG%.*.*}"
+        BUNDLE_IMG_MINOR_VERSION="{BUNDLE_IMG%.*}"
+        CATALOG_IMG='${{ secrets.REGISTRY_URI }}/${{ secrets.REGISTRY_REPOSITORY }}/${{ env.OPERATOR_IMAGE_NAME }}:catalog-${{ steps.image_tags.outputs.VERSION }}';
+        CATALOG_IMG_MAJOR_VERSION="{CATALOG_IMG%.*.*}"
+        CATALOG_IMG_MINOR_VERSION="{CATALOG_IMG%.*}"
+        CATALOG_IMG_LATEST="{CATALOG_IMG%-v*}-latest"
+        make docker-build docker-push bundle bundle-build bundle-push IMG="${IMG}" BUNDLE_IMG="${BUNDLE_IMG}" VERSION='${{ steps.image_tags.outputs.VERSION }}';
+        docker tag "${IMG}" "${IMG_LATEST}"
+        docker tag "${IMG}" "${IMG_MAJOR_VERSION}"
+        docker tag "${IMG}" "${IMG_MINOR_VERSION}"
+        docker tag "${BUNDLE_IMG}" "${BUNDLE_IMG_LATEST}"
+        docker tag "${BUNDLE_IMG}" "${BUNDLE_IMG_MAJOR_VERSION}"
+        docker tag "${BUNDLE_IMG}" "${BUNDLE_IMG_MINOR_VERSION}"
+        docker tag "${CATALOG_IMG}" "${CATALOG_IMG_LATEST}"
+        docker tag "${CATALOG_IMG}" "${CATALOG_IMG_MAJOR_VERSION}"
+        docker tag "${CATALOG_IMG}" "${CATALOG_IMG_MINOR_VERSION}"
+        docker push "${IMG_LATEST}"
+        docker push "${IMG_MAJOR_VERSION}"
+        docker push "${IMG_MINOR_VERSION}"
+        docker push "${BUNDLE_IMG_LATEST}"
+        docker push "${BUNDLE_IMG_MAJOR_VERSION}"
+        docker push "${BUNDLE_IMG_MINOR_VERSION}"
+        docker push "${CATALOG_IMG_LATEST}"
+        docker push "${CATALOG_IMG_MAJOR_VERSION}"
+        docker push "${CATALOG_IMG_MINOR_VERSION}"
+
   publish-helm-charts:
     needs: publish
     env:

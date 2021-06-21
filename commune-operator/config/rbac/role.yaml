@@ -1,0 +1,15 @@
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: operator-manager-role
+rules:
+# Anarchy deployments can specify arbitrary RBAC so the operator needs full
+# access to configure these deployments.
+- apiGroups:
+  - "*"
+  resources:
+  - "*"
+  verbs:
+  - "*"
+
+#+kubebuilder:scaffold:rules
