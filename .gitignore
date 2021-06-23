@@ -1,6 +1,30 @@
+# Ansible retry files
 *.retry
-*.swp
+
+# Binaries for programs and plugins
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
 *.pyc
+
+# The communizer may download tools
+communizer/bin
+
+# odo artifacts
 .odo
 .odo/env
 .odo/odo-file-index.json
+
+# editor and IDE paraphernalia
+.idea
+*.swp
+*.swo
+*~
+
+# Ignore commune-operator files copied for build
+commune-operator/bin
+commune-operator/bundle
+commune-operator/helm-charts
+commune-operator/config/crd/bases/kopfpeerings.crd.yaml

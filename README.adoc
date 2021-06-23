@@ -1,4 +1,4 @@
-= Anarchy Operator
+= Anarchy
 
 image::docs/Anarchy.png[Anarchy Diagram,300,300]
 

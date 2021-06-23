@@ -8,8 +8,8 @@ metadata:
     {{- include "anarchy.labels" . | nindent 4 }}
 roleRef:
   apiGroup: rbac.authorization.k8s.io
-  kind: ClusterRole
-  name: anarchy
+  kind: Role
+  name: {{ include "anarchy.name" . }}
 subjects:
 - kind: ServiceAccount
   name: {{ include "anarchy.serviceAccountName" . }}

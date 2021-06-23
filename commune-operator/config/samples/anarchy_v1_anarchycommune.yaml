@@ -1,0 +1,50 @@
+apiVersion: anarchy.gpte.redhat.com/v1
+kind: AnarchyCommune
+metadata:
+  name: anarchycommune-sample
+spec:
+  # Default values copied from <project_dir>/helm-charts/anarchy/values.yaml
+  affinity: {}
+  deploy: true
+  envVars:
+    CLEANUP_INTERVAL: 300
+  image:
+    pullPolicy: IfNotPresent
+    repository: quay.io/redhat-cop/anarchy
+  imagePullSecrets: []
+  ingress:
+    annotations: {}
+    enabled: false
+    hosts:
+    - host: anarchy.apps.example.com
+      paths: []
+    kind: Ingress
+    tls:
+    - hosts:
+      - anarchy.apps.example.com
+      secretName: anarchy-tls
+  nameOverride: ""
+  namespace:
+    create: true
+    name: anarchy
+  nodeSelector: {}
+  replicaCount: 1
+  resources: {}
+  runners:
+  - name: default
+    resources:
+      limits:
+        cpu: "1"
+        memory: 256Mi
+      requests:
+        cpu: 500m
+        memory: 256Mi
+  service:
+    port:
+      api: 5000
+      metrics: 8000
+    type: ClusterIP
+  serviceAccount:
+    create: true
+    name: null
+  tolerations: []

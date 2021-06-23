@@ -1,0 +1,55 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  labels:
+    control-plane: controller-manager
+  name: operator
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: operator-controller-manager
+  namespace: operator
+  labels:
+    control-plane: controller-manager
+spec:
+  selector:
+    matchLabels:
+      control-plane: controller-manager
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        control-plane: controller-manager
+    spec:
+      securityContext:
+        runAsNonRoot: true
+      containers:
+      - args:
+        - --leader-elect
+        - --leader-election-id=anarchy-operator
+        image: controller:latest
+        name: manager
+        securityContext:
+          allowPrivilegeEscalation: false
+        livenessProbe:
+          httpGet:
+            path: /healthz
+            port: 8081
+          initialDelaySeconds: 15
+          periodSeconds: 20
+        readinessProbe:
+          httpGet:
+            path: /readyz
+            port: 8081
+          initialDelaySeconds: 5
+          periodSeconds: 10
+        resources:
+          limits:
+            cpu: 100m
+            memory: 90Mi
+          requests:
+            cpu: 100m
+            memory: 60Mi
+      serviceAccountName: operator-controller-manager
+      terminationGracePeriodSeconds: 10
