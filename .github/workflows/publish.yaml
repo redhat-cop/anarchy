@@ -75,17 +75,17 @@ jobs:
       run: |
         cd commune-operator;
         IMG='${{ secrets.REGISTRY_URI }}/${{ secrets.REGISTRY_REPOSITORY }}/${{ env.OPERATOR_IMAGE_NAME }}:v${{ steps.image_tags.outputs.VERSION }}';
-        IMG_LATEST="{IMG%:v*}:latest"
-        IMG_MAJOR_VERSION="{IMG%.*.*}"
-        IMG_MINOR_VERSION="{IMG%.*}"
+        IMG_LATEST="${IMG%:v*}:latest"
+        IMG_MAJOR_VERSION="${IMG%.*.*}"
+        IMG_MINOR_VERSION="${IMG%.*}"
         BUNDLE_IMG='${{ secrets.REGISTRY_URI }}/${{ secrets.REGISTRY_REPOSITORY }}/${{ env.OPERATOR_IMAGE_NAME }}:bundle-v${{ steps.image_tags.outputs.VERSION }}';
-        BUNDLE_IMG_LATEST="{BUNDLE_IMG%-v*}-latest"
-        BUNDLE_IMG_MAJOR_VERSION="{BUNDLE_IMG%.*.*}"
-        BUNDLE_IMG_MINOR_VERSION="{BUNDLE_IMG%.*}"
+        BUNDLE_IMG_LATEST="${BUNDLE_IMG%:bundle-v*}:bundle-latest"
+        BUNDLE_IMG_MAJOR_VERSION="${BUNDLE_IMG%.*.*}"
+        BUNDLE_IMG_MINOR_VERSION="${BUNDLE_IMG%.*}"
         CATALOG_IMG='${{ secrets.REGISTRY_URI }}/${{ secrets.REGISTRY_REPOSITORY }}/${{ env.OPERATOR_IMAGE_NAME }}:catalog-v${{ steps.image_tags.outputs.VERSION }}';
-        CATALOG_IMG_MAJOR_VERSION="{CATALOG_IMG%.*.*}"
-        CATALOG_IMG_MINOR_VERSION="{CATALOG_IMG%.*}"
-        CATALOG_IMG_LATEST="{CATALOG_IMG%-v*}-latest"
+        CATALOG_IMG_LATEST="${CATALOG_IMG%:catalog-v*}:catalog-latest"
+        CATALOG_IMG_MAJOR_VERSION="${CATALOG_IMG%.*.*}"
+        CATALOG_IMG_MINOR_VERSION="${CATALOG_IMG%.*}"
         make docker-build docker-push bundle bundle-build bundle-push IMG="${IMG}" BUNDLE_IMG="${BUNDLE_IMG}" VERSION='${{ steps.image_tags.outputs.VERSION }}';
         docker tag "${IMG}" "${IMG_LATEST}"
         docker tag "${IMG}" "${IMG_MAJOR_VERSION}"
