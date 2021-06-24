@@ -86,7 +86,7 @@ jobs:
         CATALOG_IMG_LATEST="${CATALOG_IMG%:catalog-v*}:catalog-latest"
         CATALOG_IMG_MAJOR_VERSION="${CATALOG_IMG%.*.*}"
         CATALOG_IMG_MINOR_VERSION="${CATALOG_IMG%.*}"
-        make docker-build docker-push bundle bundle-build bundle-push catalog-build catalog-push IMG="${IMG}" BUNDLE_IMG="${BUNDLE_IMG}" CATALOG_IMG="${CATALOG_IMG}" VERSION='${{ steps.image_tags.outputs.VERSION }}';
+        make docker-build docker-push bundle bundle-build bundle-push catalog-build catalog-push IMG="${IMG}" BUNDLE_IMG="${BUNDLE_IMG}" CATALOG_IMG="${CATALOG_IMG}" CATALOG_BASE_IMG="${CATALOG_IMG_LATEST}" VERSION='${{ steps.image_tags.outputs.VERSION }}';
         docker tag "${IMG}" "${IMG_LATEST}"
         docker tag "${IMG}" "${IMG_MAJOR_VERSION}"
         docker tag "${IMG}" "${IMG_MINOR_VERSION}"

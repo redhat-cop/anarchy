@@ -36,7 +36,7 @@ spec:
   maintainers:
   - email: jkupfere@redhat.com
     name: Johnathan Kupferer
-  maturity: alpha
+  maturity: stable
   provider:
     name: Red Hat Global Patner and Technical Enablement
     url: https://github.com/redhat-cop/anarchy
