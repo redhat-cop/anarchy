@@ -2,8 +2,18 @@ apiVersion: v1
 entries:
   anarchy:
   - apiVersion: v2
+    appVersion: 0.16.3
+    created: "2021-06-24T16:11:52.827467701Z"
+    description: Anarchy Operator
+    digest: 8adeaac841a819279d78b133f30159065afbd6ba41fcf402b3082123d44c4a10
+    name: anarchy
+    type: application
+    urls:
+    - https://redhat-cop.github.io/anarchy/anarchy-0.16.3.tgz
+    version: 0.16.3
+  - apiVersion: v2
     appVersion: 0.16.2
-    created: "2021-06-23T21:18:26.641721823Z"
+    created: "2021-06-24T16:11:52.82598431Z"
     description: Anarchy Operator
     digest: 5c253dadf7c4f43b390597861b1a215dda4be891cbb433161d52f8f5ba182bc3
     name: anarchy
@@ -13,7 +23,7 @@ entries:
     version: 0.16.2
   - apiVersion: v2
     appVersion: 0.16.1
-    created: "2021-06-23T21:18:26.640709431Z"
+    created: "2021-06-24T16:11:52.825303714Z"
     description: Anarchy Operator
     digest: 1f8a86723fb973115c0837a126c0268be9aa0b7dfc991b4e6a80c1ed181087e6
     name: anarchy
@@ -23,7 +33,7 @@ entries:
     version: 0.16.1
   - apiVersion: v2
     appVersion: 0.15.1
-    created: "2021-06-23T21:18:26.639345208Z"
+    created: "2021-06-24T16:11:52.824632618Z"
     description: Anarchy Operator
     digest: cb80482c97f4d45743fb27692854f0bb50284a0273b79eb2e3eee8b095c0db92
     name: anarchy
@@ -33,7 +43,7 @@ entries:
     version: 0.15.1
   - apiVersion: v2
     appVersion: 0.15.0
-    created: "2021-06-23T21:18:26.638568338Z"
+    created: "2021-06-24T16:11:52.823953222Z"
     description: Anarchy Operator
     digest: 03bf8fbcda3a7132c933cc71569b5d7b5bd1a83bd9f48cd00b198e2c7d794f5c
     name: anarchy
@@ -41,4 +51,4 @@ entries:
     urls:
     - https://redhat-cop.github.io/anarchy/anarchy-0.15.0.tgz
     version: 0.15.0
-generated: "2021-06-23T21:18:26.637695159Z"
+generated: "2021-06-24T16:11:52.823086528Z"
