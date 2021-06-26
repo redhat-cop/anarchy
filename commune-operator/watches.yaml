@@ -3,6 +3,4 @@
   version: v1
   kind: AnarchyCommune
   chart: helm-charts/anarchy
-  overrideValues:
-    clusterroles.create: false
 #+kubebuilder:scaffold:watch

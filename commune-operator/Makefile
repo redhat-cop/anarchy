@@ -64,6 +64,7 @@ run: helm-operator ## Run against the configured Kubernetes cluster in ~/.kube/c
 docker-build: ## Build docker image with the manager.
 	mkdir -p helm-charts/anarchy || :
 	cp -r ../helm/* helm-charts/anarchy/
+	rm -rf helm-charts/anarchy/clusterroles
 	cp ../kopfpeerings.crd.yaml config/crd/bases/kopfpeerings.crd.yaml
 	docker build -t ${IMG} .
 
