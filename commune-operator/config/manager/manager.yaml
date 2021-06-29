@@ -47,9 +47,9 @@ spec:
         resources:
           limits:
             cpu: 500m
-            memory: 300Mi
+            memory: 512Mi
           requests:
             cpu: 100m
-            memory: 200Mi
+            memory: 384Mi
       serviceAccountName: operator-controller-manager
       terminationGracePeriodSeconds: 10
