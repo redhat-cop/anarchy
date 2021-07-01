@@ -65,7 +65,7 @@ docker-build: ## Build docker image with the manager.
 	mkdir -p helm-charts/anarchy || :
 	cp -r ../helm/* helm-charts/anarchy/
 	rm -rf helm-charts/anarchy/templates/clusterroles
-	cp helm-charts/anarchy/crds/*.yaml config/crd/bases/
+	mv helm-charts/anarchy/crds/*.yaml config/crd/bases/
 	cp ../kopfpeerings.crd.yaml config/crd/bases/kopfpeerings.crd.yaml
 	docker build -t ${IMG} .
 
@@ -148,7 +148,7 @@ bundle: kustomize operator-sdk ## Generate bundle manifests and metadata, then v
 .PHONY: bundle-build
 bundle-build: ## Build the bundle image.
 	# Remove all references to scorecard
-	sed -r 's/(.*scorecard)/#\1/' bundle.Dockerfile
+	sed -ri 's/(.*scorecard)/#\1/' bundle.Dockerfile
 	docker build -f bundle.Dockerfile -t $(BUNDLE_IMG) .
 
 .PHONY: bundle-push
