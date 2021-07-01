@@ -113,6 +113,19 @@ rules:
   - patch
   - update
   - watch
+# AnarchyCommune resources are watched by the commune operator
+- apiGroups:
+  - anarchy.gpte.redhat.com
+  resources:
+  - anarchycommunes
+  - anarchycommunes/status
+  verbs:
+  - create
+  - get
+  - list
+  - patch
+  - update
+  - watch
 # Anarchy resource kinds which can be managed by the operator
 - apiGroups:
   - anarchy.gpte.redhat.com
