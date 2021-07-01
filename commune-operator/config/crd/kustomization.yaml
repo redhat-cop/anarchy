@@ -11,3 +11,4 @@ resources:
 - bases/anarchysubjects.yaml
 # Copied by Makefile from ../kopfpeerings.crd.yaml
 - bases/kopfpeerings.crd.yaml
+#+kubebuilder:scaffold:crdkustomizeresource

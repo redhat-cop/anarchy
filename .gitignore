@@ -25,6 +25,7 @@ communizer/bin
 
 # Ignore commune-operator files copied for build
 commune-operator/bin
-commune-operator/bundle
+commune-operator/bundle*
 commune-operator/helm-charts
+commune-operator/index*
 commune-operator/config/crd/bases/kopfpeerings.crd.yaml

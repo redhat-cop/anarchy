@@ -1,0 +1,455 @@
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: anarchygovernors.anarchy.gpte.redhat.com
+spec:
+  group: anarchy.gpte.redhat.com
+  scope: Namespaced
+  names:
+    plural: anarchygovernors
+    singular: anarchygovernor
+    kind: AnarchyGovernor
+    shortNames: []
+  versions:
+  - name: v1
+    served: true
+    storage: true
+    schema:
+      openAPIV3Schema:
+        description: >-
+          AnarchyGovernors define how to manage AnarchySubjects. The governor may define how to
+          respond to new subjects being created or existing subjects being updated or deleted.
+          AnarchyGovernors also define how to process AnarchyActions and handle callbacks
+          related to those actions.
+        type: object
+        required:
+        - apiVersion
+        - kind
+        - metadata
+        - spec
+        properties:
+          apiVersion:
+            type: string
+          kind:
+            type: string
+          metadata:
+            type: object
+            properties:
+              name:
+                type: string
+                maxLength: 63
+                pattern: ^[a-z0-9A-Z]([a-z0-9A-Z\-._]*[a-z0-9A-Z])?$
+          spec:
+            description: >-
+              Definition of how the AnarchyGovernor should manage AnarchySubjects and AnarchyActions.
+            type: object
+            properties:
+              runner:
+                description: >-
+                  AnsibleRunner that should process AnsibleRuns for this governor.
+                type: string
+              removeFinishedActions:
+                description: >-
+                  Specification for removing AnarchyActions after they are finished.
+                type: object
+                properties:
+                  after:
+                    description: >-
+                      Time interval specified in units of days (d), hours (h), minutes (m), and seconds (s).
+                      Examples: 1d, 3h, 1h30m, 10s
+                      Default is 7 days. Use string "disabled" to prevent removal.
+                    type: string
+              removeSuccessfulRuns:
+                description: >-
+                  Specification for removing AnarchyRuns after successful completion.
+                type: object
+                properties:
+                  after:
+                    description: >-
+                      Time interval specified in units of days (d), hours (h), minutes (m), and seconds (s).
+                      Examples: 1d, 3h, 1h30m, 10s
+                      Default is 7 days. Use string "disabled" to prevent removal.
+                    type: string
+              ansibleGalaxyRequirements:
+                description: >-
+                  List of Ansible Galaxy requirements in requirements format with keys "roles" and "collections".
+                type: object
+                properties:
+                  roles:
+                    type: array
+                    items:
+                      type: object
+                      x-kubernetes-preserve-unknown-fields: true
+                  collections:
+                    type: array
+                    items:
+                      type: object
+                      x-kubernetes-preserve-unknown-fields: true
+              pythonRequirements:
+                description: >-
+                  Python requirements to install with pip into virtual environment. Format should be
+                  python requirements.txt style such as produced by "pip freeze".
+                type: string
+              actions:
+                description: >-
+                  Actions are used to describe available types of AnarchyActions. These are scheduled
+                  activities that will be processed by AnarchyRuns. Key is action name.
+                type: object
+                additionalProperties:
+                  type: object
+                  properties:
+                    finishOnSuccessfulRun:
+                      description: >-
+                        Flag to indicate whether this action should be marked as finished automatically
+                        on a successful run or otherwise requires an explicit callback from the runner
+                        using anarchy_finish_action to be marked as finished. Defaults to true.
+                      type: boolean
+                    tasks:
+                      description: >-
+                        Ansible "tasks" for the dynamic ansible play used to run this action.
+                      type: array
+                      items:
+                        type: object
+                        x-kubernetes-preserve-unknown-fields: true
+                    preTasks:
+                      description: >-
+                        Ansible "pre_tasks" for the dynamic ansible play used to run this action.
+                      type: array
+                      items:
+                        type: object
+                        x-kubernetes-preserve-unknown-fields: true
+                    postTasks:
+                      description: >-
+                        Ansible "post_tasks" for the dynamic ansible play used to run this action.
+                      type: array
+                      items:
+                        type: object
+                        x-kubernetes-preserve-unknown-fields: true
+                    roles:
+                      description: >-
+                        Ansible "roles" for the dynamic ansible play used to run this action.
+                      type: array
+                      items:
+                        type: object
+                        x-kubernetes-preserve-unknown-fields: true
+                    vars:
+                      description: >-
+                        Ansible "vars" for the dynamic ansible play used to run this action.
+                      type: object
+                      x-kubernetes-preserve-unknown-fields: true
+                    varSecrets:
+                      description: >-
+                        List of secrets to use to set variables in the dynamic ansible play for this action.
+                      type: array
+                      items:
+                        description: >-
+                          Secret used to set variables in the dynamic ansible play for the action.
+                          Secret values are merged into values from "vars".
+                        type: object
+                        required:
+                        - name
+                        properties:
+                          name:
+                            description: Secret name
+                            type: string
+                          namespace:
+                            description: >-
+                              Optional secret namespace. If omitted then the operator namespace is used.
+                            type: string
+                          var:
+                            description: >-
+                              Optional variable name to set. If not provided, then each data key from the
+                              secret is treated as a separate variable.
+                            type: string
+                    callbackNameParameter:
+                      description: >-
+                        Parameter in callback data used to name the event the callback is for.
+                      type: string
+                    callbackHandlers:
+                      description: >-
+                        Configuration for how to handle callback events for the action callback.
+                        Key is callback event name.
+                      type: object
+                      additionalProperties:
+                        type: object
+                        properties:
+                          tasks:
+                            description: >-
+                              Ansible "tasks" for the dynamic ansible play used to run the action callback.
+                            type: array
+                            items:
+                              type: object
+                              x-kubernetes-preserve-unknown-fields: true
+                          preTasks:
+                            description: >-
+                              Ansible "pre_tasks" for the dynamic ansible play used to run the action callback.
+                            type: array
+                            items:
+                              type: object
+                              x-kubernetes-preserve-unknown-fields: true
+                          postTasks:
+                            description: >-
+                              Ansible "post_tasks" for the dynamic ansible play used to run the action callback.
+                            type: array
+                            items:
+                              type: object
+                              x-kubernetes-preserve-unknown-fields: true
+                          roles:
+                            description: >-
+                              Ansible "roles" for the dynamic ansible play used to run the action callback.
+                            type: array
+                            items:
+                              type: object
+                              x-kubernetes-preserve-unknown-fields: true
+                          vars:
+                            description: >-
+                              Ansible "vars" for the dynamic ansible play used to run the action callback.
+                            type: object
+                            x-kubernetes-preserve-unknown-fields: true
+                          varSecrets:
+                            description: >-
+                              List of secrets to use to set variables in the dynamic ansible play for the action callback.
+                            type: array
+                            items:
+                              description: >-
+                                Secret used to set variables in the dynamic ansible play for the action callback.
+                                Secret values are merged into values from "vars".
+                              type: object
+                              required:
+                              - name
+                              properties:
+                                name:
+                                  description: Secret name
+                                  type: string
+                                namespace:
+                                  description: >-
+                                    Optional secret namespace. If omitted then the operator namespace is used.
+                                  type: string
+                                var:
+                                  description: >-
+                                    Optional variable name to set. If not provided, then each data key from the
+                                    secret is treated as a separate variable.
+                                  type: string
+              subjectEventHandlers:
+                description: >-
+                  Actions are used to describe available types of AnarchyActions. These are scheduled
+                  activities that will be processed by AnarchyRuns.
+                type: object
+                properties:
+                  create:
+                    description: >-
+                      Description of how to handle creation of AnarchySubjects for this governor.
+                    type: object
+                    properties:
+                      tasks:
+                        description: >-
+                          Ansible "tasks" for the dynamic ansible play used to run the event handler.
+                        type: array
+                        items:
+                          type: object
+                          x-kubernetes-preserve-unknown-fields: true
+                      preTasks:
+                        description: >-
+                          Ansible "pre_tasks" for the dynamic ansible play used to run the event handler.
+                        type: array
+                        items:
+                          type: object
+                          x-kubernetes-preserve-unknown-fields: true
+                      postTasks:
+                        description: >-
+                          Ansible "post_tasks" for the dynamic ansible play used to run the event handler.
+                        type: array
+                        items:
+                          type: object
+                          x-kubernetes-preserve-unknown-fields: true
+                      roles:
+                        description: >-
+                          Ansible "roles" for the dynamic ansible play used to run the event handler.
+                        type: array
+                        items:
+                          type: object
+                          x-kubernetes-preserve-unknown-fields: true
+                      vars:
+                        description: >-
+                          Ansible "vars" for the dynamic ansible play used to run the event handler.
+                        type: object
+                        x-kubernetes-preserve-unknown-fields: true
+                      varSecrets:
+                        description: >-
+                          List of secrets to use to set variables in the dynamic ansible play for the event handler.
+                        type: array
+                        items:
+                          description: >-
+                            Secret used to set variables in the dynamic ansible play for the event handler.
+                            Secret values are merged into values from "vars".
+                          type: object
+                          required:
+                          - name
+                          properties:
+                            name:
+                              description: Secret name
+                              type: string
+                            namespace:
+                              description: >-
+                                Optional secret namespace. If omitted then the operator namespace is used.
+                              type: string
+                            var:
+                              description: >-
+                                Optional variable name to set. If not provided, then each data key from the
+                                secret is treated as a separate variable.
+                              type: string
+                  update:
+                    description: >-
+                      Description of how to handle update of AnarchySubjects for this governor.
+                    type: object
+                    properties:
+                      tasks:
+                        description: >-
+                          Ansible "tasks" for the dynamic ansible play used to run the event handler.
+                        type: array
+                        items:
+                          type: object
+                          x-kubernetes-preserve-unknown-fields: true
+                      preTasks:
+                        description: >-
+                          Ansible "pre_tasks" for the dynamic ansible play used to run the event handler.
+                        type: array
+                        items:
+                          type: object
+                          x-kubernetes-preserve-unknown-fields: true
+                      postTasks:
+                        description: >-
+                          Ansible "post_tasks" for the dynamic ansible play used to run the event handler.
+                        type: array
+                        items:
+                          type: object
+                          x-kubernetes-preserve-unknown-fields: true
+                      roles:
+                        description: >-
+                          Ansible "roles" for the dynamic ansible play used to run the event handler.
+                        type: array
+                        items:
+                          type: object
+                          x-kubernetes-preserve-unknown-fields: true
+                      vars:
+                        description: >-
+                          Ansible "vars" for the dynamic ansible play used to run the event handler.
+                        type: object
+                        x-kubernetes-preserve-unknown-fields: true
+                      varSecrets:
+                        description: >-
+                          List of secrets to use to set variables in the dynamic ansible play for the event handler.
+                        type: array
+                        items:
+                          description: >-
+                            Secret used to set variables in the dynamic ansible play for the event handler.
+                            Secret values are merged into values from "vars".
+                          type: object
+                          required:
+                          - name
+                          properties:
+                            name:
+                              description: Secret name
+                              type: string
+                            namespace:
+                              description: >-
+                                Optional secret namespace. If omitted then the operator namespace is used.
+                              type: string
+                            var:
+                              description: >-
+                                Optional variable name to set. If not provided, then each data key from the
+                                secret is treated as a separate variable.
+                              type: string
+                  delete:
+                    description: >-
+                      Description of how to handle deletion of AnarchySubjects for this governor.
+                      If defined, then finalizers will be added to the AnarchySubject which must be
+                      removed by Ansible processing.
+                    type: object
+                    properties:
+                      tasks:
+                        description: >-
+                          Ansible "tasks" for the dynamic ansible play used to run the event handler.
+                        type: array
+                        items:
+                          type: object
+                          x-kubernetes-preserve-unknown-fields: true
+                      preTasks:
+                        description: >-
+                          Ansible "pre_tasks" for the dynamic ansible play used to run the event handler.
+                        type: array
+                        items:
+                          type: object
+                          x-kubernetes-preserve-unknown-fields: true
+                      postTasks:
+                        description: >-
+                          Ansible "post_tasks" for the dynamic ansible play used to run the event handler.
+                        type: array
+                        items:
+                          type: object
+                          x-kubernetes-preserve-unknown-fields: true
+                      roles:
+                        description: >-
+                          Ansible "roles" for the dynamic ansible play used to run the event handler.
+                        type: array
+                        items:
+                          type: object
+                          x-kubernetes-preserve-unknown-fields: true
+                      vars:
+                        description: >-
+                          Ansible "vars" for the dynamic ansible play used to run the event handler.
+                        type: object
+                        x-kubernetes-preserve-unknown-fields: true
+                      varSecrets:
+                        description: >-
+                          List of secrets to use to set variables in the dynamic ansible play for the event handler.
+                        type: array
+                        items:
+                          description: >-
+                            Secret used to set variables in the dynamic ansible play for the event handler.
+                            Secret values are merged into values from "vars".
+                          type: object
+                          required:
+                          - name
+                          properties:
+                            name:
+                              description: Secret name
+                              type: string
+                            namespace:
+                              description: >-
+                                Optional secret namespace. If omitted then the operator namespace is used.
+                              type: string
+                            var:
+                              description: >-
+                                Optional variable name to set. If not provided, then each data key from the
+                                secret is treated as a separate variable.
+                              type: string
+              vars:
+                description: >-
+                  Ansible "vars" for the dynamic ansible play used to run the event handler.
+                type: object
+                x-kubernetes-preserve-unknown-fields: true
+              varSecrets:
+                description: >-
+                  List of secrets to use to set variables in the dynamic ansible play for the event handler.
+                type: array
+                items:
+                  description: >-
+                    Secret used to set variables in the dynamic ansible play for the event handler.
+                    Secret values are merged into values from "vars".
+                  type: object
+                  required:
+                  - name
+                  properties:
+                    name:
+                      description: Secret name
+                      type: string
+                    namespace:
+                      description: >-
+                        Optional secret namespace. If omitted then the operator namespace is used.
+                      type: string
+                    var:
+                      description: >-
+                        Optional variable name to set. If not provided, then each data key from the
+                        secret is treated as a separate variable.
+                      type: string

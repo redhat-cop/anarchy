@@ -4,3 +4,4 @@ resources:
 - bases/anarchy-operator.clusterserviceversion.yaml
 - ../default
 - ../samples
+- ../scorecard
