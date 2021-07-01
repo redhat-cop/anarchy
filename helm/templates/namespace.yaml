@@ -3,6 +3,8 @@ apiVersion: v1
 kind: Namespace
 metadata:
   name: {{ include "anarchy.namespaceName" . }}
+  annotations:
+    helm.sh/resource-policy: keep
   labels:
     {{- include "anarchy.labels" . | nindent 4 }}
 {{- end -}}

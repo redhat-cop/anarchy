@@ -3,13 +3,217 @@ kind: ClusterRole
 metadata:
   name: operator-manager-role
 rules:
-# Anarchy deployments can specify arbitrary RBAC so the operator needs full
-# access to configure these deployments.
+# Operator should have access to manage namespaces, but not access to delete them.
 - apiGroups:
-  - "*"
+  - ""
   resources:
-  - "*"
+  - namespaces
   verbs:
-  - "*"
-
-#+kubebuilder:scaffold:rules
+  - create
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - ""
+  resources:
+  - namespaces/status
+  verbs:
+  - get
+  - list
+  - watch
+# Projects, like namespaces, operator has access to create but not delete
+- apiGroups:
+  - project.openshift.io
+  resources:
+  - projects
+  verbs:
+  - create
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - project.openshift.io
+  resources:
+  - projectrequests
+  verbs:
+  - create
+# Access to manage deployment resource kinds
+- apiGroups:
+  - ""
+  resources:
+  - services
+  - serviceaccounts
+  verbs:
+  - create
+  - delete
+  - deletecollection
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - apps
+  resources:
+  - deployments
+  verbs:
+  - create
+  - delete
+  - deletecollection
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - networking.k8s.io
+  resources:
+  - ingresses
+  - networkpolicies
+  verbs:
+  - create
+  - delete
+  - deletecollection
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - rbac.authorization.k8s.io
+  resources:
+  - rolebindings
+  - roles
+  verbs:
+  - create
+  - delete
+  - deletecollection
+  - get
+  - list
+  - patch
+  - update
+  - watch
+# Access to deploy runners with custom access rights. ClusterRole and
+# ClusterRoleBinding naming includes namespace name to prevent conflicts.
+- apiGroups:
+  - rbac.authorization.k8s.io
+  # ClusterRoles
+  - clusterroles
+  - clusterrolebindings
+# Anarchy resource kinds which can be managed by the operator
+- apiGroups:
+  - anarchy.gpte.redhat.com
+  resources:
+  - anarchygovernors
+  - anarchyrunners
+  verbs:
+  - create
+  - delete
+  - deletecollection
+  - get
+  - list
+  - patch
+  - update
+  - watch
+# Access rights from helm templates role.yaml
+- apiGroups:
+  - kopf.dev
+  resources:
+  - kopfpeerings
+  verbs:
+  - create
+  - delete
+  - deletecollection
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - anarchy.gpte.redhat.com
+  resources:
+  - anarchygovernors
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - anarchy.gpte.redhat.com
+  resources:
+  - anarchyactions
+  - anarchyactions/status
+  - anarchyrunners
+  - anarchyrunners/status
+  - anarchyruns
+  - anarchyruns/status
+  - anarchysubjects
+  - anarchysubjects/status
+  verbs:
+  - create
+  - delete
+  - deletecollection
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - apps
+  resources:
+  - deployments
+  - deployments/rollback
+  - deployments/scale
+  verbs:
+  - create
+  - delete
+  - deletecollection
+  - get
+  - list
+  - patch
+  - update
+- apiGroups:
+  - image.openshift.io
+  resources:
+  - imagestreams
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - route.openshift.io
+  resources:
+  - routes
+  verbs:
+  - create
+  - get
+  - list
+  - patch
+  - update
+- apiGroups:
+  - ""
+  resources:
+  - pods
+  - secrets
+  - serviceaccounts
+  - services
+  verbs:
+  - create
+  - delete
+  - deletecollection
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - ""
+  resources:
+  - events
+  verbs:
+  - create
+  - patch
+  - update
