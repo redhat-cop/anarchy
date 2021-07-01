@@ -147,6 +147,8 @@ bundle: kustomize operator-sdk ## Generate bundle manifests and metadata, then v
 
 .PHONY: bundle-build
 bundle-build: ## Build the bundle image.
+	# Remove all references to scorecard
+	sed -r 's/(.*scorecard)/#\1/' bundle.Dockerfile
 	docker build -f bundle.Dockerfile -t $(BUNDLE_IMG) .
 
 .PHONY: bundle-push
