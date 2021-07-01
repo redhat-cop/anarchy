@@ -101,9 +101,18 @@ rules:
 # ClusterRoleBinding naming includes namespace name to prevent conflicts.
 - apiGroups:
   - rbac.authorization.k8s.io
-  # ClusterRoles
+  resources:
   - clusterroles
   - clusterrolebindings
+  verbs:
+  - create
+  - delete
+  - deletecollection
+  - get
+  - list
+  - patch
+  - update
+  - watch
 # Anarchy resource kinds which can be managed by the operator
 - apiGroups:
   - anarchy.gpte.redhat.com
