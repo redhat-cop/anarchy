@@ -159,8 +159,6 @@ spec:
                     data:
                       type: object
                       x-kubernetes-preserve-unknown-fields: true
-                    name:
-                      type: string
               finishedTimestamp:
                 description: >-
                   Timestamp for when the action is completed.
