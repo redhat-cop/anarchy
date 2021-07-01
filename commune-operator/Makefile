@@ -65,6 +65,7 @@ docker-build: ## Build docker image with the manager.
 	mkdir -p helm-charts/anarchy || :
 	cp -r ../helm/* helm-charts/anarchy/
 	rm -rf helm-charts/anarchy/templates/clusterroles
+	mv helm-charts/anarchy/crds/*.yaml config/crd/bases/
 	cp ../kopfpeerings.crd.yaml config/crd/bases/kopfpeerings.crd.yaml
 	docker build -t ${IMG} .
 

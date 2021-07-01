@@ -3,5 +3,11 @@
 # It should be run by config/default
 resources:
 - bases/anarchy.gpte.redhat.com_anarchycommunes.yaml
+# Copied by Makefile from ../helm/crds
+- bases/anarchyactions.yaml
+- bases/anarchygovernors.yaml
+- bases/anarchyrunners.yaml
+- bases/anarchyruns.yaml
+- bases/anarchysubjects.yaml
+# Copied by Makefile from ../kopfpeerings.crd.yaml
 - bases/kopfpeerings.crd.yaml
-#+kubebuilder:scaffold:crdkustomizeresource
