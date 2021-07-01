@@ -10,7 +10,7 @@ spec:
     CLEANUP_INTERVAL: 300
   image:
     pullPolicy: IfNotPresent
-    repository: quay.io/jkupferer/anarchy
+    repository: quay.io/redhat-cop/anarchy
   imagePullSecrets: []
   ingress:
     annotations: {}
