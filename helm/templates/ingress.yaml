@@ -9,7 +9,7 @@ apiVersion: extensions/v1beta1
 kind: Ingress
 metadata:
   name: {{ $name }}
-  namespace: {{ include "anarchy.namespapceName" . }}
+  namespace: {{ include "anarchy.namespaceName" . }}
   labels:
     {{- include "anarchy.labels" . | nindent 4 }}
   {{- with .Values.ingress.annotations }}
