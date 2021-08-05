@@ -200,6 +200,14 @@ class AnarchySubject(object):
         if self.delete_started:
             # Check if update after delete has started. Kopf update handlers
             # ignore updates after delete has begun.
+
+            # If anarchy operator domain is not in finalizers then no update
+            # processing should occur.
+            if runtime.operator_domain not in self.metadata.get('finalizers', []):
+                return
+
+            # Manually interact with the kopf last-handled-configuration
+            # annotation that is usually managed by kopf.
             last_handled_configuration = self.last_handled_configuration
             if last_handled_configuration and self.spec != last_handled_configuration['spec']:
                 self.handle_spec_update(last_handled_configuration, runtime)
@@ -488,7 +496,7 @@ class AnarchySubject(object):
         try:
             return runtime.custom_objects_api.patch_namespaced_custom_object(
                 runtime.operator_domain, runtime.api_version, runtime.operator_namespace, 'anarchysubjects', self.name,
-                {'metadata': {'finalizers': None } }
+                {'metadata': {'finalizers': [s for s in self.metadata.get('finalizers', []) if s != runtime.operator_domain]}}
             )
         except kubernetes.client.rest.ApiException as e:
             if e.status != 404:
