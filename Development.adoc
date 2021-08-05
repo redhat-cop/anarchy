@@ -52,7 +52,9 @@ helm template helm \
 . Grant the `anarchy` cluster role to the default service account:
 +
 ------------------------------------------------------------------------
-oc policy add-role-to-user anarchy --rolebinding-name=anarchy -z default
+oc policy add-role-to-user anarchy -z default \
+--rolebinding-name=anarchy \
+--role-namespace=$(oc project -q)
 ------------------------------------------------------------------------
 +
 NOTE: At this time `odo` does not support running with an alternate service account.
