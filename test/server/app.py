@@ -218,18 +218,12 @@ def api_v2_job_templates_patch(job_template_id):
         flask.abort(400, description='extra_vars not passed')
     extra_vars = json.loads(extra_vars)
     simulate_job_result = extra_vars.get('simulate_job_result', 'successful')
-    __meta__ = extra_vars.get('__meta__')
-    if not __meta__:
-        flask.abort(400, description='__meta__ not in extra_vars')
-    callback = __meta__.get('callback')
-    if not callback:
-        flask.abort(400, description='callback not in extra_vars.__meta__')
-    callback_token = callback.get('token')
+    callback_token = extra_vars.get('agnosticd_callback_token')
     if not callback_token:
-        flask.abort(400, description='token not in extra_vars.__meta__.callback')
-    callback_url = callback.get('url')
+        flask.abort(400, description='agnosticd_callback_token not set in extra_vars')
+    callback_url = extra_vars.get('agnosticd_callback_url')
     if not callback_url:
-        flask.abort(400, description='url not in extra_vars.__meta__.callback')
+        flask.abort(400, description='agnosticd_callback_url not set in extra_vars')
     ret = deepcopy(flask.request.json)
     ret['created']: datetime.utcnow().isoformat() + 'Z'
     ret['id'] = job_template_id
@@ -238,6 +232,15 @@ def api_v2_job_templates_patch(job_template_id):
     ret['url'] = '/api/v2/job_templates/{}/'.format(job_template_id)
     logger.info("Callback URL %s", callback_url)
     return flask.jsonify(ret), 200
+
+@api.route('/api/v2/job_templates/<string:job_template_id>/credentials/', methods=['GET'])
+def api_v2_job_templates_credentials_get(job_template_id):
+    return flask.jsonify({
+        "count": 0,
+        "next": None,
+        "previous": None,
+        "results": [],
+    }), 200;
 
 @api.route('/api/v2/job_templates/<string:job_template_id>/launch/', methods=['POST'])
 def api_v2_job_templates_job_runner_launch_post(job_template_id):
@@ -276,11 +279,21 @@ def job_data(job_id):
 
 @api.route('/api/v2/jobs/', methods=['GET'])
 def api_v2_jobs_get():
-    job_id = flask.request.args['id']
-    return flask.jsonify({
-        "count": 1,
-        "results": [ job_data(job_id) ]
-    }), 200
+    job_id = flask.request.args.get('id')
+    if job_id:
+        return flask.jsonify({
+            "count": 1,
+            "next": None,
+            "previous": None,
+            "results": [ job_data(job_id) ]
+        }), 200
+    else:
+        return flask.jsonify({
+            "count": 0,
+            "next": None,
+            "previous": None,
+            "results": []
+        }), 200
 
 @api.route('/api/v2/jobs/<string:job_id>/', methods=['GET'])
 def api_v2_jobs_id_get(job_id):
