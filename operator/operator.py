@@ -28,7 +28,7 @@ from anarchyrun import AnarchyRun
 api = flask.Flask('rest')
 cleanup_interval = int(os.environ.get('CLEANUP_INTERVAL', 300))
 run_check_interval = int(os.environ.get('RUN_CHECK_INTERVAL', 5))
-runner_check_interval = int(os.environ.get('RUNNER_CHECK_INTERVAL', 30))
+runner_check_interval = int(os.environ.get('RUNNER_CHECK_INTERVAL', 20))
 
 operator_logger = logging.getLogger('operator')
 operator_logger.setLevel(os.environ.get('LOGGING_LEVEL', 'INFO'))
@@ -326,42 +326,86 @@ def patch_or_delete_subject(subject_name):
 
 @api.route('/run/subject/<string:subject_name>/actions', methods=['POST'])
 def run_subject_action_post(subject_name):
+    subject_ref = dict(
+        apiVersion = runtime.api_group_version,
+        kind = 'AnarchySubject',
+        name = subject_name,
+        namespace = runtime.operator_namespace,
+    )
+
     anarchy_runner, runner_pod = check_runner_auth(flask.request.headers.get('Authorization', ''))
     if not anarchy_runner:
         flask.abort(400)
 
+    pod_ref = dict(
+        apiVersion = 'v1',
+        kind = 'Pod',
+        name = runner_pod.metadata.name,
+        namespace = runner_pod.metadata.namespace,
+    )
+
     if not runtime.running_all_in_one \
     and subject_name != runner_pod.metadata.labels.get(runtime.subject_label):
-        operator_logger.warning(
-            'AnarchyRunner %s Pod %s cannot update AnarchySubject %s!',
-            anarchy_runner.name, runner_pod.metadata.name, subject_name
+        anarchy_runner.logger.warning(
+            'AnarchyRunner pod denied access to update AnarchySubject!',
+            extra = dict(
+                pod = pod_ref,
+                subject = subject_ref,
+            )
         )
         flask.abort(400)
 
     anarchy_subject = AnarchySubject.get(subject_name, runtime)
     if not anarchy_subject:
-        operator_logger.warning(
-            'AnarchyRunner %s Pod %s attempted to create action on deleted AnarchySubject %s!',
-            anarchy_runner.name, runner_pod.metadata.name, subject_name
+        anarchy_runner.logger.warning(
+            'AnarchyRunner pod attempted to create action on deleted AnarchySubject!',
+            extra = dict(
+                pod = pod_ref,
+                subject = subject_ref,
+            )
         )
         flask.abort(400)
 
     anarchy_governor = anarchy_subject.get_governor(runtime)
     if not anarchy_governor:
-        operator_logger.warning(
-            'AnarchyRunner %s Pod %s cannot post action to AnarchySubject %s, unable to find AnarchyGovernor %s!',
-            anarchy_runner.name, runner_pod, subject_name, anarchy_subject.governor_name
+        anarchy_runner.logger.warning(
+            'AnarchyRunner pod cannot post action to AnarchySubject, unable to find AnarchyGovernor!',
+            extra = dict(
+                governor = dict(
+                    apiVersion = runtime.api_group_version,
+                    kind = 'AnarchyGovernor',
+                    name = anarchy_subject.governor_name,
+                    namespace = anasrchy_subject.namespace_name,
+                ),
+                pod = pod_ref,
+                subject = subject_ref,
+            )
         )
         flask.abort(400)
 
     action_name = flask.request.json.get('action', None)
     after_timestamp = flask.request.json.get('after', None)
     cancel_actions = flask.request.json.get('cancel', None)
+
     if not action_name and not cancel_actions:
-        operator_logger.warning('No action or cancel given for scheduling action')
+        anarchy_runner.warning(
+            'No action or cancel given for scheduling action',
+            extra = dict(
+                pod = pod_ref,
+                subject = subject_ref,
+            )
+        )
         flask.abort(400)
+
     if after_timestamp and not re.match(r'\d\d\d\d-\d\d-\d\dT\d\d:\d\d:\d\dZ', after_timestamp):
-        operator_logger.warning('Invalide datetime format "%s" given for action after value', after_timestamp)
+        anarchy_runner.logger.warning(
+            'Invalid datetime format given for action after value',
+            extra = dict(
+                after = after_timestamp,
+                pod = pod_ref,
+                subject = subject_ref,
+            )
+        )
         flask.abort(400)
 
     if action_name not in cancel_actions:
@@ -402,13 +446,7 @@ def run_subject_action_post(subject_name):
                     "action": action_name,
                     "after": after_timestamp,
                     "callbackToken": uuid.uuid4().hex,
-                    "governorRef": {
-                        "apiVersion": runtime.api_group_version,
-                        "kind": "AnarchyGovernor",
-                        "name": anarchy_governor.name,
-                        "namespace":  runtime.operator_namespace,
-                        "uid": anarchy_governor.uid
-                    },
+                    "governorRef": anarchy_governor.ref,
                     "subjectRef": {
                         "apiVersion": runtime.api_group_version,
                         "kind": "AnarchySubject",
@@ -532,8 +570,15 @@ def watch_governors():
     while True:
         try:
             AnarchyGovernor.watch(runtime)
+        except kubernetes.client.rest.ApiException as e:
+            if e.status == 410:
+                # Ignore 410 Gone, simply reset watch
+                pass
+            else:
+                operator_logger.exception("ApiException in AnarchyGovernor watch")
+                time.sleep(5)
         except Exception as e:
-            operator_logger.exception("Error in AnarchyGovernor watch")
+            operator_logger.exception("Exception in AnarchyGovernor watch")
             time.sleep(5)
 
 def watch_runners():
@@ -543,8 +588,15 @@ def watch_runners():
     while True:
         try:
             AnarchyRunner.watch(runtime)
+        except kubernetes.client.rest.ApiException as e:
+            if e.status == 410:
+                # Ignore 410 Gone, simply reset watch
+                pass
+            else:
+                operator_logger.exception("ApiException in AnarchyRunner watch")
+                time.sleep(5)
         except Exception as e:
-            operator_logger.exception("Error in AnarchyRunner watch")
+            operator_logger.exception("Exception in AnarchyRunner watch")
             time.sleep(5)
 
 def watch_runner_pods():
@@ -554,8 +606,15 @@ def watch_runner_pods():
     while True:
         try:
             AnarchyRunner.watch_pods(runtime)
+        except kubernetes.client.rest.ApiException as e:
+            if e.status == 410:
+                # Ignore 410 Gone, simply reset watch
+                pass
+            else:
+                operator_logger.exception("ApiException in AnarchyRunner watch_pods")
+                time.sleep(5)
         except Exception as e:
-            operator_logger.exception("Error in AnarchyRunner watch_pods")
+            operator_logger.exception("Exception in AnarchyRunner watch_pods")
             time.sleep(5)
 
 def watch_peering():
@@ -565,8 +624,15 @@ def watch_peering():
     while True:
         try:
             runtime.watch_peering()
+        except kubernetes.client.rest.ApiException as e:
+            if e.status == 410:
+                # Ignore 410 Gone, simply reset watch
+                pass
+            else:
+                operator_logger.exception("ApiException in KopfPeering watch")
+                time.sleep(5)
         except Exception as e:
-            operator_logger.exception("Error in KopfPeering watch")
+            operator_logger.exception("Exception in KopfPeering watch")
             time.sleep(5)
 
 def cleanup_loop():

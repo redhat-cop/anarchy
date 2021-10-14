@@ -3,6 +3,7 @@ from datetime import datetime
 from anarchyutil import deep_update, k8s_ref
 import hashlib
 import json
+import kopf
 import kubernetes
 import logging
 import os
@@ -12,14 +13,11 @@ import uuid
 
 from anarchygovernor import AnarchyGovernor
 
-operator_logger = logging.getLogger('operator')
-
 class AnarchySubject(object):
     """AnarchySubject class"""
 
     @staticmethod
     def get(name, runtime):
-        operator_logger.debug('Getting AnarchySubject %s', name)
         resource = AnarchySubject.get_resource_from_api(name, runtime)
         if resource:
             subject = AnarchySubject(resource)
@@ -41,10 +39,12 @@ class AnarchySubject(object):
 
     def __init__(self, resource):
         """Initialize AnarchySubject from resource object data."""
-        self.metadata = resource['metadata']
-        self.spec = resource['spec']
-        self.status = resource.get('status', None)
-        self.__sanity_check()
+        self.refresh_from_resource(resource)
+        try:
+            self.__sanity_check()
+        except AssertionError as e:
+            self.logger.exception('Sanity check failed')
+            raise
 
     def __sanity_check(self):
         assert 'governor' in self.spec, \
@@ -168,7 +168,7 @@ class AnarchySubject(object):
                 if e.status == 409:
                     # Conflict, refresh subject from api and retry
                     if not self.refresh_from_api(runtime):
-                        operator_logger.error('Cannot add run to status, unable to refresh AnarchySubject %s', self.name)
+                        self.logger.error('Cannot add run to status, unable to refresh')
                         return
                 else:
                     raise
@@ -182,9 +182,19 @@ class AnarchySubject(object):
         return result
 
     def get_governor(self, runtime):
-        governor = AnarchyGovernor.get(self.spec['governor'])
+        governor = AnarchyGovernor.get(self.governor_name)
         if not governor:
-            operator_logger.error('Unable to find governor %s', self.governor_name)
+            self.logger.error(
+                'Unable to find AnarchyGovernor',
+                extra = dict(
+                    governor = dict(
+                        apiVersion = runtime.api_version,
+                        kind = 'AnarchyGovernor',
+                        name = self.governor_name,
+                        namespace = self.namespace,
+                    )
+                )
+            )
         return governor
 
     def handle_create(self, runtime):
@@ -286,16 +296,25 @@ class AnarchySubject(object):
                         anarchy_subject['status'].pop('runStatus', None)
                         anarchy_subject['status'].pop('runStatusMessage', None)
                     else:
-                        operator_logger.warning(
-                            'Removing AnarchyRun %s in AnarchySubject %s, but it was not the active run!',
-                            run_name, self.name
+                        self.logger.warning(
+                            'Removing AnarchyRun, but it was not the active run!',
+                            extra = dict(
+                                run = run_ref,
+                            )
                         )
                     break
             if not run_ref:
                 if first_attempt:
-                    operator_logger.warning(
-                        'Attempt to remove AnarchyRun %s in AnarchySubject %s status when not listed in active!',
-                        run_name, self.name
+                    self.logger.warning(
+                        'Attempt to remove AnarchyRun in status when not listed in active!',
+                        extra = dict(
+                            run = dict(
+                                apiVersion = runtime.api_version,
+                                kind = 'AnarchyRun',
+                                name = run_name,
+                                namespace = self.namespace,
+                            )
+                        )
                     )
                 return
             try:
@@ -309,7 +328,7 @@ class AnarchySubject(object):
                     # Conflict, refresh subject from api and retry
                     first_attempt = False
                     if not self.refresh_from_api(runtime):
-                        operator_logger.info('Cannot remove active run from status, unable to refresh AnarchySubject %s', self.name)
+                        self.logger.info('Cannot remove active run from status, unable to refresh')
                         return
                 else:
                     raise
@@ -349,9 +368,17 @@ class AnarchySubject(object):
     def process_subject_event_handlers(self, runtime, event_name, old=None):
         governor = self.get_governor(runtime)
         if not governor:
-            operator_logger.warning(
-                'Received "%s" event for subject "%s", but cannot find AnarchyGovernor %s',
-                event_name, self.name, self.governor_name
+            self.logger.warning(
+                'Received event, but cannot find AnarchyGovernor',
+                extra = dict(
+                    event = event_name,
+                    governor = dict(
+                        apiVersion = runtime.api_group_version,
+                        kind = 'AnarchyGovernor',
+                        name = self.governor_name,
+                        namespace = self.namespace
+                    )
+                )
             )
             return
 
@@ -388,6 +415,10 @@ class AnarchySubject(object):
             return False
 
     def refresh_from_resource(self, resource):
+        self.logger = kopf.LocalObjectLogger(
+            body = resource,
+            settings = kopf.OperatorSettings(),
+        )
         self.metadata = resource['metadata']
         self.spec = resource['spec']
         self.status = resource.get('status')
@@ -422,9 +453,11 @@ class AnarchySubject(object):
             anarchy_subject['status'].pop('activeAction', None)
 
             try:
-                operator_logger.info(
-                    'Removing activeAction %s for AnarchySubject %s',
-                    action.name, self.name
+                self.logger.info(
+                    'Removing activeAction',
+                    extra = dict(
+                        action = self.active_action_ref
+                    )
                 )
                 resource = runtime.custom_objects_api.replace_namespaced_custom_object_status(
                     runtime.operator_domain, runtime.api_version, self.namespace, 'anarchysubjects', self.name, anarchy_subject
@@ -435,16 +468,10 @@ class AnarchySubject(object):
                 if e.status == 409:
                     # Conflict, refresh subject from api and retry
                     if not self.refresh_from_api(runtime):
-                        operator_logger.error(
-                            'Cannot remove activeAction from status, unable to refresh AnarchySubject %s',
-                            self.name
-                        )
+                        self.logger.error('Cannot remove activeAction from status, unable to refresh')
                         return False
                 elif e.status == 404:
-                    operator_logger.warning(
-                        'Cannot remove activeAction from status, AnarchySubject %s was deleted',
-                        self.name
-                    )
+                    self.logger.warning('Cannot remove activeAction from status, AnarchySubject was deleted')
                     return False
                 else:
                     raise
@@ -547,9 +574,11 @@ class AnarchySubject(object):
                 anarchy_subject['status']['activeAction'] = set_action_ref
 
             try:
-                operator_logger.info(
-                    'Setting AnarchyAction %s to active for AnarchySubject %s',
-                    action.name, self.name
+                self.logger.info(
+                    'Setting AnarchyAction to active',
+                    extra = dict(
+                        action = set_action_ref
+                    )
                 )
                 resource = runtime.custom_objects_api.replace_namespaced_custom_object_status(
                     runtime.operator_domain, runtime.api_version, self.namespace, 'anarchysubjects', self.name, anarchy_subject
@@ -560,10 +589,7 @@ class AnarchySubject(object):
                 if e.status == 409:
                     # Conflict, refresh subject from api and retry
                     if not self.refresh_from_api(runtime):
-                        operator_logger.error(
-                            'Cannot set activeAction in status, unable to refresh AnarchySubject %s',
-                            self.name
-                        )
+                        self.logger.error('Cannot set activeAction in status, unable to refresh')
                         return False
                 else:
                     raise
@@ -589,7 +615,12 @@ class AnarchySubject(object):
             run_name = run_ref['name']
             run_namespace = run_ref['namespace']
             try:
-                operator_logger.info('Setting AnarchyRun %s to pending for AnarchySubject %s', run_name, self.name)
+                self.logger.info(
+					'Setting AnarchyRun to pending',
+					extra = dict(
+						run = run_ref
+					)
+				)
                 runtime.custom_objects_api.patch_namespaced_custom_object(
                     runtime.operator_domain, runtime.api_version, run_namespace, 'anarchyruns', run_name,
                     {'metadata': {'labels': { runtime.runner_label: 'pending' } } }
@@ -597,10 +628,12 @@ class AnarchySubject(object):
                 return
             except kubernetes.client.rest.ApiException as e:
                 if e.status == 404:
-                    operator_logger.warning(
-                        'AnarchyRun %s for AnarchySubject %s was deleted before execution',
-                        run_name, self.name
-                    )
+                    self.logger.warning(
+						'AnarchyRun was deleted before execution',
+						extra = dict(
+							run = run_ref
+						)
+					)
                     self.remove_active_run(run_ref, runtime)
                 else:
                     raise

@@ -1,13 +1,12 @@
 from datetime import datetime, timedelta
 import copy
+import kopf
 import kubernetes
 import logging
 import threading
 
 from anarchyrunner import AnarchyRunner
 from anarchysubject import AnarchySubject
-
-operator_logger = logging.getLogger('operator')
 
 class AnarchyRun(object):
     pending_count = 0
@@ -17,7 +16,6 @@ class AnarchyRun(object):
         '''
         Get AnarchyRun from api by name.
         '''
-        operator_logger.debug('Getting AnarchyRun %s', name)
         resource = AnarchyRun.get_resource_from_api(name, runtime)
         if resource:
             return AnarchyRun(resource)
@@ -66,14 +64,7 @@ class AnarchyRun(object):
             run.manage(runtime)
 
     def __init__(self, resource):
-        self.metadata = resource['metadata']
-        self.spec = resource['spec']
-        self.status = resource.get('status', {})
-        self.sanity_check()
-
-    def sanity_check(self):
-        # FIXME
-        pass
+        self.refresh_from_resource(resource)
 
     @property
     def action_name(self):
@@ -146,8 +137,16 @@ class AnarchyRun(object):
 
     def handle_lost_runner(self, runner_pod_name, runtime):
         """Notified that a runner has been lost, reset AnarchyRun to pending"""
-        operator_logger.warning(
-            'Handling AnarchyRun %s lost runner %s', self.name, runner_pod_name
+        self.logger.warning(
+            'AnarchyRun lost runner pod',
+            extra = dict(
+                runnerPod = dict(
+                    apiVersion = 'v1',
+                    kind = 'Pod',
+                    name = runner_pod_name,
+                    namespace = self.operator_namespace,
+                )
+            )
         )
         self.post_result({'status': 'lost'}, runner_pod_name, runtime)
 
@@ -169,12 +168,25 @@ class AnarchyRun(object):
                 else:
                     self.handle_lost_runner(runtime.runner_label, runtime)
             else:
-                operator_logger.warning(
-                    'Unable to find AnarchyRunner %s for AnarchyRun %s', runner_name, self.name
+                self.logger.warning(
+                    'Unable to find AnarchyRunner',
+                    extra = dict(
+                        runner = dict(
+                            apiVersion = runtime.api_group_version,
+                            kind = 'AnarchyRunner',
+                            name = runner_name,
+                            namespace = runtime.operator_namespace,
+                        )
+                    )
                 )
 
     def post_result(self, result, runner_pod_name, runtime):
-        operator_logger.info('Update AnarchyRun %s for %s run', self.name, result['status'])
+        self.logger.info(
+            'Post result for AnarchyRun',
+            extra = dict(
+                status = result['status']
+            )
+        )
 
         patch = [{
             'op': 'add',
@@ -240,7 +252,7 @@ class AnarchyRun(object):
             self.refresh_from_resource(data[0])
         except kubernetes.client.rest.ApiException as e:
             if e.status == 404:
-                operator_logger.warning('Unable to updated deleted AnarchyRun %s', self.name)
+                self.logger.warning('Unable to updated deleted AnarchyRun')
             else:
                 raise
 
@@ -252,7 +264,12 @@ class AnarchyRun(object):
                 runtime.operator_domain, runtime.api_version, self.namespace, 'anarchyruns', self.name, resource_def
             )
             self.refresh_from_resource(resource)
-            operator_logger.info('Set runner for AnarchyRun %s to %s', self.name, runner_value)
+            self.logger.info(
+                'Set runner',
+                extra = dict(
+                    runner = runner_value
+                )
+            )
         except kubernetes.client.rest.ApiException as e:
             if e.status == 409:
                 # Failed to set runner due to conflict
@@ -271,8 +288,13 @@ class AnarchyRun(object):
         )
 
     def refresh_from_resource(self, resource):
+        self.logger = kopf.LocalObjectLogger(
+            body = resource,
+            settings = kopf.OperatorSettings(),
+        )
         self.metadata = resource['metadata']
         self.spec = resource['spec']
+        self.status = resource.get('status', {})
 
     def set_to_pending(self, runtime):
         resource = runtime.custom_objects_api.patch_namespaced_custom_object(
