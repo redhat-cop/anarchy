@@ -710,7 +710,7 @@
   failed_when: >-
     _run.metadata.labels['anarchy.gpte.redhat.com/runner'] == 'queued'
   until: r_get_test_simple_1_update_run_again is success
-  retries: 20
+  retries: 40
   delay: 5
 
 - name: Verify all runs successful for test-simple-1
