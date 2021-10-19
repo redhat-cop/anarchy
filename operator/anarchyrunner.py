@@ -1,5 +1,6 @@
 import copy
 import json
+import kopf
 import kubernetes
 import logging
 import os
@@ -84,7 +85,23 @@ class AnarchyRunner(object):
             if runner:
                 runner.pods[pod.metadata.name] = pod
             else:
-                operator_logger.warning("Init found runner pod %s but no runner named %s", pod.metadata.name, runner_name)
+                operator_logger.warning(
+                    'Init found runner pod without matching runner',
+                    extra = dict(
+                        pod = dict(
+                            apiVersion = 'v1',
+                            kind = 'Pod',
+                            name = pod.metadata.name,
+                            namespace = pod.metadata.namespace
+                        ),
+                        runner = dict(
+                            apiVersion = runtime.api_group_version,
+                            kind = 'AnarchyRunner',
+                            name = runner_name,
+                            namespace = runtime.operator_namespace
+                        )
+                    )
+                )
 
     @staticmethod
     def manage_runners(runtime):
@@ -96,12 +113,12 @@ class AnarchyRunner(object):
         name = resource['metadata']['name']
         runner = AnarchyRunner.cache.get(name)
         if runner:
-            operator_logger.info("Refreshed AnarchyRunner %s", runner.name)
+            runner.logger.info("Refreshed AnarchyRunner")
             runner.refresh_from_resource(resource)
         else:
             runner = AnarchyRunner(resource)
             AnarchyRunner.cache[name] = runner
-            operator_logger.info("Registered AnarchyRunner %s", runner.name)
+            runner.logger.info("Registered AnarchyRunner")
         return runner
 
     @staticmethod
@@ -126,10 +143,15 @@ class AnarchyRunner(object):
             and obj['kind'] == 'Status':
                 if obj['status'] == 'Failure':
                     if obj['reason'] in ('Expired', 'Gone'):
-                        operator_logger.info('AnarchyGovernor watch restarting, reason %s', obj['reason'])
+                        operator_logger.info(
+                            'AnarchyRunner watch restarting',
+                            extra = dict(
+                                reason = obj['reason'],
+                            )
+                        )
                         return
                     else:
-                        raise Exception("AnarchyGovernor watch failure: reason {}, message {}", obj['reason'], obj['message'])
+                        raise Exception("AnarchyRunner watch failure: reason {}, message {}", obj['reason'], obj['message'])
 
             if event['type'] == 'DELETED':
                 AnarchyRunner.unregister(obj['metadata']['name'])
@@ -156,7 +178,12 @@ class AnarchyRunner(object):
             and obj['kind'] == 'Status':
                 if obj['status'] == 'Failure':
                     if obj['reason'] in ('Expired', 'Gone'):
-                        operator_logger.info('Runner Pod watch restarting, reason %s', obj['reason'])
+                        operator_logger.info(
+                            'Runner pod watch restarting',
+                            extra = dict(
+                                reason = obj['reason'],
+                            )
+                        )
                         return
                     else:
                         raise Exception("Runner Pod watch failure: reason {}, message {}", obj['reason'], obj['message'])
@@ -173,10 +200,25 @@ class AnarchyRunner(object):
                 else:
                     runner = AnarchyRunner.get(runner_name)
                     if runner:
-                        operator_logger.debug('Update AnarchyRunner %s Pod %s', runner.name, obj.metadata.name)
                         runner.pods[obj.metadata.name] = obj
                     else:
-                        operator_logger.warning("Watch found runner pod %s but no runner named %s", obj.metadata.name, runner_name)
+                        operator_logger.warning(
+                            'Watch found runner pod without matching runner',
+                            extra = dict(
+                                pod = dict(
+                                    apiVersion = 'v1',
+                                    kind = 'Pod',
+                                    name = obj.metadata.name,
+                                    namespace = obj.metadata.namespace
+                                ),
+                                runner = dict(
+                                    apiVersion = runtime.api_group_version,
+                                    kind = 'AnarchyRunner',
+                                    name = runner_name,
+                                    namespace = runtime.operator_namespace
+                                )
+                            )
+                        )
 
     def __init__(self, resource):
         self.metadata = resource['metadata']
@@ -185,6 +227,10 @@ class AnarchyRunner(object):
         if not self.spec.get('token'):
             self.spec['token'] = random_string(50)
         self.lock = threading.Lock()
+        self.logger = kopf.LocalObjectLogger(
+            body = resource,
+            settings = kopf.OperatorSettings(),
+        )
         self.sanity_check()
 
     def sanity_check(self):
@@ -340,7 +386,18 @@ class AnarchyRunner(object):
                     pod.metadata.name, pod.metadata.namespace,
                     { 'metadata': { 'labels': { runtime.runner_terminating_label: 'true' } } }
                 )
-                operator_logger.info('Labeled AnarchyRunner %s runner pod %s for termination', self.name, pod.metadata.name)
+                self.logger.info(
+                    'Labeled AnarchyRunner pod for termination',
+                    extra = dict(
+                        pod = dict(
+                            apiVersion = 'v1',
+                            kind = 'Pod',
+                            name = pod.metadata.name,
+                            namespace = pod.metadata.namespace,
+                            uid = pod.metadata.uid,
+                        )
+                    )
+                )
 
         for i in range(self.min_replicas - pod_count):
             pod = None
@@ -353,7 +410,18 @@ class AnarchyRunner(object):
                         time.sleep(1)
                     else:
                         raise
-            operator_logger.info("Started runner pod %s for AnarchyRunner %s", pod.metadata.name, self.name)
+            self.logger.info(
+                'Started runner pod',
+                extra = dict(
+                    pod = dict(
+                        apiVersion = 'v1',
+                        kind = 'Pod',
+                        name = pod.metadata.name,
+                        namespace = pod.metadata.namespace,
+                        uid = pod.metadata.uid,
+                    )
+                )
+            )
 
     def manage_runner_service_account(self, runtime):
         """Create service account if not found"""

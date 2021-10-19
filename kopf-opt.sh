@@ -1,4 +1,5 @@
 #!/bin/sh
+KOPF_OPTIONS="--log-format=json"
 
 # Default ANARCHY_SERVICE to HOSTNAME for running in odo
 ANARCHY_SERVICE=${ANARCHY_SERVICE:-$HOSTNAME}

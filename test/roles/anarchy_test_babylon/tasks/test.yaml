@@ -143,17 +143,25 @@
   retries: 20
   delay: 5
 
-- name: Update AnarchySubject test-babylon-2 simulate_job_result
+- name: Update AnarchySubject test-babylon-2 simulate_job_result successful
+  vars:
+    _patch:
+      vars:
+        job_vars:
+          simulate_job_result: successful
+    _spec: >-
+      {{ r_test_subject.resources[0].spec | combine(_patch, recursive=true) }}
   k8s:
     api_version: anarchy.gpte.redhat.com/v1
     kind: AnarchySubject
     name: test-babylon-2
     namespace: "{{ anarchy_namespace }}"
     definition:
-      spec:
-        vars:
-          job_vars:
-            simulate_job_result: successful
+      metadata:
+        annotations:
+          # Make Anarchy ignore this update
+          anarchy.gpte.redhat.com/spec-sha256: "{{ _spec | anarchy_spec_sha256 }}"
+      spec: "{{ _spec }}"
 
 - when: anarchy_test_delete_subjects | bool
   block:
@@ -202,16 +210,24 @@
   delay: 5
 
 - name: Update AnarchySubject test-babylon-3 to fail on destroy
+  vars:
+    _patch:
+      vars:
+        job_vars:
+          simulate_job_result: failed
+    _spec: >-
+      {{ r_test_subject.resources[0].spec | combine(_patch, recursive=true) }}
   k8s:
     api_version: anarchy.gpte.redhat.com/v1
     kind: AnarchySubject
     name: test-babylon-3
     namespace: "{{ anarchy_namespace }}"
     definition:
-      spec:
-        vars:
-          job_vars:
-            simulate_job_result: failed
+      metadata:
+        annotations:
+          # Make Anarchy ignore this update
+          anarchy.gpte.redhat.com/spec-sha256: "{{ _spec | anarchy_spec_sha256 }}"
+      spec: "{{ _spec }}"
 
 - name: Delete test-babylon-3 subject
   k8s:

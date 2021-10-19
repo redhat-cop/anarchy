@@ -10,8 +10,6 @@ from datetime import datetime, timedelta
 from anarchygovernor import AnarchyGovernor
 from anarchysubject import AnarchySubject
 
-operator_logger = logging.getLogger('operator')
-
 class AnarchyAction(object):
     """
     AnarchyAction class
@@ -42,7 +40,6 @@ class AnarchyAction(object):
 
     @staticmethod
     def get(name, runtime):
-        operator_logger.debug('Getting AnarchyAction %s', name)
         resource = AnarchyAction.get_resource_from_api(name, runtime)
         if resource:
             subject = AnarchyAction(resource)
@@ -70,17 +67,16 @@ class AnarchyAction(object):
                 try:
                     action.start(runtime)
                 except Exception as e:
-                    operator_logger.exception("Error running action %s", action.name)
+                    action.logger.exception("Error running action %s", action.name)
 
     def __init__(self, resource):
         self.metadata = resource['metadata']
         self.spec = resource['spec']
-        self.status = resource.get('status', None)
-        self.__sanity_check()
-
-    def __sanity_check(self):
-        # FIXME
-        pass
+        self.status = resource.get('status')
+        self.logger = kopf.LocalObjectLogger(
+            body = resource,
+            settings = kopf.OperatorSettings(),
+        )
 
     @property
     def action(self):
@@ -176,7 +172,7 @@ class AnarchyAction(object):
                     }
                 }
             )
-            self.refresh_from_resource(resource)
+            self.__init__(resource)
             # Remove action from cache as it will not appear in watch when run label is set
             AnarchyAction.cache_remove(self.name)
         except kubernetes.client.rest.ApiException as e:
@@ -192,22 +188,55 @@ class AnarchyAction(object):
     def get_subject(self, runtime):
         return AnarchySubject.get(self.subject_name, runtime)
 
+    def governor_ref(self, runtime):
+        return dict(
+            apiVersion = runtime.api_group_version,
+            kind = 'AnarchyGovernor',
+            name = self.governor_name,
+            namespace = self.namespace,
+        )
+
     def process_callback(self, runtime, callback_name, callback_data):
         subject = self.get_subject(runtime)
+        if not subject:
+            self.logger.info(
+                'Received callback but cannot find AnarchySubject',
+                extra = dict(
+                    subject = self.subject_ref(runtime),
+                )
+            )
+            return
+
         governor = subject.get_governor(runtime)
         if not governor:
-            operator_logger.warning('Received callback for subject "%s", but cannot find AnarchyGovernor %s', subject.name, governor.name)
+            self.logger.warning(
+                'Received callback but cannot find AnarchyGovernor',
+                extra = dict(
+                    governor = self.governor_ref(runtime),
+                )
+            )
             return
-        action_config = governor.action_config(self.action)
 
+        action_config = governor.action_config(self.action)
         if not action_config:
-            operator_logger.warning('Received callback for action, "%s", which is not defined in AnarchyGovernor %s', self.action, governor.name)
+            self.logger.warning(
+                'Received callback for action which is not defined in governor',
+                extra = dict(
+                    action = self.action,
+                    governor = self.governor_ref(runtime),
+                )
+            )
             return
         if not callback_name:
             name_parameter = action_config.callback_name_parameter or governor.callback_name_parameter
             callback_name = callback_data.get(name_parameter, None)
             if not callback_name:
-                operator_logger.warning('Name parameter, "%s", not set in callback data', name_parameter)
+                self.logger.warning(
+                    'Name parameter not set in callback data, cannot process callback',
+                    extra = dict(
+                        nameParameter = name_parameter
+                    )
+                )
                 return
 
         while True:
@@ -226,7 +255,7 @@ class AnarchyAction(object):
                 resource = runtime.custom_objects_api.replace_namespaced_custom_object_status(
                     runtime.operator_domain, runtime.api_version, self.namespace, 'anarchyactions', self.name, self.to_dict(runtime)
                 )
-                self.refresh_from_resource(resource)
+                self.__init__(resource)
                 break
             except kubernetes.client.rest.ApiException as e:
                 if e.status == 409:
@@ -237,7 +266,13 @@ class AnarchyAction(object):
 
         handler = action_config.callback_handler(callback_name)
         if not handler:
-            operator_logger.warning('No callback handler in %s for %s', action_config.name, callback_name)
+            self.logger.warning(
+                'Callback handler not found',
+                extra = dict(
+                    action = action_config.name,
+                    callback = callback_name,
+                )
+            )
             return
 
         context = (
@@ -261,14 +296,9 @@ class AnarchyAction(object):
     def refresh_from_api(self, runtime):
         resource = AnarchyAction.get_resource_from_api(self.name, runtime)
         if resource:
-            self.refresh_from_resource(resource)
+            self.__init__(resource)
         else:
             raise Exception('Unable to find AnarchyAction {} to refresh'.format(self.name))
-
-    def refresh_from_resource(self, resource):
-        self.metadata = resource['metadata']
-        self.spec = resource['spec']
-        self.status = resource.get('status')
 
     def schedule_continuation(self, args, runtime):
         after_seconds = args.get('after', 0)
@@ -294,7 +324,7 @@ class AnarchyAction(object):
                     }
                 }
             )
-            self.refresh_from_resource(resource)
+            self.__init__(resource)
         except kubernetes.client.rest.ApiException as e:
             # If error is 404, not found, then subject or action must have been deleted
             if e.status != 404:
@@ -313,7 +343,7 @@ class AnarchyAction(object):
                     }
                 }
             )
-            self.refresh_from_resource(resource)
+            self.__init__(resource)
         except kubernetes.client.rest.ApiException as e:
             if e.status != 404:
                 raise
@@ -328,7 +358,7 @@ class AnarchyAction(object):
                     }
                 }
             )
-            self.refresh_from_resource(resource)
+            self.__init__(resource)
         except kubernetes.client.rest.ApiException as e:
             if e.status != 404:
                 raise
@@ -386,7 +416,12 @@ class AnarchyAction(object):
 
         # Subject may have been deleted, abort run of the action in this case
         if not subject:
-            operator_logger.info('Not starting AnarchyAction %s for deleted AnarchySubject %s', self.name, self.subject_name)
+            self.logger.info(
+                'Not starting AnarchyAction for deleted AnarchySubject',
+                extra = dict(
+                    subject = self.subject_ref(runtime),
+                )
+            )
             AnarchyAction.cache_remove(self)
             return
 
@@ -399,7 +434,13 @@ class AnarchyAction(object):
 
         action_config = governor.action_config(self.action)
         if not action_config:
-            operator_logger.warning('Attempting to start action, "%s", which is not defined in AnarchyGovernor %s', self.action, governor.name)
+            self.logger.warning(
+                'Attempt to start action which is not defined in governor',
+                extra = dict(
+                    action = self.action,
+                    governor = self.governor_ref(runtime),
+                )
+            )
             return
 
         context = (
@@ -417,6 +458,14 @@ class AnarchyAction(object):
 
         governor.run_ansible(runtime, action_config, run_vars, context, subject, self)
         return True
+
+    def subject_ref(self, runtime):
+        return dict(
+            apiVersion = runtime.api_group_version,
+            kind = 'AnarchySubject',
+            name = self.subject_name,
+            namespace = self.namespace,
+        )
 
     def to_dict(self, runtime):
         return dict(
