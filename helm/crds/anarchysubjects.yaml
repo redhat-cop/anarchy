@@ -104,8 +104,52 @@ spec:
             type: object
             x-kubernetes-preserve-unknown-fields: true
             properties:
+              activeAction:
+                type: object
+                properties:
+                  after:
+                    type: string
+                  apiVersion:
+                    type: string
+                  kind:
+                    type: string
+                  name:
+                    type: string
+                  namespace:
+                    type: string
+                  uid:
+                    type: string
+                required:
+                - apiVersion
+                - kind
+                - name
+                - namespace
+                - uid
               deleteHandlersStarted:
                 type: string
+              pendingActions:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    after:
+                      type: string
+                    apiVersion:
+                      type: string
+                    kind:
+                      type: string
+                    name:
+                      type: string
+                    namespace:
+                      type: string
+                    uid:
+                      type: string
+                  required:
+                  - apiVersion
+                  - kind
+                  - name
+                  - namespace
+                  - uid
               runStatus:
                 type: string
               runStatusMessage:

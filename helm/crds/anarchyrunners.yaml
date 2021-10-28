@@ -69,3 +69,37 @@ spec:
               token:
                 description: Token used to validate communication with pods in the AnarchyRunner pool.
                 type: string
+          status:
+            description: >-
+              AnarchyRunner status.
+            type: object
+            x-kubernetes-preserve-unknown-fields: true
+            properties:
+              pods:
+                type: array
+                items:
+                  type: object
+                  required:
+                  - name
+                  properties:
+                    name:
+                      type: string
+                    run:
+                      type: object
+                      required:
+                      - apiVersion
+                      - kind
+                      - name
+                      - namespace
+                      - uid
+                      properties:
+                        apiVersion:
+                          type: string
+                        kind:
+                          type: string
+                        name:
+                          type: string
+                        namespace:
+                          type: string
+                        uid:
+                          type: string

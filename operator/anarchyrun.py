@@ -63,8 +63,21 @@ class AnarchyRun(object):
             run = AnarchyRun(resource)
             run.manage(runtime)
 
-    def __init__(self, resource):
-        self.refresh_from_resource(resource)
+    def __init__(self, resource_object):
+        self.api_version = resource_object['apiVersion']
+        self.kind = resource_object['kind']
+        self.metadata = resource_object['metadata']
+        self.spec = resource_object['spec']
+        self.status = resource_object.get('status')
+
+        self.local_logger = kopf.LocalObjectLogger(
+            body = resource_object,
+            settings = kopf.OperatorSettings(),
+        )
+        if logger:
+            self.logger = logger
+        elif not hasattr(self, 'logger'):
+            self.logger = self.local_logger
 
     @property
     def action_name(self):
@@ -85,12 +98,31 @@ class AnarchyRun(object):
         return self.spec['governor']['name']
 
     @property
+    def governor_reference(self):
+        return dict(
+            apiVersion = self.api_version,
+            kind = 'AnarchyGovernor',
+            name = self.governor_name,
+            namespace = self.namespace,
+        )
+
+    @property
     def name(self):
         return self.metadata['name']
 
     @property
     def namespace(self):
         return self.metadata['namespace']
+
+    @property
+    def reference(self):
+        return dict(
+            apiVersion = self.api_version,
+            kind = self.kind,
+            name = self.name,
+            namespace = self.namespace,
+            uid = self.uid,
+        )
 
     @property
     def result_status(self):
@@ -124,6 +156,15 @@ class AnarchyRun(object):
     @property
     def subject_name(self):
         return self.spec['subject']['name']
+
+    @property
+    def subject_reference(self):
+        return dict(
+            apiVersion = self.api_version,
+            kind = 'AnarchySubject',
+            name = self.subject_name,
+            namespace = self.namespace,
+        )
 
     @property
     def uid(self):
@@ -249,7 +290,7 @@ class AnarchyRun(object):
                 response_type='object',
                 auth_settings=['BearerToken'],
             )
-            self.refresh_from_resource(data[0])
+            self.__init__(data[0])
         except kubernetes.client.rest.ApiException as e:
             if e.status == 404:
                 self.logger.warning('Unable to updated deleted AnarchyRun')
@@ -263,7 +304,7 @@ class AnarchyRun(object):
             resource = runtime.custom_objects_api.replace_namespaced_custom_object(
                 runtime.operator_domain, runtime.api_version, self.namespace, 'anarchyruns', self.name, resource_def
             )
-            self.refresh_from_resource(resource)
+            self.__init__(resource)
             self.logger.info(
                 'Set runner',
                 extra = dict(
@@ -287,27 +328,18 @@ class AnarchyRun(object):
             uid = self.uid
         )
 
-    def refresh_from_resource(self, resource):
-        self.logger = kopf.LocalObjectLogger(
-            body = resource,
-            settings = kopf.OperatorSettings(),
-        )
-        self.metadata = resource['metadata']
-        self.spec = resource['spec']
-        self.status = resource.get('status', {})
-
     def set_to_pending(self, runtime):
         resource = runtime.custom_objects_api.patch_namespaced_custom_object(
             runtime.operator_domain, runtime.api_version, self.namespace, 'anarchyruns', self.name,
             {'metadata': {'labels': { runtime.runner_label: 'pending' } } }
         )
-        self.refresh_from_resource(resource)
+        self.__init__(resource)
 
     def to_dict(self, runtime):
         return dict(
             apiVersion = runtime.api_group_version,
             kind = 'AnarchyRun',
-            metadata=self.metadata,
-            spec=self.spec,
-            status=self.status
+            metadata = dict(self.metadata),
+            spec = dict(self.spec),
+            status = dict(self.status),
         )

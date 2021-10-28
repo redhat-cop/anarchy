@@ -9,8 +9,6 @@ import socket
 import threading
 import time
 
-from anarchyutil import deep_update
-
 operator_logger = logging.getLogger('operator')
 
 class AnarchyRuntime(object):
@@ -131,6 +129,9 @@ class AnarchyRuntime(object):
             raise Exception('Unable to set action callback URL. Please set CALLBACK_BASE_URL environment variable.')
         return '{}/action/{}'.format(self.callback_base_url, action_name)
 
+    def dict_to_k8s_object(self, src, cls):
+        return self.api_client.deserialize(FakeKubeResponse(src), cls)
+
     def get_secret_data(self, secret_name, secret_namespace=None):
         if not secret_namespace:
             secret_namespace = self.operator_namespace
@@ -146,29 +147,6 @@ class AnarchyRuntime(object):
             except json.decoder.JSONDecodeError:
                 pass
         return data
-
-    def get_vars(self, obj):
-        if not obj:
-            return
-        merged_vars = copy.deepcopy(obj.vars)
-        for var_secret in obj.var_secrets:
-            secret_name = var_secret.get('name', None)
-            secret_namespace = var_secret.get('namespace', None)
-            if secret_name:
-                try:
-                    secret_data = self.get_secret_data(secret_name, secret_namespace)
-                    var_name = var_secret.get('var', None)
-                    if var_name:
-                        deep_update(merged_vars, {var_name: secret_data})
-                    else:
-                        deep_update(merged_vars, secret_data)
-                except kubernetes.client.rest.ApiException as e:
-                    if e.status != 404:
-                        raise
-                    operator_logger.warning('varSecrets references missing secret, %s', secret_name)
-            else:
-                operator_logger.warning('varSecrets has entry with no name')
-        return merged_vars
 
     def register_runner(self, runner):
         self.anarchy_runners[runner] = time.time()
@@ -218,3 +196,8 @@ class AnarchyRuntime(object):
                             operator_logger.info('Active kopf peer is now: %s', active_peer)
                         self.is_active = False
                     self.is_active_condition.notify()
+
+# See: https://github.com/kubernetes-client/python/issues/977
+class FakeKubeResponse:
+    def __init__(self, obj):
+        self.data = json.dumps(obj)

@@ -140,6 +140,7 @@ class AnarchyRunner(object):
             anarchy_run = self.get_run()
         except Exception as e:
             logging.exception("Exception when getting run")
+            self.sleep()
             return
 
         if not anarchy_run:
@@ -149,7 +150,7 @@ class AnarchyRunner(object):
 
         # Extract governor and subject from AnarchyRun and set vars within
         # run spec into governor and subject for DWIM behavior.
-        anarchy_governor = anarchy_run.pop('governor')
+        anarchy_governor = anaruhy_run.pop('governor')
         anarchy_governor.update(anarchy_run['spec']['governor'])
         anarchy_subject = anarchy_run.pop('subject')
         anarchy_subject.update(anarchy_run['spec']['subject'])
