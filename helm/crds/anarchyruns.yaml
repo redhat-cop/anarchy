@@ -140,6 +140,36 @@ spec:
                 description: >-
                   UTC timestamp for next retry after failure.
                 type: string
+              runnerPod:
+                description: >-
+                  Reference to the AnarchyRunner Pod executing this AnarchyRun
+                type: object
+                properties:
+                  apiVersion:
+                    type: string
+                  kind:
+                    type: string
+                  name:
+                    type: string
+                  namespace:
+                    type: string
+                  uid:
+                    type: string
+              runnerRef:
+                description: >-
+                  Reference to the AnarchyRunner executing this AnarchyRun
+                type: object
+                properties:
+                  apiVersion:
+                    type: string
+                  kind:
+                    type: string
+                  name:
+                    type: string
+                  namespace:
+                    type: string
+                  uid:
+                    type: string
               subject:
                 description: >-
                   Reference to the AnarchySubject related to this AnarchyRun.
@@ -208,9 +238,6 @@ spec:
                 x-kubernetes-preserve-unknown-fields: true
               runPostTimestamp:
                 description: Timestamp of when the run result was received from the runner.
-                type: string
-              runner:
-                description: Runner pod name
                 type: string
               result:
                 description: Result of Ansible playbook run.
@@ -318,6 +345,14 @@ spec:
                                                 description: Result of task item execution
                                                 type: object
                                                 x-kubernetes-preserve-unknown-fields: true
+                  continueAction:
+                    description: >-
+                      Result indicating whether action should be continued by another AnarchyRun.
+                    type: object
+                    properties:
+                      after:
+                        description: Timestamp for when to continue action
+                        type: string
                   rc:
                     type: integer
                   status:

@@ -103,3 +103,22 @@ spec:
                           type: string
                         uid:
                           type: string
+                    subject:
+                      type: object
+                      required:
+                      - apiVersion
+                      - kind
+                      - name
+                      - namespace
+                      - uid
+                      properties:
+                        apiVersion:
+                          type: string
+                        kind:
+                          type: string
+                        name:
+                          type: string
+                        namespace:
+                          type: string
+                        uid:
+                          type: string
