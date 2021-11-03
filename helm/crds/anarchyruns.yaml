@@ -14,6 +14,8 @@ spec:
   - name: v1
     served: true
     storage: true
+    subresources:
+      status: {}
     additionalPrinterColumns:
     - name: Governor
       type: string
@@ -322,3 +324,8 @@ spec:
                     type: string
                   statusMessage:
                     type: string
+          status:
+            description: >-
+              AnarchyRun status.
+            type: object
+            x-kubernetes-preserve-unknown-fields: true
