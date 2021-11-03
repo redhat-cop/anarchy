@@ -148,55 +148,6 @@ class AnarchyRuntime(object):
                 pass
         return data
 
-    def register_runner(self, runner):
-        self.anarchy_runners[runner] = time.time()
-
-    def remove_runner(self, runner):
-        try:
-            del self.anarchy_runners[runner]
-        except KeyError:
-            pass
-
-    def watch_peering(self):
-        '''
-        Wait for KopfPeering to indicate this pod should be active.
-        '''
-        for event in kubernetes.watch.Watch().stream(
-            self.custom_objects_api.list_namespaced_custom_object,
-            'kopf.dev', 'v1', self.operator_namespace, 'kopfpeerings'
-        ):
-            obj = event.get('object')
-
-            if event['type'] == 'ERROR' \
-            and obj['kind'] == 'Status':
-                if obj['status'] == 'Failure':
-                    if obj['reason'] in ('Expired', 'Gone'):
-                        operator_logger.info('KopfPeering watch restarting, reason %s', obj['reason'])
-                        return
-                    else:
-                        raise Exception("KopfPeering watch failure: reason {}, message {}", obj['reason'], obj['message'])
-
-            if obj \
-            and obj.get('apiVersion') == 'kopf.dev/v1' \
-            and obj.get('kind') == 'KopfPeering' \
-            and obj['metadata']['name'] == self.anarchy_service_name:
-                with self.is_active_condition:
-                    active_peer = None
-                    priority = 0
-                    for peerid, status in obj.get('status', {}).items():
-                        if status['priority'] > priority:
-                            active_peer = peerid
-                            priority = status['priority']
-                    if active_peer and '@{}/'.format(self.pod_name) in active_peer:
-                        if not self.is_active:
-                            operator_logger.info('Became active kopf peer: %s', active_peer)
-                        self.is_active = True
-                    else:
-                        if self.is_active:
-                            operator_logger.info('Active kopf peer is now: %s', active_peer)
-                        self.is_active = False
-                    self.is_active_condition.notify()
-
 # See: https://github.com/kubernetes-client/python/issues/977
 class FakeKubeResponse:
     def __init__(self, obj):

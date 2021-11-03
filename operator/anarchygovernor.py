@@ -104,14 +104,6 @@ class AnarchyGovernor(object):
     governors = {}
     register_lock = threading.Lock()
 
-#REMOVE#    @staticmethod
-#REMOVE#    def cleanup(anarchy_runtime):
-#REMOVE#        for governor in list(AnarchyGovernor.governors.values()):
-#REMOVE#            governor.logger.debug("Starting cleanup")
-#REMOVE#            governor.cleanup_subjects(anarchy_runtime)
-#REMOVE#            governor.cleanup_actions(anarchy_runtime)
-#REMOVE#            governor.cleanup_runs(anarchy_runtime)
-
     @staticmethod
     def get(name):
         return AnarchyGovernor.governors.get(name)
@@ -125,27 +117,28 @@ class AnarchyGovernor(object):
         loaded before processing starts.
         '''
         operator_logger.info("Starting AnarchyGovernor preload")
-        for resource in anarchy_runtime.custom_objects_api.list_namespaced_custom_object(
-            anarchy_runtime.operator_domain, anarchy_runtime.api_version, anarchy_runtime.operator_namespace, 'anarchygovernors'
+        for resource_object in anarchy_runtime.custom_objects_api.list_namespaced_custom_object(
+            anarchy_runtime.operator_domain, anarchy_runtime.api_version,
+            anarchy_runtime.operator_namespace, 'anarchygovernors'
         ).get('items', []):
-            AnarchyGovernor.register(resource=resource)
+            AnarchyGovernor.register(resource_object=resource_object)
 
     @staticmethod
     def register(
         logger=None,
-        resource=None,
+        resource_object=None,
     ):
         '''
         Register AnarchyGovernor or refresh definition of already registered AnarchyGovernor.
         '''
-        name = resource['metadata']['name']
+        name = resource_object['metadata']['name']
         with AnarchyGovernor.register_lock:
             governor = AnarchyGovernor.governors.get(name)
             if governor:
-                governor.__init__(logger=logger, resource=resource)
-                governor.logger.info("Refreshed AnarchyGovernor")
+                governor.__init__(logger=logger, resource_object=resource_object)
+                governor.logger.debug("Refreshed AnarchyGovernor")
             else:
-                governor = AnarchyGovernor(logger=logger, resource=resource)
+                governor = AnarchyGovernor(logger=logger, resource_object=resource_object)
                 AnarchyGovernor.governors[name] = governor
                 governor.logger.info("Registered AnarchyGovernor")
             return governor
@@ -223,22 +216,22 @@ class AnarchyGovernor(object):
                 if event['type'] == 'DELETED':
                     AnarchyGovernor.unregister(name=obj['metadata']['name'])
                 else:
-                    AnarchyGovernor.register(resource=obj)
+                    AnarchyGovernor.register(resource_object=obj)
 
-    def __init__(self, resource, logger=None):
+    def __init__(self, resource_object, logger=None):
         if logger:
             self.logger = logger
         elif not hasattr(self, 'logger'):
             self.logger = kopf.LocalObjectLogger(
-                body = resource,
+                body = resource_object,
                 settings = kopf.OperatorSettings(),
             )
 
-        self.api_version = resource['apiVersion']
-        self.kind = resource['kind']
-        self.metadata = resource['metadata']
-        self.spec = resource['spec']
-        self.status = resource.get('status')
+        self.api_version = resource_object['apiVersion']
+        self.kind = resource_object['kind']
+        self.metadata = resource_object['metadata']
+        self.spec = resource_object['spec']
+        self.status = resource_object.get('status')
 
         subject_event_handlers = {}
         for event_name, handler_spec in self.spec.get('subjectEventHandlers', {}).items():
@@ -283,7 +276,7 @@ class AnarchyGovernor(object):
         return self.spec.get('pythonRequirements', None)
 
     @property
-    def ref(self):
+    def reference(self):
         return dict(
             apiVersion = self.api_version,
             kind = self.kind,
@@ -333,153 +326,6 @@ class AnarchyGovernor(object):
         else:
             return None
 
-#REMOVE#    def cleanup_subjects(self, anarchy_runtime):
-#REMOVE#        """
-#REMOVE#        Cleanup AnarchySubjects, removing references to AnarchyActions or AnarchyRuns that do not exist.
-#REMOVE#        """
-#REMOVE#        for subject_resource in anarchy_runtime.custom_objects_api.list_namespaced_custom_object(
-#REMOVE#            anarchy_runtime.operator_domain, anarchy_runtime.api_version, anarchy_runtime.operator_namespace, 'anarchysubjects',
-#REMOVE#            label_selector='{}={}'.format(anarchy_runtime.governor_label, self.name)
-#REMOVE#        ).get('items', []):
-#REMOVE#            subject_meta = subject_resource['metadata']
-#REMOVE#            subject_name = subject_meta['name']
-#REMOVE#            subject_namespace = subject_meta['namespace']
-#REMOVE#            subject_ref = dict(
-#REMOVE#                apiVersion = anarchy_runtime.api_version,
-#REMOVE#                kind = 'AnarchySubject',
-#REMOVE#                name = subject_name,
-#REMOVE#                namespace = subject_namespace,
-#REMOVE#                uid = subject_meta['uid'],
-#REMOVE#            )
-#REMOVE#            subject_update_required = False
-#REMOVE#
-#REMOVE#            active_action_ref = subject_resource.get('status', {}).get('activeAction')
-#REMOVE#            if active_action_ref:
-#REMOVE#                action_name = active_action_ref['name']
-#REMOVE#                action_namespace = active_action_ref['namespace']
-#REMOVE#                try:
-#REMOVE#                    anarchy_runtime.custom_objects_api.get_namespaced_custom_object(
-#REMOVE#                        anarchy_runtime.operator_domain, anarchy_runtime.api_version, action_namespace, 'anarchyactions', action_name
-#REMOVE#                    )
-#REMOVE#                except kubernetes.client.rest.ApiException as e:
-#REMOVE#                    if e.status == 404:
-#REMOVE#                        self.logger.info(
-#REMOVE#                            'Clearing deleted AnarchyAction from AnarchySubject status.activeAction',
-#REMOVE#                            extra = dict(
-#REMOVE#                                action = active_action_ref,
-#REMOVE#                                subject = subject_ref,
-#REMOVE#                            )
-#REMOVE#                        )
-#REMOVE#                        subject_resource['status']['activeAction'] = None
-#REMOVE#                        subject_update_required = True
-#REMOVE#                    else:
-#REMOVE#                        raise
-#REMOVE#
-#REMOVE#            lost_first_active_run = False
-#REMOVE#            active_runs = []
-#REMOVE#            for i, active_run_ref in enumerate(subject_resource.get('status', {}).get('runs', {}).get('active', [])):
-#REMOVE#                run_name = active_run_ref['name']
-#REMOVE#                run_namespace = active_run_ref['namespace']
-#REMOVE#                try:
-#REMOVE#                    anarchy_runtime.custom_objects_api.get_namespaced_custom_object(
-#REMOVE#                        anarchy_runtime.operator_domain, anarchy_runtime.api_version, run_namespace, 'anarchyruns', run_name
-#REMOVE#                    )
-#REMOVE#                    active_runs.append(active_run_ref)
-#REMOVE#                except kubernetes.client.rest.ApiException as e:
-#REMOVE#                    if e.status == 404:
-#REMOVE#                        self.logger.info(
-#REMOVE#                            'Removing deleted AnarchyRun from AnarchySubject status.runs.active',
-#REMOVE#                            extra = dict(
-#REMOVE#                                run = active_run_ref,
-#REMOVE#                                subject = subject_ref,
-#REMOVE#                            )
-#REMOVE#                        )
-#REMOVE#                        subject_update_required = True
-#REMOVE#                        lost_first_active_run = i == 0
-#REMOVE#                    else:
-#REMOVE#                        raise
-#REMOVE#
-#REMOVE#            if subject_update_required:
-#REMOVE#                try:
-#REMOVE#                    subject_resource['status']['runs']['active'] = active_runs
-#REMOVE#                    resource = anarchy_runtime.custom_objects_api.replace_namespaced_custom_object_status(
-#REMOVE#                        anarchy_runtime.operator_domain, anarchy_runtime.api_version, subject_namespace, 'anarchysubjects', subject_name, subject_resource
-#REMOVE#                    )
-#REMOVE#                except kubernetes.client.rest.ApiException as e:
-#REMOVE#                    if e.status == 404 \
-#REMOVE#                    or e.status == 409:
-#REMOVE#                        pass
-#REMOVE#                    else:
-#REMOVE#                        raise
-#REMOVE#
-#REMOVE#                if lost_first_active_run and len(active_runs) > 0:
-#REMOVE#                    run_name = active_runs[0]['name']
-#REMOVE#                    run_namespace = active_runs[0]['namespace']
-#REMOVE#                    anarchy_runtime.custom_objects_api.patch_namespaced_custom_object(
-#REMOVE#                        anarchy_runtime.operator_domain, anarchy_runtime.api_version, run_namespace, 'anarchyruns', run_name,
-#REMOVE#                        {'metadata': {'labels': { anarchy_runtime.runner_label: 'pending' } } }
-#REMOVE#                    )
-
-#REMOVE#    def cleanup_actions(self, anarchy_runtime):
-#REMOVE#        """
-#REMOVE#        Delete AnarchyActions that have finished a while ago, configured by spec.removeFinishedActions.after
-#REMOVE#        """
-#REMOVE#        time_interval = self.remove_finished_actions_after
-#REMOVE#        if not isinstance(time_interval, timedelta):
-#REMOVE#            return
-#REMOVE#        for action_resource in anarchy_runtime.custom_objects_api.list_namespaced_custom_object(
-#REMOVE#            anarchy_runtime.operator_domain, anarchy_runtime.api_version, anarchy_runtime.operator_namespace, 'anarchyactions',
-#REMOVE#            label_selector='{}={},{}'.format(anarchy_runtime.governor_label, self.name, anarchy_runtime.finished_label)
-#REMOVE#        ).get('items', []):
-#REMOVE#            action_name = action_resource['metadata']['name']
-#REMOVE#            # If action has no finishedTimestamp than do not delete
-#REMOVE#            finished_timestamp = action_resource.get('status', {}).get('finishedTimestamp')
-#REMOVE#            if not finished_timestamp:
-#REMOVE#                continue
-#REMOVE#
-#REMOVE#            # If action has not finished longer ago than the interval then do not delete
-#REMOVE#            finished_datetime = datetime.strptime(finished_timestamp, '%Y-%m-%dT%H:%M:%SZ')
-#REMOVE#            if finished_datetime + time_interval > datetime.utcnow():
-#REMOVE#                continue
-#REMOVE#
-#REMOVE#            try:
-#REMOVE#                anarchy_runtime.custom_objects_api.delete_namespaced_custom_object(
-#REMOVE#                    anarchy_runtime.operator_domain, anarchy_runtime.api_version, anarchy_runtime.operator_namespace, 'anarchyactions', action_name
-#REMOVE#                )
-#REMOVE#            except kubernetes.client.rest.ApiException as e:
-#REMOVE#                if e.status != 404:
-#REMOVE#                    raise
-
-#REMOVE#    def cleanup_runs(self, anarchy_runtime):
-#REMOVE#        """
-#REMOVE#        Delete AnarchyRuns that have posted results a while ago, configured by spec.removeSuccessfulRuns.after
-#REMOVE#        """
-#REMOVE#        time_interval = self.remove_successful_runs_after
-#REMOVE#        if not isinstance(time_interval, timedelta):
-#REMOVE#            return
-#REMOVE#        for run_resource in anarchy_runtime.custom_objects_api.list_namespaced_custom_object(
-#REMOVE#            anarchy_runtime.operator_domain, anarchy_runtime.api_version, anarchy_runtime.operator_namespace, 'anarchyruns',
-#REMOVE#            label_selector='{}={},{}=successful'.format(anarchy_runtime.governor_label, self.name, anarchy_runtime.runner_label)
-#REMOVE#        ).get('items', []):
-#REMOVE#            run_name = run_resource['metadata']['name']
-#REMOVE#            # If run has no runPostTimestamp than do not delete
-#REMOVE#            run_post_timestamp = run_resource.get('spec', {}).get('runPostTimestamp')
-#REMOVE#            if not run_post_timestamp:
-#REMOVE#                continue
-#REMOVE#
-#REMOVE#            # If run has not posted a result longer ago than the interval then do not delete
-#REMOVE#            run_post_datetime = datetime.strptime(run_post_timestamp, '%Y-%m-%dT%H:%M:%SZ')
-#REMOVE#            if run_post_datetime + time_interval > datetime.utcnow():
-#REMOVE#                continue
-#REMOVE#
-#REMOVE#            try:
-#REMOVE#                anarchy_runtime.custom_objects_api.delete_namespaced_custom_object(
-#REMOVE#                    anarchy_runtime.operator_domain, anarchy_runtime.api_version, anarchy_runtime.operator_namespace, 'anarchyruns', run_name
-#REMOVE#                )
-#REMOVE#            except kubernetes.client.rest.ApiException as e:
-#REMOVE#                if e.status != 404:
-#REMOVE#                    raise
-
     def get_context_vars(self, obj, context, anarchy_runtime):
         '''
         Get variables for a context object such as the governor, subject, action config, etc
@@ -522,7 +368,16 @@ class AnarchyGovernor(object):
                 )
         return merged_vars
 
-    def run_ansible(self, anarchy_runtime, run_config, run_vars, context, anarchy_subject, anarchy_action, event_name=None):
+    def run_ansible(
+        self,
+        anarchy_runtime,
+        run_config,
+        run_vars,
+        context,
+        anarchy_subject,
+        anarchy_action,
+        event_name=None,
+    ):
         run_spec = {
             'preTasks': run_config.pre_tasks,
             'roles': run_config.roles,
@@ -594,28 +449,6 @@ class AnarchyGovernor(object):
         anarchy_run_meta = anarchy_run['metadata']
         anarchy_run_name = anarchy_run_meta['name']
 
-        if anarchy_action:
-            anarchy_action.add_run_to_status(anarchy_run, anarchy_runtime)
-
-        anarchy_subject.add_run_to_status(anarchy_run, anarchy_runtime)
-
-        if anarchy_subject.active_run_name == anarchy_run_name:
-            anarchy_subject.set_active_run_to_pending(anarchy_runtime)
-        else:
-            anarchy_subject.logger.debug(
-                'Not setting new AnarchyRun as pending, AnarchySubject already has active run',
-                extra = dict(
-                    activeRun = anarchy_subject.active_run_ref,
-                    newRun = dict(
-                        apiVersion = anarchy_runtime.api_group_version,
-                        kind = 'AnarchyRun',
-                        name = anarchy_run_name,
-                        namespace = anarchy_run_meta['namespace'],
-                        uid = anarchy_run_meta['uid']
-                    ),
-                )
-            )
-
     def subject_event_handler(self, name):
         if name in self.subject_event_handlers:
             return self.subject_event_handlers[name]
@@ -628,7 +461,7 @@ class AnarchyGovernor(object):
         return dict(
             apiVersion = self.api_version,
             kind = self.kind,
-            metadata = dict(self.metadata),
-            spec = dict(self.spec),
-            status = dict(self.status),
+            metadata = copy.deepcopy(self.metadata),
+            spec = copy.deepcopy(self.spec),
+            status = copy.deepcopy(self.status),
         )

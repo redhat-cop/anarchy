@@ -103,8 +103,8 @@ class AnarchyRunner:
             )
             return None, None, None
 
-        anarchy_run_ref = anarchy_runner.get_current_run(pod_ref)
-        return anarchy_runner, runner_pod, anarchy_run_ref
+        run_ref, subject_ref = anarchy_runner.get_current_run_and_subject(pod_ref)
+        return anarchy_runner, runner_pod, run_ref, subject_ref
 
     @staticmethod
     def create_default(anarchy_runtime):
@@ -236,23 +236,23 @@ class AnarchyRunner:
                     apiVersion = anarchy_runtime.api_group_version,
                     kind = 'AnarchyRunner',
                     metadata = dict(
-                        annotations = dict(annotations),
+                        annotations = dict(annotations) if annotations else None,
                         creationTimestamp = meta["creationTimestamp"],
                         deletionTimestamp = meta.get("deletionTimestamp"),
-                        labels = dict(labels),
+                        labels = dict(labels) if labels else None,
                         name = name,
                         namespace = namespace,
                         resourceVersion = meta["resourceVersion"],
                         uid = uid,
                     ),
                     spec = dict(spec),
-                    status = status,
+                    status = dict(status) if status else {},
                 )
 
             runner = AnarchyRunner.runners.get(name)
             if runner:
-                runner.local_logger.info("Refreshed AnarchyRunner")
                 runner.__init__(logger=logger, resource_object=resource_object)
+                runner.local_logger.debug("Refreshed AnarchyRunner")
             else:
                 runner = AnarchyRunner(logger=logger, resource_object=resource_object)
                 AnarchyRunner.runners[name] = runner
@@ -274,7 +274,7 @@ class AnarchyRunner:
                     "uid": "-",
                 },
                 "spec": {
-                    "runner_token": AnarchyRunner.all_in_one_token,
+                    "token": AnarchyRunner.all_in_one_token,
                 },
                 "status": {
                     "pods": [{
@@ -581,22 +581,88 @@ class AnarchyRunner:
     def uid(self):
         return self.metadata.get('uid')
 
-    def get_current_run(self, pod_ref):
+    def clear_pod_run_reference(self, anarchy_runtime, runner_pod_name, run_name=None):
+        runner_pod_ref = dict(
+            apiVersion = 'v1',
+            kind = 'Pod',
+            name = runner_pod_name,
+            namespace = self.namespace,
+        )
+        with self.lock:
+            while True:
+                runner_pod_found = False
+                run_ref = None
+                resource_object = self.to_dict()
+                subject_ref = None
+
+                for status_pod in resource_object['status']['pods']:
+                    if status_pod['name'] == runner_pod_name:
+                        runner_pod_found = True
+                        run_ref = status_pod.pop('run', None)
+                        subject_ref = status_pod.pop('subject', None)
+                        if run_name \
+                        and (not run_ref or run_ref['name'] != run_name):
+                            return
+
+                if not runner_pod_found:
+                    self.local_logger.warning(
+                        'Did not find pod in AnarchyRunner status when clearing AnarchyRun!',
+                        extra = dict(
+                            pod = runner_pod_ref,
+                        )
+                    )
+                    return
+
+                if not run_ref:
+                    # Indicates runner pod was found but run was already cleared
+                    return
+
+                if anarchy_runtime.running_all_in_one:
+                    self.__init__(resource_object)
+                    return
+
+                try:
+                    resource_object = anarchy_runtime.custom_objects_api.replace_namespaced_custom_object_status(
+                        anarchy_runtime.operator_domain, anarchy_runtime.api_version,
+                        anarchy_runtime.operator_namespace, 'anarchyrunners', self.name,
+                        resource_object
+                    )
+                    self.__init__(resource_object)
+                    self.local_logger.info(
+                        'Cleared AnarchyRun for AnarchyRunner Pod',
+                        extra = dict(
+                            pod = runner_pod_ref,
+                            run = run_ref,
+                            subject = subject_ref,
+                        )
+                    )
+                    return
+                except kubernetes.client.rest.ApiException as e:
+                    if e.status == 409:
+                        # Conflict, refresh from api and retry
+                        if not self.refresh_from_api(anarchy_runtime):
+                            self.logger.error(
+                                'Failed to refresh AnarchyRunner to clear AnarchyRun from status!',
+                                extra = dict(
+                                    pod = runner_pod_ref,
+                                    run = run_ref,
+                                    subject = subject_ref,
+                                )
+                            )
+                            return
+                    else:
+                        raise
+
+    def get_current_run_and_subject(self, pod_ref):
         pod_name = pod_ref.get('name')
-        if not self.status:
-            self.local_logger.warning(
-                "Attempt to get current run for Pod when AnarchyRunner status not set!",
-                extra = dict(pod = pod_ref)
-            )
-            return None
-        for pod in self.status.get('pods', []):
-            if pod['name'] == pod_name:
-                return pod.get('run')
+        for status_pod in self.status.get('pods', []):
+            if status_pod['name'] == pod_name:
+                return status_pod.get('run'), status_pod.get('subject')
         self.local_logger.warning(
             "Attempt to get current run for Pod not listed in AnarchyRunner status!",
             extra = dict(pod = pod_ref)
         )
-        return None
+        return None, None
 
     def get_pod(self, name):
         return self.pods.get(name)
@@ -614,8 +680,6 @@ class AnarchyRunner:
         '''
         Manage Pods for AnarchyRunner
         '''
-
-        self.logger.warning("manage_runner_pods")
 
         #deployment_name = 'anarchy-runner-' + self.name
         #deployment_namespace = self.pod_namespace or anarchy_runtime.operator_namespace
@@ -848,7 +912,7 @@ class AnarchyRunner:
             'serviceAccountName', anarchy_runtime.anarchy_service_name + '-runner-' + self.name
         )
 
-    def set_pod_run_reference(self, anarchy_run, anarchy_runtime, runner_pod):
+    def set_pod_run_reference(self, anarchy_runtime, run, runner_pod):
         runner_pod_reference = dict(
             apiVersion = runner_pod.api_version,
             kind = runner_pod.kind,
@@ -864,18 +928,21 @@ class AnarchyRunner:
                 for status_pod in resource_object['status']['pods']:
                     if status_pod['name'] == runner_pod.metadata.name:
                         runner_pod_found = True
-                        status_pod['run'] = anarchy_run.reference
+                        status_pod['run'] = run.reference
+                        status_pod['subject'] = run.subject_reference
                 if not runner_pod_found:
                     self.local_logger.warning(
                         'Did not find pod in AnarchyRunner status when assinging AnarchyRun!',
                         extra = dict(
                             pod = runner_pod_reference,
-                            run = anarchy_run.reference,
+                            run = run.reference,
+                            subject = run.subject_reference,
                         )
                     )
                     self.status['pods'].append({
                         "name": runner_pod.metadata.name,
-                        "run": anarchy_run.reference,
+                        "run": run.reference,
+                        "subject": run.subject_reference,
                     })
 
                 if anarchy_runtime.running_all_in_one:
@@ -893,7 +960,8 @@ class AnarchyRunner:
                         'Assigned AnarchyRun to AnarchyRunner Pod',
                         extra = dict(
                             pod = runner_pod_reference,
-                            run = anarchy_run.reference,
+                            run = run.reference,
+                            subject = run.subject_reference,
                         )
                     )
                     return
@@ -905,7 +973,8 @@ class AnarchyRunner:
                                 'Failed to refresh AnarchyRunner to add run to status!',
                                 extra = dict(
                                     pod = runner_pod_reference,
-                                    run = anarchy_run.reference,
+                                    run = run.reference,
+                                    subject = run.subject_reference,
                                 )
                             )
                             return
@@ -916,9 +985,9 @@ class AnarchyRunner:
         return dict(
             apiVersion = self.api_version,
             kind = self.kind,
-            metadata = dict(self.metadata),
-            spec = dict(self.spec),
-            status = dict(self.status),
+            metadata = copy.deepcopy(self.metadata),
+            spec = copy.deepcopy(self.spec),
+            status = copy.deepcopy(self.status),
         )
 
     def unregister_pod(self, name, anarchy_runtime):

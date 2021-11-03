@@ -212,11 +212,24 @@ class AnarchyRunner(object):
         try:
             continue_file_path = os.path.join(self.output_dir + '/continue.yaml')
             if os.path.exists(continue_file_path):
-                ansible_run_result['continue'] = yaml.safe_load(open(continue_file_path))
+                ansible_run_result['continueAction'] = yaml.safe_load(open(continue_file_path))
         except Exception:
             logging.exception('Failure reading continue.yaml')
 
         self.post_result(anarchy_run, ansible_run_result)
+
+    def run_command(self, command, retries=5, delay=1):
+        attempt = 0
+        while True:
+            attempt += 1
+            try:
+                subprocess.check_output(command, stderr=subprocess.STDOUT)
+                return
+            except subprocess.CalledProcessError:
+                if attempt <= retries:
+                    time.sleep(delay)
+                else:
+                    raise
 
     def setup_python_venv(self, anarchy_run):
         requirements = anarchy_run['spec'].get('pythonRequirements', None)
@@ -240,10 +253,7 @@ class AnarchyRunner(object):
 
             # Apply requirements to virtualenv
             try:
-                subprocess.check_output(
-                    [virtual_env + '/bin/pip3', 'install', '-r', requirements_file],
-                    stderr=subprocess.STDOUT
-                )
+                self.run_command([virtual_env + '/bin/pip3', 'install', '-r', requirements_file])
             except Exception as e:
                 shutil.rmtree(virtual_env)
                 raise
@@ -272,15 +282,9 @@ class AnarchyRunner(object):
         os.symlink(requirements_dir + '/roles', ansible_roles_dir)
         try:
             if requirements and 'collections' in requirements:
-                subprocess.check_output(
-                    ['ansible-galaxy', 'collection', 'install', '-r', requirements_file],
-                    stderr=subprocess.STDOUT
-                )
+                self.run_command(['ansible-galaxy', 'collection', 'install', '-r', requirements_file])
             if requirements:
-                subprocess.check_output(
-                    ['ansible-galaxy', 'role', 'install', '-r', requirements_file],
-                    stderr=subprocess.STDOUT
-                )
+                self.run_command(['ansible-galaxy', 'role', 'install', '-r', requirements_file])
         except Exception as e:
             shutil.rmtree(requirements_dir)
             raise

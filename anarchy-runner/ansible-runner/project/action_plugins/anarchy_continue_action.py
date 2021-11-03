@@ -43,18 +43,18 @@ class ActionModule(ActionBase):
             )
 
         interval = parse_time_interval(after)
-        if interval:
-            after = (datetime.utcnow() + interval).strftime('%FT%TZ')
-        else:
+        if not interval:
             return dict(
                 failed = True,
                 message = 'Parameter `after` must be time interval. Ex: 1h, 10m, 30s',
             )
 
+        after_timestamp = (datetime.utcnow() + interval).strftime('%FT%TZ')
+
         with open(os.path.join(anarchy_output_dir, 'continue.yaml'), 'w') as f:
-            yaml.safe_dump({'after': int(interval.total_seconds())}, f)
+            yaml.safe_dump({'after': after_timestamp}, f)
 
         return dict(
-            after = int(interval.total_seconds()),
+            after = after_timestamp,
             failed = False,
         )

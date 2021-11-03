@@ -12,14 +12,14 @@
   k8s_info:
     api_version: apps/v1
     kind: Deployment
-    name: anarchy
+    name: anarchy-app
     namespace: "{{ anarchy_namespace }}"
-  register: r_get_odo_dc
-  failed_when: r_get_odo_dc.resources | length != 1
+  register: r_get_odo_deployment
+  failed_when: r_get_odo_deployment.resources | length != 1
 
 - name: Set anarchy_odo_deployment
   set_fact:
-    anarchy_odo_deployment: "{{ r_get_odo_dc.resources[0] }}"
+    anarchy_odo_deployment: "{{ r_get_odo_deployment.resources[0] }}"
 
 - name: Get odo anarchy-app Pod
   k8s_info:

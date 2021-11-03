@@ -1,14 +1,13 @@
 #!/usr/bin/env python
 
-from datetime import datetime, timedelta, timezone
-
+import asyncio
 import flask
 import gevent.pywsgi
 import json
 import kopf
 import kubernetes
-import kubernetes.client.rest
 import logging
+import math
 import os
 import prometheus_client
 import re
@@ -25,30 +24,44 @@ from anarchygovernor import AnarchyGovernor
 from anarchysubject import AnarchySubject
 from anarchyaction import AnarchyAction
 from anarchyrun import AnarchyRun
+from datetime import datetime
 
 api = flask.Flask('rest')
 
-action_check_interval = int(os.environ.get('ACTION_CHECK_INTERVAL', 5))
-cleanup_interval = int(os.environ.get('CLEANUP_INTERVAL', 300))
-run_check_interval = int(os.environ.get('RUN_CHECK_INTERVAL', 5))
+action_check_interval = int(os.environ.get('ACTION_CHECK_INTERVAL', 3))
+cleanup_interval = int(os.environ.get('CLEANUP_INTERVAL', 60))
+run_check_interval = int(os.environ.get('RUN_CHECK_INTERVAL', 3))
 runner_check_interval = int(os.environ.get('RUNNER_CHECK_INTERVAL', 20))
 
 operator_logger = logging.getLogger('operator')
 operator_logger.setLevel(os.environ.get('LOGGING_LEVEL', 'INFO'))
 anarchy_runtime = AnarchyRuntime()
 
+class InfiniteRelativeBackoff:
+    def __init__(self, n=2, maximum=60):
+        self.n = n
+        self.maximum = maximum
+
+    def __iter__(self):
+        prev_t = []
+        max_age = self.maximum * math.ceil(math.log(self.maximum) / math.log(self.n))
+        while True:
+            t = time.monotonic()
+            prev_t = [p for p in prev_t if t - p < max_age]
+            delay = self.n ** len(prev_t)
+            prev_t.append(t)
+            yield delay if delay < self.maximum else self.maximum
+
 @kopf.on.startup()
 def startup(settings: kopf.OperatorSettings, **_):
-    # Disable scanning for crds and namespaces
-    settings.scanning.disabled = True
+    # Never give up from network errors
+    settings.networking.error_backoffs = InfiniteRelativeBackoff()
+
+    # Use operator domain as finalizer
     settings.persistence.finalizer = anarchy_runtime.operator_domain
 
-    http_server = gevent.pywsgi.WSGIServer(('', 5000), api)
-    threading.Thread(
-        name = 'api',
-        target = run_api,
-        daemon = True,
-    ).start()
+    # Disable scanning for crds and namespaces
+    settings.scanning.disabled = True
 
     if anarchy_runtime.running_all_in_one:
         AnarchyRunner.start_all_in_one_runner(anarchy_runtime)
@@ -77,12 +90,27 @@ def startup(settings: kopf.OperatorSettings, **_):
         daemon = True,
     ).start()
 
+    AnarchySubject.preload(anarchy_runtime)
+    threading.Thread(
+        name = 'watch_subjects',
+        target = AnarchySubject.watch,
+        args = [anarchy_runtime],
+        daemon = True
+    )
+
+    threading.Thread(
+        name = 'api',
+        target = run_api,
+        daemon = True,
+    ).start()
+
+
 if not anarchy_runtime.running_all_in_one:
-    @kopf.on.create(anarchy_runtime.operator_domain, anarchy_runtime.api_version, 'anarchyrunners')
-    @kopf.on.resume(anarchy_runtime.operator_domain, anarchy_runtime.api_version, 'anarchyrunners')
-    @kopf.on.update(anarchy_runtime.operator_domain, anarchy_runtime.api_version, 'anarchyrunners')
-    def runner_event(logger, **kwargs):
-        runner = AnarchyRunner.register(anarchy_runtime=anarchy_runtime, logger=logger, **kwargs)
+    @kopf.on.create(anarchy_runtime.operator_domain, anarchy_runtime.api_version, 'anarchyrunners', id='anarchyrunner_create')
+    @kopf.on.resume(anarchy_runtime.operator_domain, anarchy_runtime.api_version, 'anarchyrunners', id='anarchyrunner_resume')
+    @kopf.on.update(anarchy_runtime.operator_domain, anarchy_runtime.api_version, 'anarchyrunners', id='anarchyrunner_update')
+    def runner_event(**kwargs):
+        runner = AnarchyRunner.register(anarchy_runtime=anarchy_runtime, **kwargs)
         runner.manage(anarchy_runtime)
 
     @kopf.on.event('pods', labels={anarchy_runtime.runner_label: kopf.PRESENT})
@@ -112,289 +140,485 @@ if not anarchy_runtime.running_all_in_one:
                 )
             )
 
-#action_delete_timers = {}
-#subject_action_start_timers = {}
 
-#def init():
-#    """Initialization function before management loops."""
-#    global init_complete
-#    AnarchyGovernor.init(anarchy_runtime)
-#    AnarchyRunner.init(anarchy_runtime)
-#
-#    init_complete = True
-#    operator_logger.debug("Completed init")
-#
-#def init_default_runner():
-#    """
-#    Create default AnarchyRunner if it does not exist.
-#    """
-#    try:
-#        runner = anarchy_runtime.custom_objects_api.get_namespaced_custom_object(
-#            anarchy_runtime.operator_domain, anarchy_runtime.api_version, anarchy_runtime.operator_namespace, 'anarchyrunners', 'default'
-#        )
-#    except kubernetes.client.rest.ApiException as e:
-#        if e.status == 404:
-#            operator_logger.info('Creating default AnarchyRunner')
-#            runner = anarchy_runtime.custom_objects_api.create_namespaced_custom_object(
-#                anarchy_runtime.operator_domain, anarchy_runtime.api_version, anarchy_runtime.operator_namespace, 'anarchyrunners',
-#                AnarchyRunner.default_runner_definition(anarchy_runtime)
-#            )
-#        else:
-#            raise
-#
-#@kopf.on.create(anarchy_runtime.operator_domain, anarchy_runtime.api_version, 'anarchysubjects')
-#def handle_subject_create(logger, **kwargs):
-#    try:
-#        subject = AnarchySubject.register(logger=logger, anarchy_runtime=anarchy_runtime, **kwargs)
-#        subject.handle_create(anarchy_runtime)
-#    except AssertionError as e:
-#        logger.warning(
-#            'AnarchySubject is invalid',
-#            extra = dict(
-#                reason = str(e)
-#            )
-#        )
-#
-#@kopf.on.resume(anarchy_runtime.operator_domain, anarchy_runtime.api_version, 'anarchysubjects')
-#def handle_subject_resume(logger, **kwargs):
-#    try:
-#        subject = AnarchySubject.register(logger=logger, anarchy_runtime=anarchy_runtime, **kwargs)
-#        subject.handle_resume(anarchy_runtime)
-#    except AssertionError as e:
-#        logger.warning(
-#            'AnarchySubject is invalid',
-#            extra = dict(
-#                reason = str(e)
-#            )
-#        )
-#
-#@kopf.on.update(anarchy_runtime.operator_domain, anarchy_runtime.api_version, 'anarchysubjects')
-#def handle_subject_update(logger, old, new, **kwargs):
-#    try:
-#        subject = AnarchySubject.register(logger=logger, anarchy_runtime=anarchy_runtime, **kwargs)
-#        if old['spec'] != new['spec']:
-#            subject.handle_spec_update(old, anarchy_runtime)
-#    except AssertionError as e:
-#        logger.warning(
-#            'AnarchySubject is invalid',
-#            extra = dict(
-#                reason = str(e)
-#            )
-#        )
-#
-#@kopf.on.delete(anarchy_runtime.operator_domain, anarchy_runtime.api_version, 'anarchysubjects')
-#def handle_subject_delete(logger, **kwargs):
-#    subject = AnarchySubject.register(logger=logger, anarchy_runtime=anarchy_runtime, **kwargs)
-#    subject.handle_delete(anarchy_runtime)
-#
-#@kopf.on.event(anarchy_runtime.operator_domain, anarchy_runtime.api_version, 'anarchysubjects')
-#def handle_subject_event(event, logger, **_):
-#    '''
-#    Monitor for update events after delete has begun.
-#    The Kopf framework stops tracking updates after the delete handler has succeeded.
-#    '''
-#    obj = event.get('object')
-#    if obj and obj.get('apiVersion') == anarchy_runtime.api_group_version:
-#        if event['type'] == 'DELETED':
-#            AnarchySubject.unregister(
-#                logger = logger,
-#                name = obj,
-#            )
-#        elif event['type'] in ['ADDED', 'MODIFIED', None]:
-#            subject = AnarchySubject.register(
-#                logger = logger,
-#                resource = obj,
-#                anarchy_runtime = anarchy_runtime,
-#            )
-#            if subject.delete_started \
-#            and anarchy_runtime.subject_label in self.metadata.get('finalizers', []):
-#                # Manually interact with the kopf last-handled-configuration
-#                # annotation that is usually managed by kopf.
-#                last_handled_configuration = self.last_handled_configuration
-#                if last_handled_configuration and self.spec != last_handled_configuration['spec']:
-#                    self.handle_spec_update(last_handled_configuration, anarchy_runtime)
-#                    # Update kopf last-handled-configuration annotation
-#                    resource = anarchy_runtime.custom_objects_api.patch_namespaced_custom_object(
-#                        anarchy_runtime.operator_domain, anarchy_runtime.api_version, self.namespace, 'anarchysubjects', self.name,
-#                        {
-#                            'metadata': {
-#                                'annotations': {
-#                                    'kopf.zalando.org/last-handled-configuration': json.dumps({
-#                                        'metadata': {
-#                                            'annotations': {
-#                                                k: v for k, v in self.metadata.get('annotations', {}).items()
-#                                                if k != 'kopf.zalando.org/last-handled-configuration'
-#                                            },
-#                                            'labels': self.metadata.get('labels', {})
-#                                        },
-#                                        'spec': self.spec,
-#                                    }),
-#                                }
-#                            }
-#                        }
-#                    )
-#
-#@kopf.on.create(anarchy_runtime.operator_domain, anarchy_runtime.api_version, 'anarchyactions')
-#@kopf.on.resume(anarchy_runtime.operator_domain, anarchy_runtime.api_version, 'anarchyactions')
-#@kopf.on.update(anarchy_runtime.operator_domain, anarchy_runtime.api_version, 'anarchyactions')
-#def handle_action(body, logger, **_):
-#    action = AnarchyAction(body, logger)
-#
-#    # Remove timer if set. It will be reset if appropriate.
-#    action_delete_timers.pop(action.name, None)
-#
-#    governor = action.get_governor(anarchy_runtime)
-#    if not governor:
-#        raise kopf.TemporaryError(
-#            'Cannot find AnarchyGovernor',
-#            delay = 30,
-#            extra = dict(
-#                subject = action.governor_ref(anarchy_runtime)
-#            )
-#        )
-#
-#    subject = action.get_subject(anarchy_runtime)
-#    if not subject:
-#        raise kopf.TemporaryError(
-#            'Cannot find AnarchySubject',
-#            delay = 30,
-#            extra = dict(
-#                subject = action.subject_ref(anarchy_runtime)
-#            )
-#        )
-#
-#    # Initialize actions if not fully initalized with owner
-#    if not action.has_owner:
-#        action.set_owner(subject, anarchy_runtime)
-#
-#    if action.is_finished:
-#        if subject.active_action_name == action.name:
-#            next_action = subject.resolve_active_action(action)
-#            if next_action:
-#                next_action = AnarchyAction(next_action)
-#                next_action.start()
-#
-#        finished_datetime = datetime.strptime(finished_timestamp, '%Y-%m-%dT%H:%M:%SZ')
-#        remove_after_datetime = finished_datetime + governor.remove_finished_actions_after
-#        remove_after_seconds = (remove_after_datetime - datetime.utcnow()).total_seconds()
-#
-#
-#
-#        if remove_after_seconds <= 0:
-#            action.delete(anarchy_runtime)
-#        else:
-#            timer = threading.Timer(remove_after_seconds, action.delete, args=[anarchy_runtime])
-#            timer.daemon = True
-#            timer.start()
-#            action_delete_timers[action.name] = timer
-#    elif not action.has_run_scheduled:
-#        start_after_seconds = (action.after_datetime - datetime.utcnow()).total_seconds()
-#        subject = action.get_subject(anarchy_runtime)
-#        if subject.active_action_name == action.name:
-#            if start_after_seconds <= 0
-#                action.start(anarchy_runtime)
-#            else:
-#                timer = threading.Timer(start_after_seconds, action.start, args=[anarchy_runtime])
-#                timer.daemon = True
-#                timer.start()
-#                subject_action_start_timers[subject.name] = timer
-#        elif subject.active_action_name:
-#
-#            # Already have an active action, add this action to pending
-#            ...
-#        elif start_after_seconds <= 0:
-#            # Set this action as the active action for the subject and start
-#            ...
-#        else:
-#            # Add this action to the subject's pending actions and set timer
-#
-#
-#
-#
-#
-#
-#
-#
-#
-#    subject = action.get_subject(anarchy_runtime)
-#
-#
-#
-#
-#
-#
-#    elif not action.is_started:
-#        start_after_seconds = (datetime.utcnow() - action.after_datetime).total_seconds()
-#        subject = action.get_subject(anarchy_runtime)
-#        if subject.active_action_name:
-#            if action.name == subject.active_action_name:
-#                # Action scheduled for continued execution
-#                if start_after_seconds < 0:
-#                    action.start()
-#                else:
-#                    action.
-#            else:
-#
-#        else:
-#
-#
-#
-#
-#            pass
-#
-#
-#
-#
-#        # 
-#        if start_after_seconds < 0:
-#            action.start(anarchy_runtime)
-#        else:
-#
-#
-#
-#
-#
-#
-#@kopf.on.delete(anarchy_runtime.operator_domain, anarchy_runtime.api_version, 'anarchyactions')
-#def handle_action_delete(body, logger, **_):
-#    action = AnarchyAction(body)
-#
-#
-#
-#@api.route('/action/<string:anarchy_action_name>', methods=['POST'])
-#def action_callback(anarchy_action_name):
-#    operator_logger.info("Action callback for %s", anarchy_action_name)
-#    return handle_action_callback(anarchy_action_name, None)
-#@api.route('/action/<string:anarchy_action_name>/<string:callback_name>', methods=['POST'])
-#def named_action_callback(anarchy_action_name, callback_name):
-#    operator_logger.info("AnarchyAction %s received callback %s", anarchy_action_name, callback_name)
-#    return handle_action_callback(anarchy_action_name, callback_name)
-#
-#def handle_action_callback(anarchy_action_name, callback_name):
-#    if not flask.request.json:
-#        flask.abort(400)
-#    anarchy_action = AnarchyAction.get(anarchy_action_name, anarchy_runtime)
-#    if not anarchy_action:
-#        operator_logger.warning("AnarchyAction %s not found for callback", anarchy_action_name)
-#        flask.abort(404)
-#    if not anarchy_action.check_callback_token(flask.request.headers.get('Authorization', '')):
-#        operator_logger.warning("Invalid callback token for AnarchyAction %s", anarchy_action_name)
-#        flask.abort(403)
-#    if anarchy_action.finished_timestamp:
-#        operator_logger.warning("Invalid callback to finished AnarchyAction %s", anarchy_action_name)
-#        flask.abort(400)
-#    anarchy_action.process_callback(anarchy_runtime, callback_name, flask.request.json)
-#    return flask.jsonify({'status': 'ok'})
+@kopf.on.create(anarchy_runtime.operator_domain, anarchy_runtime.api_version, 'anarchysubjects')
+def subject_create(**kwargs):
+    subject = AnarchySubject.register(anarchy_runtime=anarchy_runtime, **kwargs)
+    subject.initialize_metadata(anarchy_runtime)
+    subject.process_subject_event_handlers(anarchy_runtime, 'create')
+
+
+@kopf.on.resume(anarchy_runtime.operator_domain, anarchy_runtime.api_version, 'anarchysubjects')
+def subject_resume(**kwargs):
+    subject = AnarchySubject.register(anarchy_runtime=anarchy_runtime, **kwargs)
+    subject.initialize_metadata(anarchy_runtime)
+
+
+@kopf.on.update(anarchy_runtime.operator_domain, anarchy_runtime.api_version, 'anarchysubjects')
+def subject_update(new, old, **kwargs):
+    subject = AnarchySubject.register(anarchy_runtime=anarchy_runtime, **kwargs)
+    if old['spec'] != new['spec']:
+        # Updates are checked againts sha256 annotition to allow Anarchy to
+        # skip processing when this annotation is updated along with the spec
+        if subject.check_spec_changed(anarchy_runtime=anarchy_runtime):
+            subject.process_subject_event_handlers(
+                anarchy_runtime=anarchy_runtime,
+                event_name='update',
+                old=old,
+            )
+
+
+@kopf.on.delete(anarchy_runtime.operator_domain, anarchy_runtime.api_version, 'anarchysubjects')
+def subject_delete(**kwargs):
+    subject = AnarchySubject.register(anarchy_runtime=anarchy_runtime, **kwargs)
+    event_handled = subject.process_subject_event_handlers(anarchy_runtime, 'delete')
+    if event_handled:
+        subject.record_delete_started(anarchy_runtime)
+    if not event_handled:
+        # Remove custom subject event handlers to allow delete to complete
+        subject.remove_finalizers(anarchy_runtime)
+
+
+@kopf.on.event(anarchy_runtime.operator_domain, anarchy_runtime.api_version, 'anarchysubjects')
+def subject_event(event, logger, **_):
+    '''
+    Monitor for update events after delete has begun.
+    The Kopf framework stops tracking updates after the delete handler has succeeded.
+    '''
+    if 'object' not in event:
+        return
+
+    obj = event.get('object')
+    if obj.get('apiVersion') != anarchy_runtime.api_group_version:
+        return
+
+    if event['type'] == 'DELETED':
+        AnarchySubject.unregister(obj['metadata']['name'])
+    elif event['type'] in ['ADDED', 'MODIFIED', None]:
+        subject = AnarchySubject.register(
+            logger = logger,
+            resource_object = obj,
+            anarchy_runtime = anarchy_runtime,
+        )
+        if subject.delete_started \
+        and anarchy_runtime.subject_label in subject.metadata.get('finalizers', []):
+            # Manually interact with the kopf last-handled-configuration
+            # annotation that is usually managed by kopf.
+            last_handled_configuration = subject.last_handled_configuration
+            if last_handled_configuration and subject.spec != last_handled_configuration['spec']:
+                # Updates are checked againts sha256 annotition to allow Anarchy to
+                # skip processing when this annotation is updated along with the spec
+                if subject.check_spec_changed(anarchy_runtime=anarchy_runtime):
+                    subject.process_subject_event_handlers(
+                        anarchy_runtime=anarchy_runtime,
+                        event_name='update',
+                        old=last_handled_configuration,
+                    )
+
+                # Update kopf last-handled-configuration annotation
+                resource_object = anarchy_runtime.custom_objects_api.patch_namespaced_custom_object(
+                    anarchy_runtime.operator_domain, anarchy_runtime.api_version,
+                    subject.namespace, 'anarchysubjects', subject.name,
+                    {
+                        'metadata': {
+                            'annotations': {
+                                'kopf.zalando.org/last-handled-configuration': json.dumps({
+                                    'metadata': {
+                                        'annotations': {
+                                            k: v for k, v in subject.metadata.get('annotations', {}).items()
+                                            if k != 'kopf.zalando.org/last-handled-configuration'
+                                        },
+                                        'labels': subject.metadata.get('labels', {})
+                                    },
+                                    'spec': subject.spec,
+                                }),
+                            }
+                        }
+                    }
+                )
+                subject.__init__(resource_object)
+
+
+@kopf.daemon(anarchy_runtime.operator_domain, anarchy_runtime.api_version, 'anarchysubjects', cancellation_timeout=1)
+async def subject_daemon(stopped, **kwargs):
+    subject = AnarchySubject.register(anarchy_runtime=anarchy_runtime, **kwargs)
+    try:
+        while not stopped:
+            if subject.active_action_name:
+                action_name = subject.active_action_name
+                action = AnarchyAction.get_from_cache(action_name)
+                if not action:
+                    action = AnarchyAction.get_from_api(action_name, anarchy_runtime)
+                if not action:
+                    subject.logger.warning(
+                        "Active AnarchyAction not found!",
+                        extra = dict(action=subject.active_action_ref),
+                    )
+                    subject.remove_action_from_status(
+                        action_name = action_name,
+                        anarchy_runtime = anarchy_runtime,
+                    )
+            for action_ref in subject.pending_actions:
+                action_name = action_ref['name']
+                action = AnarchyAction.get_from_cache(action_name)
+                if not action:
+                    action = AnarchyAction.get_from_api(action_name, anarchy_runtime)
+                if not action:
+                    subject.logger.warning(
+                        "Pending AnarchyAction not found!",
+                        extra = dict(action=action_ref),
+                    )
+                    subject.remove_action_from_status(
+                        action_name = action_name,
+                        anarchy_runtime = anarchy_runtime,
+                    )
+            for run_ref in subject.active_runs:
+                run_name = run_ref['name']
+                run = AnarchyRun.get_from_cache(run_name)
+                if not run:
+                    run = AnarchyRun.get_from_api(run_name, anarchy_runtime)
+                if not run:
+                    subject.logger.warning(
+                        "Active AnarchyRun not found!",
+                        extra = dict(run=run_ref),
+                    )
+                    subject.remove_run_from_status(
+                        anarchy_runtime = anarchy_runtime,
+                        run_name = run_name,
+                    )
+            await asyncio.sleep(cleanup_interval)
+    except asyncio.CancelledError:
+        pass
+    except asyncio.CancelledError:
+        pass
+
+
+@kopf.on.create(anarchy_runtime.operator_domain, anarchy_runtime.api_version, 'anarchyactions')
+def action_create(**kwargs):
+    action = AnarchyAction.register(anarchy_runtime=anarchy_runtime, **kwargs)
+    action.set_owner_references(
+        anarchy_runtime = anarchy_runtime,
+    )
+    subject = action.get_subject()
+    subject.add_action_to_status(
+        action = action,
+        anarchy_runtime = anarchy_runtime,
+    )
+
+
+@kopf.on.resume(anarchy_runtime.operator_domain, anarchy_runtime.api_version, 'anarchyactions')
+def action_resume(**kwargs):
+    action = AnarchyAction.register(anarchy_runtime=anarchy_runtime, **kwargs)
+    subject = action.get_subject()
+    if not subject:
+        raise kopf.TemporaryError(
+            "Unable to find AnarchySubject for AnarchyAction",
+            delay = 5
+        )
+    if action.is_finished:
+        return
+    subject.add_action_to_status(
+        action = action,
+        anarchy_runtime = anarchy_runtime,
+    )
+
+
+@kopf.on.update(anarchy_runtime.operator_domain, anarchy_runtime.api_version, 'anarchyactions')
+def action_update(new, old, **kwargs):
+    action = AnarchyAction.register(anarchy_runtime=anarchy_runtime, **kwargs)
+    subject = action.get_subject()
+    if not subject:
+        raise kopf.TemporaryError(
+            "Unable to find AnarchySubject for AnarchyAction",
+            delay = 5
+        )
+
+    if action.is_finished:
+        # Action just finished, remove from AnarchySubject status
+        if not old['metadata'].get('labels', {}).get(anarchy_runtime.finished_label):
+            subject.remove_action_from_status(
+                action_name = action.name,
+                anarchy_runtime = anarchy_runtime,
+            )
+    else:
+        # Action was rescheduled, update schedule in AnarchySubject status
+        if new['spec'].get('after') != old['spec'].get('after'):
+            subject.reschedule_action_in_status(action=action, anarchy_runtime=anarchy_runtime)
+
+
+@kopf.on.delete(anarchy_runtime.operator_domain, anarchy_runtime.api_version, 'anarchyactions')
+def action_delete(logger, name, spec, **kwargs):
+    AnarchyAction.unregister(name)
+    subject_name = spec.get('subjectRef', {}).get('name')
+
+    if subject_name:
+        subject = AnarchySubject.get(subject_name)
+        if subject:
+            subject.remove_action_from_status(
+                action_name = name,
+                anarchy_runtime = anarchy_runtime,
+            )
+
+
+@kopf.daemon(anarchy_runtime.operator_domain, anarchy_runtime.api_version, 'anarchyactions', cancellation_timeout=1)
+async def action_daemon(stopped, **kwargs):
+    action = AnarchyAction.register(anarchy_runtime=anarchy_runtime, **kwargs)
+    try:
+        while not stopped:
+            if not action.has_run_scheduled:
+                if action.after_datetime <= datetime.utcnow():
+                    subject = action.get_subject()
+                    if not subject:
+                        raise kopf.TemporaryError(
+                            "Unable to find AnarchySubject for AnarchyAction",
+                            delay = 10
+                        )
+                    if subject.active_action_name:
+                        if action.name == subject.active_action_name:
+                            action.start(anarchy_runtime = anarchy_runtime)
+                    else:
+                        if action.name == subject.next_pending_action_name:
+                            action.start(anarchy_runtime = anarchy_runtime)
+                await asyncio.sleep(action_check_interval)
+            elif action.is_finished:
+                governor = action.get_governor()
+                if governor:
+                    delete_datetime = action.finished_datetime + governor.remove_finished_actions_after
+                    if delete_datetime <= datetime.utcnow():
+                        action.delete(anarchy_runtime)
+                else:
+                    action.delete(anarchy_runtime)
+                await asyncio.sleep(cleanup_interval)
+            else:
+                await asyncio.sleep(action_check_interval)
+    except asyncio.CancelledError:
+        pass
+
+
+@kopf.on.create(anarchy_runtime.operator_domain, anarchy_runtime.api_version, 'anarchyruns', id="run_create")
+@kopf.on.resume(anarchy_runtime.operator_domain, anarchy_runtime.api_version, 'anarchyruns', id="run_resume")
+def run_create_or_resume(**kwargs):
+    run = AnarchyRun.register(anarchy_runtime=anarchy_runtime, **kwargs)
+
+    # Do not do anything else with run if it is finished already
+    if anarchy_runtime.finished_label in run.labels:
+        return
+
+    subject = run.get_subject()
+    if not subject:
+        raise kopf.TemporaryError(
+            "Unable to find AnarchySubject for AnarchyRun",
+            delay = 5
+        )
+
+    if run.action_name:
+        action = run.add_to_action_status(anarchy_runtime=anarchy_runtime)
+        if not action:
+            raise kopf.TemporaryError(
+                "Unable to find AnarchyAction for AnarchyRun!",
+                delay = 5
+            )
+
+    subject.add_run_to_status(anarchy_runtime=anarchy_runtime, run=run)
+
+@kopf.on.update(anarchy_runtime.operator_domain, anarchy_runtime.api_version, 'anarchyruns')
+def run_update(new, old, **kwargs):
+    run = AnarchyRun.register(anarchy_runtime=anarchy_runtime, **kwargs)
+
+    new_spec = new['spec']
+    old_spec = old['spec']
+    new_run_post_timestamp = new_spec.get('runPostTimestamp')
+    old_run_post_timestamp = old_spec.get('runPostTimestamp')
+
+    # Only do something if new result was posted
+    if new_run_post_timestamp == old_run_post_timestamp:
+        return
+
+    governor = run.get_governor()
+    if not governor:
+        raise kopf.TemporaryError(
+            f"AnarchyRun posted result but cannot find AnarchyGovernor {run.governor_name}!",
+            delay = 5
+        )
+
+    subject = run.get_subject()
+    if not subject:
+        raise kopf.TemporaryError(
+            f"AnarchyRun posted result but cannot find AnarchySubject {run.subject_name}!",
+            delay = 5
+        )
+
+    result_status = new_spec.get('result', {}).get('status')
+    if result_status == 'successful':
+        subject.remove_run_from_status(
+            anarchy_runtime = anarchy_runtime,
+            run_name = run.name,
+        )
+
+        if run.action_name:
+            action = AnarchyAction.get_from_cache(run.action_name)
+            if not action:
+                action = AnarchyAction.get_from_api(
+                    anarchy_runtime = anarchy_runtime,
+                    name = run.action_name, 
+                )
+            if not action:
+                raise kopf.TemporaryError(
+                    f"AnarchyRun posted result but cannot find AnarchyAction {run.action_name}!",
+                    delay = 5
+                )
+
+            action_config = governor.action_config(action.action)
+            if not action_config:
+                raise kopf.TemporaryError(
+                    "AnarchyRun posted result but cannot action config for AnarchyAction in AnarchyGovernor!",
+                    delay = 5
+                )
+
+            continue_action_after = run.continue_action_after
+            if continue_action_after:
+                run.logger.info(
+                    "Scheduling continuation for AnarchyAction",
+                    extra = {
+                        "action": action.reference,
+                        "after": continue_action_after,
+                    },
+                )
+                action.schedule_continuation(
+                    after = continue_action_after,
+                    anarchy_runtime = anarchy_runtime,
+                )
+            elif action_config.finish_on_successful_run:
+                run.logger.info(
+                    "Marking AnarchyAction as finished after successful AnarchyRun",
+                    extra = dict(action=action.reference),
+                )
+                action.set_finished(
+                    anarchy_runtime = anarchy_runtime,
+                    state = 'successful',
+                )
+    else:
+        subject.set_run_failure_in_status(
+            anarchy_runtime = anarchy_runtime,
+            run = run,
+        )
+
+
+@kopf.on.delete(anarchy_runtime.operator_domain, anarchy_runtime.api_version, 'anarchyruns')
+def run_delete(logger, name, spec, **_):
+    AnarchyRun.unregister(name)
+
+    subject_name = spec.get('subject', {}).get('name')
+    if subject_name:
+        subject = AnarchySubject.get(subject_name)
+        if subject:
+            subject.remove_run_from_status(
+                anarchy_runtime = anarchy_runtime,
+                run_name = name,
+            )
+
+    runner_ref = spec.get('runnerRef')
+    runner_pod = spec.get('runnerPod')
+    if runner_ref and runner_pod:
+        runner = AnarchyRunner.get(runner_ref['name'])
+        runner.clear_pod_run_reference(
+            anarchy_runtime = anarchy_runtime,
+            run_name = name,
+            runner_pod_name = runner_pod['name'],
+        )
+
+
+@kopf.daemon(anarchy_runtime.operator_domain, anarchy_runtime.api_version, 'anarchyruns', cancellation_timeout=1)
+async def run_daemon(stopped, **kwargs):
+    run = AnarchyRun.register(anarchy_runtime=anarchy_runtime, **kwargs)
+    try:
+        while not stopped:
+            subject = run.get_subject()
+            if not subject:
+                run.logger.info(
+                    'AnarchySubject found deleted in AnarchyRun daemon',
+                    extra = dict(subject=run.subject_reference)
+                )
+                # The AnarchyRun should auto-delete following the AnarhySubject
+                run.delete(anarchy_runtime)
+                return
+
+            governor = run.get_governor()
+            if not governor:
+                run.logger.warning(
+                    'Cannot find AnarchyGovernor for AnarchyRun!',
+                    extra = dict(governor=run.governor_reference)
+                )
+                return
+
+            # Delete if finished for longer than remove successful runs after configuration
+            if anarchy_runtime.finished_label in run.labels:
+                if governor:
+                    delete_datetime = run.run_post_datetime + governor.remove_successful_runs_after
+                    if delete_datetime <= datetime.utcnow():
+                        run.delete(anarchy_runtime)
+                else:
+                    run.delete(anarchy_runtime)
+                await asyncio.sleep(cleanup_interval)
+            else:
+                run.manage(anarchy_runtime=anarchy_runtime)
+                await asyncio.sleep(run_check_interval)
+    except asyncio.CancelledError:
+        pass
+
+
+@api.route('/action/<string:action_name>', methods=['POST'])
+def action_callback(action_name):
+    return handle_action_callback(action_name, None)
+@api.route('/action/<string:action_name>/<string:callback_name>', methods=['POST'])
+def named_action_callback(action_name, callback_name):
+    return handle_action_callback(action_name, callback_name)
+
+def handle_action_callback(action_name, callback_name):
+    if not flask.request.json:
+        flask.abort(400)
+
+    action_ref = dict(
+        apiVersion = anarchy_runtime.api_group_version,
+        kind = 'AnarchyAction',
+        name = action_name,
+        namespace = anarchy_runtime.operator_namespace,
+    )
+
+    action = AnarchyAction.get_from_api(action_name, anarchy_runtime)
+    if not action:
+        operator_logger.warning(
+            "AnarchyAction not found for callback",
+            extra=dict(action=action_ref, callback=callback_name)
+        )
+        flask.abort(404)
+
+    if not action.check_callback_token(flask.request.headers.get('Authorization', '')):
+        action.logger.warning(
+            "Invalid callback token for AnarchyAction",
+            extra=dict(callback=callback_name)
+        )
+        flask.abort(403)
+    if action.finished_timestamp:
+        action.logger.warning(
+            "Invalid callback to finished AnarchyAction",
+            extra=dict(callback=callback_name)
+        )
+        flask.abort(400)
+
+    action.process_callback(anarchy_runtime, callback_name, flask.request.json)
+    return flask.jsonify({'status': 'ok'})
+
 
 @api.route('/run', methods=['GET'])
 def get_run():
-    anarchy_runner, runner_pod, anarchy_run_ref = AnarchyRunner.check_runner_auth(
+    runner, runner_pod, run_ref, subject_ref = AnarchyRunner.check_runner_auth(
         flask.request.headers.get('Authorization', ''), anarchy_runtime
     )
-    if not anarchy_runner:
+    if not runner:
         flask.abort(400)
 
-    logger = anarchy_runner.local_logger
+    logger = runner.local_logger
 
     runner_pod_ref = dict(
         apiVersion = runner_pod.api_version,
@@ -404,11 +628,16 @@ def get_run():
         uid = runner_pod.metadata.uid,
     )
 
-    if anarchy_run_ref:
+    if run_ref:
         logger.warning(
             'AnarchyRunner requesting new run when an AnarchyRun should still be running',
-            extra = dict(pod=runner_pod_ref, run=anarchy_run_ref)
+            extra = dict(pod=runner_pod_ref, run=run_ref, subject=subject_ref)
         )
+        runner.clear_pod_run_reference(
+            anarchy_runtime = anarchy_runtime,
+            runner_pod_name = runner_pod.metadata.name,
+        )
+
 
     if runner_pod.metadata.deletion_timestamp:
         logger.debug(
@@ -428,532 +657,434 @@ def get_run():
     while True:
         # Loop trying to get a pending anarchy run and claim in for this runner
         # until either nothing is pending or one is claimed.
-        anarchy_run = AnarchyRun.get_pending(anarchy_runtime)
-        if not anarchy_run:
+        run = AnarchyRun.get_pending(anarchy_runtime)
+        if not run:
             logger.debug(
                 'No AnarchyRun pending for AnarchyRunner',
                 extra = dict(pod=runner_pod_ref)
             )
             return flask.jsonify(None)
-        if anarchy_run.set_runner(runner_pod.metadata.name, anarchy_runtime):
-            # If successfully set_runner on anarchy run, then break from loop
+        if run.set_runner_pod(
+            anarchy_runtime = anarchy_runtime,
+            runner = runner,
+            runner_pod = runner_pod,
+        ):
+            # If successfully set runner on anarchy run, then break from loop
             break
 
-    anarchy_subject = anarchy_run.get_subject(anarchy_runtime)
-    if not anarchy_subject:
+    subject = run.get_subject()
+    if not subject:
         logger.warning(
             'AnarchyRun was pending, but cannot find AnarchySubject!',
             extra = dict(
                 pod = runner_pod_ref,
-                run = anarchy_run.reference,
-                subject = anarchy_run.subject_reference,
+                run = run.reference,
+                subject = run.subject_reference,
             )
         )
         return flask.jsonify(None)
 
-    anarchy_governor = anarchy_subject.get_governor(anarchy_runtime)
-    if not anarchy_governor:
+    governor = subject.get_governor()
+    if not governor:
         logger.warning(
             'AnarchyRun was pending, but cannot find AnarchyGovernor!',
             extra = dict(
                 governor = subject.governor_reference,
                 pod = runner_pod_ref,
-                run = anarchy_run.reference,
+                run = run.reference,
                 subject = subject.reference,
             )
         )
         return flask.jsonify(None)
 
-    anarchy_runner.set_pod_run_reference(
-        anarchy_run = anarchy_run,
+    runner.set_pod_run_reference(
         anarchy_runtime = anarchy_runtime,
+        run = run,
         runner_pod = runner_pod,
     )
-    resp = anarchy_run.to_dict(anarchy_runtime)
-    resp['subject'] = anarchy_subject.to_dict(anarchy_runtime)
-    resp['governor'] = anarchy_governor.to_dict()
+    resp = run.to_dict()
+    resp['governor'] = governor.to_dict()
+    resp['subject'] = subject.to_dict()
     return flask.jsonify(resp)
 
-#@api.route('/run/<string:run_name>', methods=['POST'])
-#def post_run(run_name):
-#    anarchy_runner, runner_pod = check_runner_auth(flask.request.headers.get('Authorization', ''))
-#    if not anarchy_runner:
-#        flask.abort(400)
-#
-#    if not anarchy_runtime.running_all_in_one:
-#        run_value = runner_pod.metadata.labels.get(anarchy_runtime.run_label)
-#        anarchy_runtime.core_v1_api.patch_namespaced_pod(
-#            runner_pod.metadata.name, runner_pod.metadata.namespace,
-#            { 'metadata': { 'labels': { anarchy_runtime.run_label: '', anarchy_runtime.subject_label: '' } } }
-#        )
-#
-#        if run_value != run_name:
-#            operator_logger.warning(
-#                'AnarchyRunner %s Pod %s attempted to post run for %s but run label indicates %s',
-#                anarchy_runner.name, runner_pod.metadata.name, run_name, run_value
-#            )
-#            flask.abort(400)
-#
-#    # When an AnarchyRun is handling a delete completion it is normal for the
-#    # AnarchyRun and AnarchySubject to be deleted before the post is received.
-#    anarchy_run = AnarchyRun.get_from_api(run_name, anarchy_runtime)
-#    if not anarchy_run:
-#        operator_logger.info(
-#            'AnarchyRunner %s pod %s posted result on deleted run %s',
-#            anarchy_runner.name, runner_pod.metadata.name, run_name
-#        )
-#        return flask.jsonify({'success': True, 'msg': 'AnarchyRun not found'})
-#
-#    anarchy_subject = anarchy_run.get_subject(anarchy_runtime)
-#    if not anarchy_subject:
-#        operator_logger.warning(
-#            'AnarchyRun %s post to deleted AnarchySubject %s!',
-#            anarchy_run.name, anarchy_run.subject_name
-#        )
-#        return flask.jsonify({'success': True, 'msg': 'AnarchySubject not found'})
-#
-#    try:
-#        result = flask.request.json['result']
-#    except KeyError:
-#        flask.abort(400, flask.jsonify(
-#            {'success': False, 'error': 'Invalid run data'}
-#        ))
-#
-#    anarchy_run.post_result(result, runner_pod.metadata.name, anarchy_runtime)
-#    if run_name == anarchy_subject.active_run_name:
-#        if result['status'] == 'successful':
-#            anarchy_subject.remove_active_run_from_status(anarchy_run, anarchy_runtime)
-#            anarchy_subject.set_active_run_to_pending(anarchy_runtime)
-#            if anarchy_run.action_name:
-#                anarchy_action = AnarchyAction.get(anarchy_run.action_name, anarchy_runtime)
-#                anarchy_governor = anarchy_subject.get_governor(anarchy_runtime)
-#                action_config = anarchy_governor.action_config(anarchy_action.action)
-#                if result.get('continue'):
-#                    anarchy_action.schedule_continuation(result['continue'], anarchy_runtime)
-#                elif action_config.finish_on_successful_run:
-#                    if anarchy_action.name == anarchy_subject.active_action_name:
-#                        anarchy_subject.remove_active_action(anarchy_action, anarchy_runtime)
-#                    anarchy_action.set_finished('successful', anarchy_runtime)
-#        else:
-#            anarchy_subject.set_run_failure_in_status(anarchy_run, anarchy_runtime)
-#    else:
-#        operator_logger.warning(
-#            'AnarchyRun %s post to AnarchySubject %s, but was not the active run!',
-#            anarchy_run.name, anarchy_run.subject_name
-#        )
-#
-#    return flask.jsonify({'success':True})
-#
-#@api.route('/run/subject/<string:subject_name>', methods=['PATCH','DELETE'])
-#def patch_or_delete_subject(subject_name):
-#    anarchy_runner, runner_pod = check_runner_auth(flask.request.headers.get('Authorization', ''))
-#    if not anarchy_runner:
-#        flask.abort(400)
-#
-#    if not anarchy_runtime.running_all_in_one \
-#    and subject_name != runner_pod.metadata.labels.get(anarchy_runtime.subject_label):
-#        operator_logger.warning(
-#            'AnarchyRunner %s Pod %s cannot update AnarchySubject %s!',
-#            anarchy_runner.name, runner_pod.metadata.name, subject_name
-#        )
-#        flask.abort(400)
-#
-#    anarchy_subject = AnarchySubject.get(subject_name, anarchy_runtime)
-#    if not anarchy_subject:
-#        operator_logger.warning(
-#            'AnarchyRunner %s Pod %s attempted %s on deleted AnarchySubject %s!',
-#            anarchy_runner.name, runner_pod.metadata.name, flask.request.method, subject_name
-#        )
-#        flask.abort(400)
-#
-#    if flask.request.method == 'PATCH':
-#        if not 'patch' in flask.request.json:
-#            operator_logger.warning('No patch in AnarchySubject %s post', subject_name)
-#            flask.abort(400)
-#        result = anarchy_subject.patch(flask.request.json['patch'], anarchy_runtime)
-#    elif flask.request.method == 'DELETE':
-#        result = anarchy_subject.delete(flask.request.json.get('remove_finalizers', False), anarchy_runtime)
-#
-#    return flask.jsonify({'success': True, 'result': result})
-#
-#@api.route('/run/subject/<string:subject_name>/actions', methods=['POST'])
-#def run_subject_action_post(subject_name):
-#    subject_ref = dict(
-#        apiVersion = anarchy_runtime.api_group_version,
-#        kind = 'AnarchySubject',
-#        name = subject_name,
-#        namespace = anarchy_runtime.operator_namespace,
-#    )
-#
-#    anarchy_runner, runner_pod = check_runner_auth(flask.request.headers.get('Authorization', ''))
-#    if not anarchy_runner:
-#        flask.abort(400)
-#
-#    pod_ref = dict(
-#        apiVersion = 'v1',
-#        kind = 'Pod',
-#        name = runner_pod.metadata.name,
-#        namespace = runner_pod.metadata.namespace,
-#    )
-#
-#    if not anarchy_runtime.running_all_in_one \
-#    and subject_name != runner_pod.metadata.labels.get(anarchy_runtime.subject_label):
-#        anarchy_runner.logger.warning(
-#            'AnarchyRunner pod denied access to update AnarchySubject!',
-#            extra = dict(
-#                pod = pod_ref,
-#                subject = subject_ref,
-#            )
-#        )
-#        flask.abort(400)
-#
-#    anarchy_subject = AnarchySubject.get(subject_name, anarchy_runtime)
-#    if not anarchy_subject:
-#        anarchy_runner.logger.warning(
-#            'AnarchyRunner pod attempted to create action on deleted AnarchySubject!',
-#            extra = dict(
-#                pod = pod_ref,
-#                subject = subject_ref,
-#            )
-#        )
-#        flask.abort(400)
-#
-#    anarchy_governor = anarchy_subject.get_governor(anarchy_runtime)
-#    if not anarchy_governor:
-#        anarchy_runner.logger.warning(
-#            'AnarchyRunner pod cannot post action to AnarchySubject, unable to find AnarchyGovernor!',
-#            extra = dict(
-#                governor = dict(
-#                    apiVersion = anarchy_runtime.api_group_version,
-#                    kind = 'AnarchyGovernor',
-#                    name = anarchy_subject.governor_name,
-#                    namespace = anasrchy_subject.namespace_name,
-#                ),
-#                pod = pod_ref,
-#                subject = subject_ref,
-#            )
-#        )
-#        flask.abort(400)
-#
-#    action_name = flask.request.json.get('action', None)
-#    after_timestamp = flask.request.json.get('after', None)
-#    cancel_actions = flask.request.json.get('cancel', None)
-#
-#    if not action_name and not cancel_actions:
-#        anarchy_runner.warning(
-#            'No action or cancel given for scheduling action',
-#            extra = dict(
-#                pod = pod_ref,
-#                subject = subject_ref,
-#            )
-#        )
-#        flask.abort(400)
-#
-#    if after_timestamp and not re.match(r'\d\d\d\d-\d\d-\d\dT\d\d:\d\d:\d\dZ', after_timestamp):
-#        anarchy_runner.logger.warning(
-#            'Invalid datetime format given for action after value',
-#            extra = dict(
-#                after = after_timestamp,
-#                pod = pod_ref,
-#                subject = subject_ref,
-#            )
-#        )
-#        flask.abort(400)
-#
-#    if action_name not in cancel_actions:
-#        cancel_actions.append(action_name)
-#
-#    for action_resource in anarchy_runtime.custom_objects_api.list_namespaced_custom_object(
-#        anarchy_runtime.operator_domain, anarchy_runtime.api_version, anarchy_runtime.operator_namespace, 'anarchyactions',
-#        label_selector='{}/subject={}'.format(anarchy_runtime.operator_domain, anarchy_subject.name)
-#    ).get('items', []):
-#        if action_resource['spec']['action'] in cancel_actions \
-#        and 'status' not in action_resource:
-#            anarchy_runtime.custom_objects_api.delete_namespaced_custom_object(
-#                anarchy_runtime.operator_domain, anarchy_runtime.api_version, anarchy_runtime.operator_namespace, 'anarchyactions', action_resource['metadata']['name']
-#            )
-#
-#    if action_name:
-#        result = anarchy_runtime.custom_objects_api.create_namespaced_custom_object(
-#            anarchy_runtime.operator_domain, anarchy_runtime.api_version, anarchy_runtime.operator_namespace, 'anarchyactions',
-#            {
-#                "apiVersion": anarchy_runtime.api_group_version,
-#                "kind": "AnarchyAction",
-#                "metadata": {
-#                    "generateName": "%s-%s-" % (anarchy_subject.name, action_name),
-#                    "labels": {
-#                        anarchy_runtime.action_label: action_name,
-#                        anarchy_runtime.subject_label: anarchy_subject.name,
-#                        anarchy_runtime.governor_label: anarchy_governor.name
-#                    },
-#                    "ownerReferences": [{
-#                        "apiVersion": anarchy_runtime.api_group_version,
-#                        "controller": True,
-#                        "kind": "AnarchySubject",
-#                        "name": anarchy_subject.name,
-#                        "uid": anarchy_subject.uid
-#                    }]
-#                },
-#                "spec": {
-#                    "action": action_name,
-#                    "after": after_timestamp,
-#                    "callbackToken": uuid.uuid4().hex,
-#                    "governorRef": anarchy_governor.ref,
-#                    "subjectRef": {
-#                        "apiVersion": anarchy_runtime.api_group_version,
-#                        "kind": "AnarchySubject",
-#                        "name": anarchy_subject.name,
-#                        "namespace":  anarchy_runtime.operator_namespace,
-#                        "uid": anarchy_subject.uid
-#                    }
-#                }
-#            }
-#        )
-#    else:
-#        result = None
-#
-#    return flask.jsonify({'success': True, 'result': result})
-#
-#@api.route('/run/subject/<string:subject_name>/actions/<string:action_name>', methods=['PATCH'])
-#def run_subject_action_patch(subject_name, action_name):
-#    """
-#    Callback from runner to update AnarchyAction associated with AnarchySubject assigned to runner.
-#
-#    The only function of this method currently is to pass JSON, `{"successful": true}` or
-#    `{"failed": true}` to mark the action as finished.
-#    """
-#    anarchy_runner, runner_pod = check_runner_auth(flask.request.headers.get('Authorization', ''))
-#    if not anarchy_runner:
-#        flask.abort(400)
-#
-#    if not anarchy_runtime.running_all_in_one \
-#    and subject_name != runner_pod.metadata.labels.get(anarchy_runtime.subject_label):
-#        operator_logger.warning(
-#            'AnarchyRunner %s Pod %s cannot update actions for AnarchySubject %s!',
-#            anarchy_runner.name, runner_pod.metadata.name, subject_name
-#        )
-#        flask.abort(400)
-#
-#    anarchy_action = AnarchyAction.get(action_name, anarchy_runtime)
-#    if not anarchy_action:
-#        operator_logger.warning(
-#            'AnarchyRunner %s Pod %s attempted to update action on deleted AnarchyAction %s!',
-#            anarchy_runner.name, runner_pod.metadata.name, action_name
-#        )
-#        flask.abort(400)
-#
-#    anarchy_subject = AnarchySubject.get(subject_name, anarchy_runtime)
-#    if not anarchy_subject:
-#        operator_logger.warning(
-#            'AnarchyRunner %s Pod %s attempted to update action on deleted AnarchySubject %s!',
-#            anarchy_runner.name, runner_pod.metadata.name, subject_name
-#        )
-#        flask.abort(400)
-#
-#    anarchy_governor = anarchy_subject.get_governor(anarchy_runtime)
-#    if not anarchy_governor:
-#        operator_logger.warning(
-#            'AnarchyRunner %s Pod %s cannot post action to AnarchySubject %s, unable to find AnarchyGovernor %s!',
-#            anarchy_runner.name, runner_pod, subject_name, anarchy_subject.governor_name
-#        )
-#        flask.abort(400)
-#
-#    finished_state = None
-#    if flask.request.json.get('successful', False):
-#        finished_state = 'successful'
-#    elif flask.request.json.get('failed', False):
-#        finished_state = 'failed'
-#
-#    if finished_state != None:
-#        anarchy_subject.remove_active_action(anarchy_action, anarchy_runtime)
-#        anarchy_action.set_finished(finished_state, anarchy_runtime)
-#
-#    return flask.jsonify({'success': True, 'result': anarchy_action.to_dict(anarchy_runtime)})
-#
-#
-#def check_runner_auth(auth_header):
-#    """
-#    Verify bearer token sent by anarchy runner in API call.
-#    """
-#    match = re.match(r'Bearer ([^:]+):([^:]+):(.*)', auth_header)
-#    if not match:
-#        return None, None
-#    runner_name = match.group(1)
-#    pod_name = match.group(2)
-#    runner_token = match.group(3)
-#
-#    anarchy_runner = AnarchyRunner.get(runner_name)
-#    if not anarchy_runner:
-#        operator_logger.warning('Failed auth for unknown AnarchyRunner %s %s', runner_name, pod_name)
-#        return None, None
-#
-#    runner_pod = anarchy_runner.pods.get(pod_name)
-#    if not runner_pod:
-#        operator_logger.warning('Failed auth for AnarchyRunner %s %s, unknown pod', runner_name, pod_name)
-#        return None, None
-#
-#    pod_runner_token = None
-#    if anarchy_runtime.running_all_in_one:
-#        pod_runner_token = anarchy_runner.runner_token
-#    else:
-#        for env_var in runner_pod.spec.containers[0].env:
-#            if env_var.name == 'RUNNER_TOKEN':
-#                pod_runner_token = env_var.value
-#                break
-#
-#        if not pod_runner_token:
-#            operator_logger.warning('Failed auth for AnarchyRunner %s %s, cannot find RUNNER_TOKEN', runner_name, pod_name)
-#            return None, None
-#
-#    if pod_runner_token == runner_token:
-#        return anarchy_runner, runner_pod
-#
-#    operator_logger.warning('Invalid auth token for AnarchyRunner %s %s', runner_name, runner_pod)
-#    return None, None
+
+@api.route('/run/<string:run_name>', methods=['POST'])
+def post_run(run_name):
+    runner, runner_pod, run_ref, subject_ref = AnarchyRunner.check_runner_auth(
+        flask.request.headers.get('Authorization', ''), anarchy_runtime
+    )
+    if not runner:
+        flask.abort(400)
+
+    logger = runner.local_logger
+
+    post_run_ref = dict(
+        apiVersion = anarchy_runtime.api_group_version,
+        kind = 'AnarchyRun',
+        name = run_name,
+        namespace = anarchy_runtime.operator_namespace,
+    )
+    runner_pod_ref = dict(
+        apiVersion = runner_pod.api_version,
+        kind = runner_pod.kind,
+        name = runner_pod.metadata.name,
+        namespace = runner_pod.metadata.namespace,
+        uid = runner_pod.metadata.uid,
+    )
+
+    runner.clear_pod_run_reference(
+        runner_pod_name = runner_pod.metadata.name,
+        anarchy_runtime = anarchy_runtime,
+    )
+
+    # When an AnarchyRun is handling a delete completion it is normal for the
+    # AnarchyRun and AnarchySubject to be deleted before the post is received.
+    run = AnarchyRun.get_from_api(run_name, anarchy_runtime)
+    if not run:
+        logger.info(
+            'AnarchyRunner Pod posted result on deleted AnarchyRun',
+            extra = dict(pod=runner_pod_ref, run=post_run_ref)
+        )
+        return flask.jsonify({'success': True, 'msg': 'AnarchyRun not found'})
+
+    anarchy_subject = run.get_subject()
+    if not anarchy_subject:
+        logger.info(
+            'AnarchyRunner Pod posted result on deleted AnarchySubject',
+            extra = dict(pod=runner_pod_ref, run=run.reference, subject=run.subject_reference)
+        )
+        return flask.jsonify({'success': True, 'msg': 'AnarchySubject not found'})
+
+    if not run_ref or run_name != run_ref['name']:
+        logger.error(
+            'AnarchyRunner Pod attempted to post run that it was not assigned!',
+            extra = dict(attempted=post_run_ref, expected=run_ref, pod=runner_pod_ref, subject=subject_ref)
+        )
+        flask.abort(400)
+
+    try:
+        result = flask.request.json['result']
+    except KeyError:
+        logger.error(
+            'AnarchyRunner Pod posted invalid run data!',
+            extra = dict(pod=runner_pod_ref, run=run.reference, subject=subject.reference)
+        )
+        flask.abort(400, flask.jsonify(
+            {'success': False, 'error': 'Invalid run data'}
+        ))
+
+    run.post_result(result, anarchy_runtime)
+    return flask.jsonify({'success':True})
+
+
+@api.route('/run/subject/<string:subject_name>', methods=['PATCH','DELETE'])
+def patch_or_delete_subject(subject_name):
+    runner, runner_pod, run_ref, subject_ref = AnarchyRunner.check_runner_auth(
+        flask.request.headers.get('Authorization', ''), anarchy_runtime
+    )
+    if not runner:
+        flask.abort(400)
+
+    logger = runner.local_logger
+
+    runner_pod_ref = dict(
+        apiVersion = runner_pod.api_version,
+        kind = runner_pod.kind,
+        name = runner_pod.metadata.name,
+        namespace = runner_pod.metadata.namespace,
+        uid = runner_pod.metadata.uid,
+    )
+    target_subject_ref = dict(
+        apiVersion = anarchy_runtime.api_group_version,
+        kind = 'AnarchySubject',
+        name = subject_name,
+        namespace = anarchy_runtime.operator_namespace,
+    )
+
+    if not subject_ref or subject_name != subject_ref['name']:
+        logger.error(
+            'AnarchyRunner Pod cannot update AnarchySubject not associated with its AnarchyRun!',
+            extra = dict(
+                pod = runner_pod_ref,
+                run = run_ref,
+                subject = subject_ref,
+                target = target_subject_ref,
+            )
+        )
+        flask.abort(400)
+
+    anarchy_subject = AnarchySubject.get(subject_name)
+    if not anarchy_subject:
+        operator_logger.warning(
+            f"AnarchyRunner Pod attempted {flask.request.method} of a deleted AnarchySubject!",
+            extra = dict(
+                pod = runner_pod_ref,
+                run = run_ref,
+                subject = subject_ref,
+            )
+        )
+        flask.abort(400)
+
+    if flask.request.method == 'PATCH':
+        if not 'patch' in flask.request.json:
+            operator_logger.warning('No patch in AnarchySubject %s post', subject_name)
+            flask.abort(400)
+        result = anarchy_subject.patch(flask.request.json['patch'], anarchy_runtime)
+    elif flask.request.method == 'DELETE':
+        result = anarchy_subject.delete(
+            anarchy_runtime = anarchy_runtime,
+            remove_finalizers = flask.request.json.get('remove_finalizers', False),
+        )
+
+    return flask.jsonify({'success': True, 'result': result})
+
+
+@api.route('/run/subject/<string:subject_name>/actions', methods=['POST'])
+def run_subject_action_post(subject_name):
+    runner, runner_pod, run_ref, subject_ref = AnarchyRunner.check_runner_auth(
+        flask.request.headers.get('Authorization', ''), anarchy_runtime
+    )
+    if not runner:
+        flask.abort(400)
+
+    logger = runner.local_logger
+
+    runner_pod_ref = dict(
+        apiVersion = runner_pod.api_version,
+        kind = runner_pod.kind,
+        name = runner_pod.metadata.name,
+        namespace = runner_pod.metadata.namespace,
+        uid = runner_pod.metadata.uid,
+    )
+    target_subject_ref = dict(
+        apiVersion = anarchy_runtime.api_group_version,
+        kind = 'AnarchySubject',
+        name = subject_name,
+        namespace = anarchy_runtime.operator_namespace,
+    )
+
+    if not subject_ref or subject_name != subject_ref['name']:
+        logger.error(
+            'AnarchyRunner Pod cannot update create AnarchyAction for AnarchySubject not associated with its AnarchyRun!',
+            extra = dict(
+                pod = runner_pod_ref,
+                run = run_ref,
+                subject = subject_ref,
+                target = target_subject_ref,
+            )
+        )
+        flask.abort(400)
+
+    subject = AnarchySubject.get(subject_name)
+    if not subject:
+        logger.warning(
+            'AnarchyRunner pod attempted to create AnarchyAction on deleted AnarchySubject!',
+            extra = dict(
+                pod = runner_pod_ref,
+                run = run_ref,
+                subject = subject_ref,
+            )
+        )
+        flask.abort(400)
+
+    governor = subject.get_governor()
+    if not governor:
+        logger.error(
+            'AnarchyRunner Pod cannot create AnarchyAction, unable to find AnarchyGovernor!',
+            extra = dict(
+                governor = subject.governor_reference,
+                pod = runner_pod_ref,
+                run = run_ref,
+                subject = subject.reference,
+            )
+        )
+        flask.abort(400)
+
+    action_name = flask.request.json.get('action', None)
+    after_timestamp = flask.request.json.get('after', None)
+    cancel_actions = flask.request.json.get('cancel', None)
+
+    if not action_name and not cancel_actions:
+        logger.warning(
+            'No action or cancel given for scheduling action',
+            extra = dict(
+                governor = governor.reference,
+                pod = runner_pod_ref,
+                run = run_ref,
+                subject = subject.reference,
+            )
+        )
+        flask.abort(400)
+
+    if after_timestamp and not re.match(r'\d\d\d\d-\d\d-\d\dT\d\d:\d\d:\d\dZ', after_timestamp):
+        runner.logger.warning(
+            'Invalid datetime format given for action after value',
+            extra = dict(
+                after = after_timestamp,
+                governor = governor.reference,
+                pod = runner_pod_ref,
+                run = run_ref,
+                subject = subject.reference,
+            )
+        )
+        flask.abort(400)
+
+    # Scheduling an action always implies canceling any existing instances of the same action
+    if action_name not in cancel_actions:
+        cancel_actions.append(action_name)
+
+    for action_resource in anarchy_runtime.custom_objects_api.list_namespaced_custom_object(
+        anarchy_runtime.operator_domain, anarchy_runtime.api_version,
+        anarchy_runtime.operator_namespace, 'anarchyactions',
+        label_selector=f"{anarchy_runtime.subject_label}={subject.name}"
+    ).get('items', []):
+        if action_resource['spec']['action'] in cancel_actions \
+        and 'status' not in action_resource:
+            anarchy_runtime.custom_objects_api.delete_namespaced_custom_object(
+                anarchy_runtime.operator_domain, anarchy_runtime.api_version,
+                anarchy_runtime.operator_namespace, 'anarchyactions', action_resource['metadata']['name']
+            )
+
+    if action_name:
+        result = anarchy_runtime.custom_objects_api.create_namespaced_custom_object(
+            anarchy_runtime.operator_domain, anarchy_runtime.api_version,
+            anarchy_runtime.operator_namespace, 'anarchyactions',
+            {
+                "apiVersion": anarchy_runtime.api_group_version,
+                "kind": "AnarchyAction",
+                "metadata": {
+                    "generateName": f"{subject.name}-{action_name}-",
+                    "labels": {
+                        anarchy_runtime.action_label: action_name,
+                        anarchy_runtime.subject_label: subject.name,
+                        anarchy_runtime.governor_label: governor.name
+                    },
+                    "ownerReferences": [subject.owner_reference]
+                },
+                "spec": {
+                    "action": action_name,
+                    "after": after_timestamp,
+                    "callbackToken": uuid.uuid4().hex,
+                    "governorRef": governor.reference,
+                    "subjectRef": subject.reference,
+                }
+            }
+        )
+    else:
+        result = None
+
+    return flask.jsonify({'success': True, 'result': result})
+
+
+@api.route('/run/subject/<string:subject_name>/actions/<string:action_name>', methods=['PATCH'])
+def run_subject_action_patch(subject_name, action_name):
+    """
+    Callback from runner to update AnarchyAction associated with AnarchySubject assigned to runner.
+
+    The only function of this method currently is to pass JSON, `{"successful": true}` or
+    `{"failed": true}` to mark the action as finished.
+    """
+    runner, runner_pod, run_ref, subject_ref = AnarchyRunner.check_runner_auth(
+        flask.request.headers.get('Authorization', ''), anarchy_runtime
+    )
+    if not runner:
+        flask.abort(400)
+
+    logger = runner.local_logger
+
+    action_ref = dict(
+        apiVersion = anarchy_runtime.api_group_version,
+        kind = 'AnarchyAction',
+        name = action_name,
+        namespace = anarchy_runtime.operator_namespace,
+    )
+    runner_pod_ref = dict(
+        apiVersion = runner_pod.api_version,
+        kind = runner_pod.kind,
+        name = runner_pod.metadata.name,
+        namespace = runner_pod.metadata.namespace,
+        uid = runner_pod.metadata.uid,
+    )
+    target_subject_ref = dict(
+        apiVersion = anarchy_runtime.api_group_version,
+        kind = 'AnarchySubject',
+        name = subject_name,
+        namespace = anarchy_runtime.operator_namespace,
+    )
+
+    if not subject_ref or subject_name != subject_ref['name']:
+        logger.error(
+            'AnarchyRunner Pod cannot update AnarchyActions for AnarchySubject!',
+            extra = dict(
+                pod = runner_pod_ref,
+                run = run_ref,
+                subject = subject_ref,
+                target = target_subject_ref,
+            )
+        )
+        flask.abort(400)
+
+    action = AnarchyAction.get_from_api(action_name, anarchy_runtime)
+    if not action:
+        logger.warning(
+            'AnarchyRunner Pod attempted to update deleted AnarchyAction!',
+            extra = dict(
+                action = action_ref,
+                pod = runner_pod_ref,
+                run = run_ref,
+                subject = subject_ref,
+            )
+        )
+        flask.abort(400)
+
+    subject = AnarchySubject.get(subject_name)
+    if not subject:
+        logger.warning(
+            'AnarchyRunner Pod attempted to update AnarchyAction for deleted AnarchySubject!',
+            extra = dict(
+                action = action.reference,
+                pod = runner_pod_ref,
+                run = run_ref,
+                subject = subject_ref,
+            )
+        )
+        flask.abort(400)
+
+    governor = subject.get_governor()
+    if not governor:
+        logger.warning(
+            'AnarchyRunner Pod cannot update AnarchyAction, unable to find AnarchyGovernor!',
+            extra = dict(
+                action = action.reference,
+                governor = subject.governor_refernce,
+                pod = runner_pod_ref,
+                run = run_ref,
+                subject = subject.reference,
+            )
+        )
+        flask.abort(400)
+
+    finished_state = None
+    if flask.request.json.get('successful', False):
+        finished_state = 'successful'
+    elif flask.request.json.get('failed', False):
+        finished_state = 'failed'
+
+    if finished_state != None:
+        action.set_finished(
+            anarchy_runtime = anarchy_runtime,
+            state = finished_state,
+        )
+
+    return flask.jsonify({'success': True, 'result': action.to_dict()})
 
 def run_api():
     http_server = gevent.pywsgi.WSGIServer(('', 5000), api)
     http_server.serve_forever()
 
-#def watch_runners():
-#    '''
-#    Watch AnarchyRunners to keep definition in sync.
-#    '''
-#    while True:
-#        try:
-#            AnarchyRunner.watch(anarchy_runtime)
-#        except kubernetes.client.rest.ApiException as e:
-#            if e.status == 410:
-#                # Ignore 410 Gone, simply reset watch
-#                pass
-#            else:
-#                operator_logger.exception("ApiException in AnarchyRunner watch")
-#                time.sleep(5)
-#                ProtocolError
-#        except urllib3.exceptions.ProtocolError as e:
-#            operator_logger.warning(f"ProtocolError in AnarchyRunner watch: {e}")
-#        except Exception as e:
-#            operator_logger.exception("Exception in AnarchyRunner watch")
-#            time.sleep(5)
-#
-#def watch_peering():
-#    '''
-#    Watch for KopfPeering and set anarchy_runtime active flag
-#    '''
-#    while True:
-#        try:
-#            anarchy_runtime.watch_peering()
-#        except kubernetes.client.rest.ApiException as e:
-#            if e.status == 410:
-#                # Ignore 410 Gone, simply reset watch
-#                pass
-#            else:
-#                operator_logger.exception("ApiException in KopfPeering watch")
-#                time.sleep(5)
-#        except urllib3.exceptions.ProtocolError as e:
-#            operator_logger.warning(f"ProtocolError in KopfPeering watch: {e}")
-#        except Exception as e:
-#            operator_logger.exception("Exception in KopfPeering watch")
-#            time.sleep(5)
-#
-#def cleanup_loop():
-#    last_cleanup = 0
-#    last_run_check = 0
-#    last_runner_check = 0
-#    while True:
-#        with anarchy_runtime.is_active_condition:
-#            while not anarchy_runtime.is_active:
-#                anarchy_runtime.is_active_condition.wait()
-#
-#        while anarchy_runtime.is_active:
-#            if runner_check_interval < time.time() - last_runner_check:
-#                try:
-#                    AnarchyRunner.manage_runners(anarchy_runtime)
-#                    last_runner_check = time.time()
-#                except:
-#                    operator_logger.exception('Error in AnarchyRunner.manage_runners!')
-#
-#            if cleanup_interval < time.time() - last_cleanup:
-#                try:
-#                    AnarchyGovernor.cleanup(anarchy_runtime)
-#                    last_cleanup = time.time()
-#                except:
-#                    operator_logger.exception('Error in AnarchyGovernor.cleanup!')
-#
-#            if run_check_interval < time.time() - last_run_check:
-#                try:
-#                    AnarchyRun.manage_active_runs(anarchy_runtime)
-#                    last_run_check = time.time()
-#                except:
-#                    operator_logger.exception('Error in AnarchyRun.manage_active_runs!')
-#
-#            time.sleep(5)
-#
-#def main_loop():
-#    while True:
-#        with anarchy_runtime.is_active_condition:
-#            while not anarchy_runtime.is_active:
-#                anarchy_runtime.is_active_condition.wait()
-#
-#        if anarchy_runtime.running_all_in_one:
-#            start_runner_process()
-#        elif not AnarchyRunner.get('default'):
-#            init_default_runner()
-#
-#def main():
-#    """Main function."""
-#    init()
-#
-#    threading.Thread(
-#        daemon = True,
-#        name = 'api',
-#        target = run_api
-#    ).start()
-#
-#    threading.Thread(
-#        daemon = True,
-#        name = 'watch_governors',
-#        target = watch_governors
-#    ).start()
-#
-#    threading.Thread(
-#        daemon = True,
-#        name = 'watch_runners',
-#        target = watch_runners
-#    ).start()
-#
-#    threading.Thread(
-#        daemon = True,
-#        name = 'watch_runner_pods',
-#        target = watch_runner_pods
-#    ).start()
-#
-#    threading.Thread(
-#        daemon = True,
-#        name = 'watch_peering',
-#        target = watch_peering
-#    ).start()
-#
-#    threading.Thread(
-#        daemon = True,
-#        name = 'cleanup',
-#        target = cleanup_loop
-#    ).start()
-#
-#    threading.Thread(
-#        daemon = True,
-#        name = 'main_loop',
-#        target = main_loop
-#    ).start()
-#
-#    prometheus_client.start_http_server(8000)
-#
-#if __name__ == '__main__':
-#    main()
-#else:
-#    # Main function call when running in Kopf
-#    threading.Thread(
-#        daemon = True,
-#        name = 'main',
-#        target = main
-#    ).start()
+def watch_active_change():
+    while True:
+        with anarchy_runtime.is_active_condition:
+            if not anarchy_runtime.is_active:
+                AnarchyRun.cancel_timers()
+            anarchy_runtime.is_active_condition.wait()
