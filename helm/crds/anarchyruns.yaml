@@ -140,6 +140,9 @@ spec:
                 description: >-
                   UTC timestamp for next retry after failure.
                 type: string
+              runner:
+￼                description: Runner pod name (deprecated)
+￼                type: string
               runnerPod:
                 description: >-
                   Reference to the AnarchyRunner Pod executing this AnarchyRun
@@ -170,6 +173,9 @@ spec:
                     type: string
                   uid:
                     type: string
+              runPostTimestamp:
+                description: Timestamp of when the run result was received from the runner.
+                type: string
               subject:
                 description: >-
                   Reference to the AnarchySubject related to this AnarchyRun.
@@ -236,9 +242,6 @@ spec:
                   combinding vars and varSecrets values.
                 type: object
                 x-kubernetes-preserve-unknown-fields: true
-              runPostTimestamp:
-                description: Timestamp of when the run result was received from the runner.
-                type: string
               result:
                 description: Result of Ansible playbook run.
                 type: object
