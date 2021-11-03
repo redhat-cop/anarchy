@@ -141,8 +141,8 @@ spec:
                   UTC timestamp for next retry after failure.
                 type: string
               runner:
-￼                description: Runner pod name (deprecated)
-￼                type: string
+                description: Runner pod name (deprecated)
+                type: string
               runnerPod:
                 description: >-
                   Reference to the AnarchyRunner Pod executing this AnarchyRun
