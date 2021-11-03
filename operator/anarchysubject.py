@@ -579,7 +579,7 @@ class AnarchySubject(object):
         while True:
             resource_object = self.to_dict()
             if self.active_action_name == action_name:
-                resource_object['status']['activeAction'] = None
+                del resource_object['status']['activeAction']
             else:
                 action_was_pending = False
                 for i, pending_action_ref in enumerate(self.pending_actions):
