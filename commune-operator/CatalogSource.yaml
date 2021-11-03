@@ -1,0 +1,11 @@
+---
+apiVersion: operators.coreos.com/v1alpha1
+kind: CatalogSource
+metadata:
+  name: anarchy-operator
+  namespace: openshift-marketplace
+spec:
+  displayName: Anarchy Operator
+  image: quay.io/redhat-cop/anarchy-operator:catalog-latest
+  #image: quay.io/jkupferer/anarchy-operator:catalog-latest
+  sourceType: grpc

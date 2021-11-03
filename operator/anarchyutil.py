@@ -1,4 +1,6 @@
 from datetime import datetime, timedelta
+
+import json
 import random
 import re
 import string
@@ -59,12 +61,3 @@ def parse_time_interval(interval):
 
 def random_string(length=8, character_set=string.ascii_lowercase + string.digits):
     return ''.join(random.choice(character_set) for i in range(length))
-
-def k8s_ref(resource_dict):
-    return dict(
-        apiVersion = resource_dict['apiVersion'],
-        kind = resource_dict['kind'],
-        name = resource_dict['metadata']['name'],
-        namespace = resource_dict['metadata']['namespace'],
-        uid = resource_dict['metadata']['uid']
-    )

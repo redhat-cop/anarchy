@@ -9,8 +9,6 @@ import socket
 import threading
 import time
 
-from anarchyutil import deep_update
-
 operator_logger = logging.getLogger('operator')
 
 class AnarchyRuntime(object):
@@ -131,6 +129,9 @@ class AnarchyRuntime(object):
             raise Exception('Unable to set action callback URL. Please set CALLBACK_BASE_URL environment variable.')
         return '{}/action/{}'.format(self.callback_base_url, action_name)
 
+    def dict_to_k8s_object(self, src, cls):
+        return self.api_client.deserialize(FakeKubeResponse(src), cls)
+
     def get_secret_data(self, secret_name, secret_namespace=None):
         if not secret_namespace:
             secret_namespace = self.operator_namespace
@@ -147,74 +148,7 @@ class AnarchyRuntime(object):
                 pass
         return data
 
-    def get_vars(self, obj):
-        if not obj:
-            return
-        merged_vars = copy.deepcopy(obj.vars)
-        for var_secret in obj.var_secrets:
-            secret_name = var_secret.get('name', None)
-            secret_namespace = var_secret.get('namespace', None)
-            if secret_name:
-                try:
-                    secret_data = self.get_secret_data(secret_name, secret_namespace)
-                    var_name = var_secret.get('var', None)
-                    if var_name:
-                        deep_update(merged_vars, {var_name: secret_data})
-                    else:
-                        deep_update(merged_vars, secret_data)
-                except kubernetes.client.rest.ApiException as e:
-                    if e.status != 404:
-                        raise
-                    operator_logger.warning('varSecrets references missing secret, %s', secret_name)
-            else:
-                operator_logger.warning('varSecrets has entry with no name')
-        return merged_vars
-
-    def register_runner(self, runner):
-        self.anarchy_runners[runner] = time.time()
-
-    def remove_runner(self, runner):
-        try:
-            del self.anarchy_runners[runner]
-        except KeyError:
-            pass
-
-    def watch_peering(self):
-        '''
-        Wait for KopfPeering to indicate this pod should be active.
-        '''
-        for event in kubernetes.watch.Watch().stream(
-            self.custom_objects_api.list_namespaced_custom_object,
-            'kopf.dev', 'v1', self.operator_namespace, 'kopfpeerings'
-        ):
-            obj = event.get('object')
-
-            if event['type'] == 'ERROR' \
-            and obj['kind'] == 'Status':
-                if obj['status'] == 'Failure':
-                    if obj['reason'] in ('Expired', 'Gone'):
-                        operator_logger.info('KopfPeering watch restarting, reason %s', obj['reason'])
-                        return
-                    else:
-                        raise Exception("KopfPeering watch failure: reason {}, message {}", obj['reason'], obj['message'])
-
-            if obj \
-            and obj.get('apiVersion') == 'kopf.dev/v1' \
-            and obj.get('kind') == 'KopfPeering' \
-            and obj['metadata']['name'] == self.anarchy_service_name:
-                with self.is_active_condition:
-                    active_peer = None
-                    priority = 0
-                    for peerid, status in obj.get('status', {}).items():
-                        if status['priority'] > priority:
-                            active_peer = peerid
-                            priority = status['priority']
-                    if active_peer and '@{}/'.format(self.pod_name) in active_peer:
-                        if not self.is_active:
-                            operator_logger.info('Became active kopf peer: %s', active_peer)
-                        self.is_active = True
-                    else:
-                        if self.is_active:
-                            operator_logger.info('Active kopf peer is now: %s', active_peer)
-                        self.is_active = False
-                    self.is_active_condition.notify()
+# See: https://github.com/kubernetes-client/python/issues/977
+class FakeKubeResponse:
+    def __init__(self, obj):
+        self.data = json.dumps(obj)
