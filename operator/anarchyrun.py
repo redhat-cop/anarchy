@@ -318,7 +318,10 @@ class AnarchyRun(object):
             'AnarchyRun lost runner pod',
             extra = dict(runnerPod = self.runner_pod_reference)
         )
-        self.post_result({'status': 'lost'}, runtime)
+        self.post_result(
+            anarchy_runtime = anarchy_runtime,
+            result = {'status': 'lost'},
+        )
 
     def manage(self, anarchy_runtime):
         runner_label_value = self.get_runner_label_value(anarchy_runtime)
