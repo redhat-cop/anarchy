@@ -18,11 +18,11 @@ class AnarchyRun(object):
     runs = {}
 
     @staticmethod
-    def get_from_api(name, runtime):
+    def get_from_api(name, anarchy_runtime):
         '''
         Get AnarchyRun from api by name.
         '''
-        resource_object = AnarchyRun.get_resource_from_api(name, runtime)
+        resource_object = AnarchyRun.get_resource_from_api(name, anarchy_runtime)
         if resource_object:
             return AnarchyRun(resource_object=resource_object)
 
@@ -31,13 +31,14 @@ class AnarchyRun(object):
         return AnarchyRun.runs.get(name)
 
     @staticmethod
-    def get_pending(runtime):
+    def get_pending(anarchy_runtime):
         '''
         Get pending AnarchyRun from api, if one exists.
         '''
-        items = runtime.custom_objects_api.list_namespaced_custom_object(
-            runtime.operator_domain, runtime.api_version, runtime.operator_namespace, 'anarchyruns',
-            label_selector='{}=pending'.format(runtime.runner_label), limit=1
+        items = anarchy_runtime.custom_objects_api.list_namespaced_custom_object(
+            anarchy_runtime.operator_domain, anarchy_runtime.api_version,
+            anarchy_runtime.operator_namespace, 'anarchyruns',
+            label_selector='{}=pending'.format(anarchy_runtime.runner_label), limit=1
         ).get('items', [])
         if items:
             return AnarchyRun(resource_object=items[0])
@@ -45,13 +46,14 @@ class AnarchyRun(object):
             return None
 
     @staticmethod
-    def get_resource_from_api(name, runtime):
+    def get_resource_from_api(name, anarchy_runtime):
         '''
         Get raw AnarchyRun resource from api by name, if one exists.
         '''
         try:
-            return runtime.custom_objects_api.get_namespaced_custom_object(
-                runtime.operator_domain, runtime.api_version, runtime.operator_namespace, 'anarchyruns', name
+            return anarchy_runtime.custom_objects_api.get_namespaced_custom_object(
+                anarchy_runtime.operator_domain, anarchy_runtime.api_version,
+                anarchy_runtime.operator_namespace, 'anarchyruns', name
             )
         except kubernetes.client.rest.ApiException as e:
             if e.status == 404:
@@ -306,8 +308,8 @@ class AnarchyRun(object):
         name = self.runner_name
         return AnarchyRunner.get(name) if name else None
 
-    def get_runner_label_value(self, runtime):
-        return self.metadata.get('labels', {}).get(runtime.runner_label, None)
+    def get_runner_label_value(self, anarchy_runtime):
+        return self.metadata.get('labels', {}).get(anarchy_runtime.runner_label, None)
 
     def get_subject(self):
         return AnarchySubject.get(self.subject_name)
@@ -352,7 +354,7 @@ class AnarchyRun(object):
                     )
                 )
 
-    def post_result(self, result, runtime):
+    def post_result(self, result, anarchy_runtime):
         self.local_logger.info(
             'Post result for AnarchyRun',
             extra = dict(
@@ -362,7 +364,7 @@ class AnarchyRun(object):
 
         patch = [{
             'op': 'add',
-            'path': '/metadata/labels/' + runtime.runner_label.replace('/', '~1'),
+            'path': '/metadata/labels/' + anarchy_runtime.runner_label.replace('/', '~1'),
             'value': 'pending' if result['status'] == 'lost' else result['status']
         },{
             'op': 'add',
@@ -377,7 +379,7 @@ class AnarchyRun(object):
         if result['status'] == 'successful':
             patch.append({
                 'op': 'add',
-                'path': '/metadata/labels/' + runtime.finished_label.replace('/', '~1'),
+                'path': '/metadata/labels/' + anarchy_runtime.finished_label.replace('/', '~1'),
                 'value': 'true',
             })
 
@@ -398,14 +400,14 @@ class AnarchyRun(object):
             })
 
         try:
-            data = runtime.custom_objects_api.api_client.call_api(
+            data = anarchy_runtime.custom_objects_api.api_client.call_api(
                 '/apis/{group}/{version}/namespaces/{namespace}/{plural}/{name}',
                 'PATCH',
                 { # path params
-                    'group': runtime.operator_domain,
-                    'version': runtime.api_version,
+                    'group': anarchy_runtime.operator_domain,
+                    'version': anarchy_runtime.api_version,
                     'plural': 'anarchyruns',
-                    'namespace': runtime.operator_namespace,
+                    'namespace': anarchy_runtime.operator_namespace,
                     'name': self.name
                 },
                 [], # query params

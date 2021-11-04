@@ -773,7 +773,10 @@ def post_run(run_name):
             {'success': False, 'error': 'Invalid run data'}
         ))
 
-    run.post_result(result, anarchy_runtime)
+    run.post_result(
+        result = result,
+        anarchy_runtime = anarchy_runtime,
+    )
     return flask.jsonify({'success':True})
 
 
