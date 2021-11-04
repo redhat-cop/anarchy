@@ -246,7 +246,7 @@ class AnarchyAction(object):
 
     def delete(self, anarchy_runtime):
         try:
-            anarchy_runtime.custom_objects_api.deleted_namespaced_custom_object(
+            anarchy_runtime.custom_objects_api.delete_namespaced_custom_object(
                 anarchy_runtime.operator_domain, anarchy_runtime.api_version,
                 self.namespace, 'anarchyactions', self.name
             )
