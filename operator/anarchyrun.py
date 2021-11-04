@@ -242,7 +242,11 @@ class AnarchyRun(object):
 
     @property
     def runner_pod_name(self):
-        return self.spec.get('runnerPod', {}).get('name')
+        return self.runner_pod_reference.get('name')
+
+    @property
+    def runner_pod_reference(self):
+        return self.spec.get('runnerPod', {})
 
     @property
     def subject_name(self):
@@ -312,14 +316,7 @@ class AnarchyRun(object):
         """Notified that a runner has been lost, reset AnarchyRun to pending"""
         self.local_logger.warning(
             'AnarchyRun lost runner pod',
-            extra = dict(
-                runnerPod = dict(
-                    apiVersion = 'v1',
-                    kind = 'Pod',
-                    name = runner_pod_name,
-                    namespace = self.operator_namespace,
-                )
-            )
+            extra = dict(runnerPod = self.runner_pod_reference)
         )
         self.post_result({'status': 'lost'}, runtime)
 
