@@ -151,7 +151,7 @@ class AnarchyGovernor(object):
         with AnarchyGovernor.register_lock:
             if name in AnarchyGovernor.governors:
                 governor = AnarchyGovernor.governors.pop(name)
-                governor.logger.info("Unregistered AnarchyGovernor")
+                governor.local_logger.info("Unregistered AnarchyGovernor")
 
     @staticmethod
     def watch(anarchy_runtime):

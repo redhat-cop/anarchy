@@ -111,7 +111,7 @@ class AnarchyRun(object):
         with AnarchyRun.register_lock:
             if name in AnarchyRun.runs:
                 run = AnarchyRun.runs.pop(name)
-                run.logger.info("Unregistered AnarchyRun")
+                run.local_logger.info("Unregistered AnarchyRun")
                 return run
 
     def __init__(self, resource_object, logger=None):

@@ -105,7 +105,7 @@ class AnarchyAction(object):
                     action.delete_timer.cancel()
                 if action.run_timer:
                     action.run_timer.cancel()
-                action.logger.info("Unregistered AnarchyAction")
+                action.local_logger.info("Unregistered AnarchyAction")
                 return action
 
     def __init__(self, resource_object, logger=None):

@@ -60,6 +60,9 @@ def startup(settings: kopf.OperatorSettings, **_):
     # Use operator domain as finalizer
     settings.persistence.finalizer = anarchy_runtime.operator_domain
 
+    # Only create events for warnings and errors
+    settings.posting.level = logging.WARNING
+
     # Disable scanning for crds and namespaces
     settings.scanning.disabled = True
 

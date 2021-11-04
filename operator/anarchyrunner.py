@@ -326,7 +326,7 @@ class AnarchyRunner:
         with AnarchyRunner.register_lock:
             if name in AnarchyRunner.runners:
                 runner = AnarchyRunner.runners.pop(name)
-                runner.logger.info("Unregistered AnarchyRunner")
+                runner.local_logger.info("Unregistered AnarchyRunner")
                 return runner
 
     @staticmethod

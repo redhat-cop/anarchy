@@ -104,7 +104,7 @@ class AnarchySubject(object):
         with AnarchySubject.register_lock:
             if name in AnarchySubject.subjects:
                 subject = AnarchySubject.subjects.pop(name)
-                subject.logger.info("Unregistered AnarchySubject")
+                subject.local_logger.info("Unregistered AnarchySubject")
 
     @staticmethod
     def watch(anarchy_runtime):
