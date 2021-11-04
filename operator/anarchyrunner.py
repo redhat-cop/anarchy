@@ -345,7 +345,7 @@ class AnarchyRunner:
                     # 410 Gone, simply reset watch
                     operator_logger.warning(
                         "Restarting AnarchyRunner watch",
-                        extra = dict(message = str(e))
+                        extra = dict(reason = str(e))
                     )
                 else:
                     operator_logger.exception("ApiException in AnarchyRunner watch")
@@ -353,7 +353,7 @@ class AnarchyRunner:
             except urllib3.exceptions.ProtocolError as e:
                 operator_logger.warning(
                     "ProtocolError in AnarchyRunner watch",
-                    extra = dict(message = str(e))
+                    extra = dict(reason = str(e))
                 )
                 time.sleep(5)
             except Exception as e:
@@ -407,7 +407,7 @@ class AnarchyRunner:
                     # 410 Gone, simply reset watch
                     operator_logger.warning(
                         "Restarting AnarchyRunner Pod watch",
-                        extra = dict(message = str(e))
+                        extra = dict(reason = str(e))
                     )
                 else:
                     operator_logger.exception("ApiException in AnarchyRunner Pod watch")
@@ -415,7 +415,7 @@ class AnarchyRunner:
             except urllib3.exceptions.ProtocolError as e:
                 operator_logger.warning(
                     "ProtocolError in AnarchyRunner Pod watch",
-                    extra = dict(message = str(e))
+                    extra = dict(reason = str(e))
                 )
                 time.sleep(5)
             except Exception as e:

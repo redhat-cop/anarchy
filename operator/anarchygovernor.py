@@ -169,7 +169,7 @@ class AnarchyGovernor(object):
                     # 410 Gone, simply reset watch
                     operator_logger.warning(
                         "Restarting AnarchyGovernor watch",
-                        extra = dict(message = str(e))
+                        extra = dict(reason = str(e))
                     )
                 else:
                     operator_logger.exception("ApiException in AnarchyGovernor watch")
@@ -177,7 +177,7 @@ class AnarchyGovernor(object):
             except urllib3.exceptions.ProtocolError as e:
                 operator_logger.warning(
                     "ProtocolError in AnarchyGovernor watch",
-                    extra = dict(message = str(e))
+                    extra = dict(reason = str(e))
                 )
                 time.sleep(5)
             except Exception as e:
