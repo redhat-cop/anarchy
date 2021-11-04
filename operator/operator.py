@@ -638,6 +638,10 @@ def get_run():
             runner_pod_name = runner_pod.metadata.name,
         )
 
+        lost_run = AnarchyRun.get_from_api(run_name)
+        if lost_run \
+        and lost_run.runner_pod_name == runner_pod.metadata.name:
+            lost_run.handle_lost_runner(anarchy_runtime)
 
     if runner_pod.metadata.deletion_timestamp:
         logger.debug(
