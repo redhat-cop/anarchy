@@ -3,5 +3,5 @@ apiVersion: v2
 name: anarchy
 description: Anarchy Operator
 type: application
-version: 0.17.9
-appVersion: 0.17.9
+version: 0.17.10
+appVersion: 0.17.10
