@@ -240,7 +240,7 @@ class AnarchyRun(object):
 
     @property
     def runner_name(self):
-        ref = sef.runner_reference
+        ref = self.runner_reference
         if ref:
             return ref['name']
 
