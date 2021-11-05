@@ -501,6 +501,20 @@ def run_update(new, old, **kwargs):
                     state = 'successful',
                 )
     else:
+        extra = dict(
+            retryAfter = run.retry_after,
+            runner = run.runner_reference,
+            runnerPod = run.runner_pod_reference,
+            status = run.result_status,
+            statusMessage = run.result_status_message,
+            subject = run.subject_reference,
+        )
+        if run.action_reference:
+            extra['action'] = run.action_reference
+        run.logger.warning(
+            "AnarchyRun failed, will retry",
+            extra = extra
+        )
         subject.set_run_failure_in_status(
             anarchy_runtime = anarchy_runtime,
             run = run,

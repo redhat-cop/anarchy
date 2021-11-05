@@ -240,11 +240,19 @@ class AnarchyRun(object):
 
     @property
     def runner_name(self):
-        return self.spec.get('runnerRef', {}).get('name')
+        ref = sef.runner_reference
+        if ref:
+            return ref['name']
+
+    @property
+    def runner_reference(self):
+        return self.spec.get('runnerRef')
 
     @property
     def runner_pod_name(self):
-        return self.runner_pod_reference.get('name')
+        ref = self.runner_pod_reference
+        if ref:
+            return ref['name']
 
     @property
     def runner_pod_reference(self):
