@@ -681,9 +681,6 @@ class AnarchyRunner:
         Manage Pods for AnarchyRunner
         '''
 
-        #deployment_name = 'anarchy-runner-' + self.name
-        #deployment_namespace = self.pod_namespace or anarchy_runtime.operator_namespace
-
         pod_template = copy.deepcopy(self.pod_template)
         if 'metadata' not in pod_template:
             pod_template['metadata'] = {}
@@ -740,7 +737,7 @@ class AnarchyRunner:
         ])
 
         pod_count = 0
-        for name, pod in self.pods.items():
+        for name, pod in list(self.pods.items()):
             pod_dict = anarchy_runtime.api_client.sanitize_for_serialization(pod)
             if pod.metadata.labels.get(anarchy_runtime.runner_terminating_label) == 'true':
                 # Ignore pod marked for termination
