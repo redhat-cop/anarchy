@@ -251,7 +251,10 @@ async def subject_daemon(stopped, **kwargs):
                 action_name = subject.active_action_name
                 action = AnarchyAction.get_from_cache(action_name)
                 if not action:
-                    action = AnarchyAction.get_from_api(action_name, anarchy_runtime)
+                    action = AnarchyAction.get_from_api(
+                        anarchy_runtime = anarchy_runtime,
+                        name = action_name,
+                    )
                 if not action:
                     subject.logger.warning(
                         "Active AnarchyAction not found!",
@@ -265,7 +268,10 @@ async def subject_daemon(stopped, **kwargs):
                 action_name = action_ref['name']
                 action = AnarchyAction.get_from_cache(action_name)
                 if not action:
-                    action = AnarchyAction.get_from_api(action_name, anarchy_runtime)
+                    action = AnarchyAction.get_from_api(
+                        anarchy_runtime = anarchy_runtime,
+                        name = action_name,
+                    )
                 if not action:
                     subject.logger.warning(
                         "Pending AnarchyAction not found!",
@@ -279,7 +285,10 @@ async def subject_daemon(stopped, **kwargs):
                 run_name = run_ref['name']
                 run = AnarchyRun.get_from_cache(run_name)
                 if not run:
-                    run = AnarchyRun.get_from_api(run_name, anarchy_runtime)
+                    run = AnarchyRun.get_from_api(
+                        anarchy_runtime = anarchy_runtime,
+                        name = run_name,
+                    )
                 if not run:
                     subject.logger.warning(
                         "Active AnarchyRun not found!",
@@ -602,7 +611,10 @@ def handle_action_callback(action_name, callback_name):
         namespace = anarchy_runtime.operator_namespace,
     )
 
-    action = AnarchyAction.get_from_api(action_name, anarchy_runtime)
+    action = AnarchyAction.get_from_api(
+        anarchy_runtime = anarchy_runtime,
+        name = action_name,
+    )
     if not action:
         operator_logger.warning(
             "AnarchyAction not found for callback",
@@ -655,7 +667,10 @@ def get_run():
             runner_pod_name = runner_pod.metadata.name,
         )
 
-        lost_run = AnarchyRun.get_from_api(run_ref['name'])
+        lost_run = AnarchyRun.get_from_api(
+            anarchy_runtime = anarchy_runtime,
+            name = run_ref['name'],
+        )
         if lost_run \
         and lost_run.runner_pod_name == runner_pod.metadata.name:
             lost_run.handle_lost_runner(anarchy_runtime)
@@ -760,7 +775,10 @@ def post_run(run_name):
 
     # When an AnarchyRun is handling a delete completion it is normal for the
     # AnarchyRun and AnarchySubject to be deleted before the post is received.
-    run = AnarchyRun.get_from_api(run_name, anarchy_runtime)
+    run = AnarchyRun.get_from_api(
+        anarchy_runtime = anarchy_runtime,
+        name = run_name,
+    )
     if not run:
         logger.info(
             'AnarchyRunner Pod posted result on deleted AnarchyRun',
@@ -1048,7 +1066,10 @@ def run_subject_action_patch(subject_name, action_name):
         )
         flask.abort(400)
 
-    action = AnarchyAction.get_from_api(action_name, anarchy_runtime)
+    action = AnarchyAction.get_from_api(
+        anarchy_runtime = anarchy_runtime,
+        name = action_name,
+    )
     if not action:
         logger.warning(
             'AnarchyRunner Pod attempted to update deleted AnarchyAction!',
