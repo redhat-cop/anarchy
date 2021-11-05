@@ -1,9 +1,12 @@
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
-  name: operator-manager-role
+  name: manager-role
 rules:
-# Operator should have access to manage namespaces, but not access to delete them.
+##
+## Base operator rules
+##
+# We need to get namespaces so the operator can read namespaces to ensure they exist
 - apiGroups:
   - ""
   resources:

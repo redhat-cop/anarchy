@@ -9,9 +9,6 @@
 *.dylib
 *.pyc
 
-# The communizer may download tools
-communizer/bin
-
 # odo artifacts
 .odo
 .odo/env
@@ -28,4 +25,9 @@ commune-operator/bin
 commune-operator/bundle*
 commune-operator/helm-charts
 commune-operator/index*
+commune-operator/config/crd/bases/anarchyactions.yaml
+commune-operator/config/crd/bases/anarchygovernors.yaml
+commune-operator/config/crd/bases/anarchyrunners.yaml
+commune-operator/config/crd/bases/anarchyruns.yaml
+commune-operator/config/crd/bases/anarchysubjects.yaml
 commune-operator/config/crd/bases/kopfpeerings.crd.yaml

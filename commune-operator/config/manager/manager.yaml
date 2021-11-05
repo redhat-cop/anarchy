@@ -3,13 +3,13 @@ kind: Namespace
 metadata:
   labels:
     control-plane: controller-manager
-  name: operator
+  name: system
 ---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: operator-controller-manager
-  namespace: operator
+  name: controller-manager
+  namespace: system
   labels:
     control-plane: controller-manager
 spec:
@@ -47,9 +47,9 @@ spec:
         resources:
           limits:
             cpu: 500m
-            memory: 1536Mi
+            memory: 2048Mi
           requests:
             cpu: 100m
             memory: 1024Mi
-      serviceAccountName: operator-controller-manager
+      serviceAccountName: controller-manager
       terminationGracePeriodSeconds: 10

@@ -1,20 +1,16 @@
-# permissions for end users to edit anarchycommunes.
+# permissions for end users to view anarchycommunes.
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
-  name: operator-anarchycommune-edit
+  name: anarchy-commune-viewer
 rules:
 - apiGroups:
   - anarchy.gpte.redhat.com
   resources:
   - anarchycommunes
   verbs:
-  - create
-  - delete
   - get
   - list
-  - patch
-  - update
   - watch
 - apiGroups:
   - anarchy.gpte.redhat.com

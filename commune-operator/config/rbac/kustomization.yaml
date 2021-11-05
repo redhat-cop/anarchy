@@ -17,4 +17,4 @@ resources:
 - auth_proxy_role_binding.yaml
 - auth_proxy_client_clusterrole.yaml
 # Anarchy core cluster role bindings
-- anarchy-admin_clusterrole.yaml
+- anarchy_admin_clusterrole.yaml

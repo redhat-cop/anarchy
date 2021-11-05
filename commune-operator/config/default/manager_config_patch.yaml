@@ -1,8 +1,8 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: operator-controller-manager
-  namespace: operator
+  name: controller-manager
+  namespace: system
 spec:
   template:
     spec:
@@ -17,4 +17,4 @@ spec:
       volumes:
       - name: manager-config
         configMap:
-          name: operator-manager-config
+          name: manager-config

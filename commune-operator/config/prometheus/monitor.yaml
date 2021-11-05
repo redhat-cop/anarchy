@@ -5,8 +5,8 @@ kind: ServiceMonitor
 metadata:
   labels:
     control-plane: controller-manager
-  name: operator-controller-manager-metrics-monitor
-  namespace: operator
+  name: controller-manager-metrics-monitor
+  namespace: system
 spec:
   endpoints:
     - path: /metrics
