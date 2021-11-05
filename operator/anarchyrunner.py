@@ -30,7 +30,7 @@ class AnarchyRunner:
         match = re.match(r'Bearer ([^:]+):([^:]+):(.*)', auth_header)
         if not match:
             operator_logger.warning('Failed AnarchyRunner auth, no Authorization header!')
-            return None, None, None
+            return None, None, None, None
 
         runner_name = match.group(1)
         pod_name = match.group(2)
@@ -57,7 +57,7 @@ class AnarchyRunner:
                     pod = pod_ref,
                 )
             )
-            return None, None, None
+            return None, None, None, None
 
         runner_pod = anarchy_runner.get_pod(pod_name)
         if not runner_pod:
@@ -68,7 +68,7 @@ class AnarchyRunner:
                     client = pod_ref,
                 )
             )
-            return None, None, None
+            return None, None, None, None
 
         if not anarchy_runtime.running_all_in_one:
             pod_ref['uid'] = runner_pod.metadata.uid
@@ -91,7 +91,7 @@ class AnarchyRunner:
                     client = pod_ref,
                 )
             )
-            return None, None, None
+            return None, None, None, None
 
         if auth_runner_token != runner_token:
             operator_logger.warning(
@@ -101,7 +101,7 @@ class AnarchyRunner:
                     client = pod_ref,
                 )
             )
-            return None, None, None
+            return None, None, None, None
 
         run_ref, subject_ref = anarchy_runner.get_current_run_and_subject(pod_ref)
         return anarchy_runner, runner_pod, run_ref, subject_ref
