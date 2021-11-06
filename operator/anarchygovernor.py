@@ -219,19 +219,11 @@ class AnarchyGovernor(object):
                     AnarchyGovernor.register(resource_object=obj)
 
     def __init__(self, resource_object, logger=None):
-        if logger:
-            self.logger = logger
-        elif not hasattr(self, 'logger'):
-            self.logger = kopf.LocalObjectLogger(
-                body = resource_object,
-                settings = kopf.OperatorSettings(),
-            )
-
         self.api_version = resource_object['apiVersion']
         self.kind = resource_object['kind']
         self.metadata = resource_object['metadata']
         self.spec = resource_object['spec']
-        self.status = resource_object.get('status')
+        self.status = resource_object.get('status', {})
 
         subject_event_handlers = {}
         for event_name, handler_spec in self.spec.get('subjectEventHandlers', {}).items():
@@ -242,6 +234,15 @@ class AnarchyGovernor(object):
         for action_name, action_spec in self.spec.get('actions', {}).items():
             actions[action_name] = AnarchyGovernor.ActionConfig(action_name, action_spec, self)
         self.actions = actions
+
+        self.local_logger = kopf.LocalObjectLogger(
+            body = resource_object,
+            settings = kopf.OperatorSettings(),
+        )
+        if logger:
+            self.logger = logger
+        elif not hasattr(self, 'logger'):
+            self.logger = self.local_logger
 
     @property
     def ansible_galaxy_requirements(self):
