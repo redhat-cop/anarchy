@@ -158,13 +158,11 @@ class AnarchyRun(object):
     def continue_action_after(self):
         timestamp = self.continue_action_after_timestamp
         if timestamp:
-            return datetime.strptime(
-                timestamp, '%Y-%m-%dT%H:%M:%SZ'
-            )
+            return datetime.strptime(timestamp, '%Y-%m-%dT%H:%M:%SZ')
 
     @property
     def continue_action_after_timestamp(self):
-        return self.spec.get('result', {}).get('continueAction', {}).get('after')
+        return self.status.get('result', {}).get('continueAction', {}).get('after')
 
     @property
     def creation_timestamp(self):
@@ -172,7 +170,7 @@ class AnarchyRun(object):
 
     @property
     def failures(self):
-        return self.spec.get('failures', 0)
+        return self.status.get('failures', 0)
 
     @property
     def governor_name(self):
@@ -211,32 +209,33 @@ class AnarchyRun(object):
 
     @property
     def result_status(self):
-        return self.spec.get('result', {}).get('status')
+        return self.status.get('result', {}).get('status')
 
     @property
     def result_status_message(self):
-        return self.spec.get('result', {}).get('statusMessage')
+        return self.status.get('result', {}).get('statusMessage')
 
     @property
     def retry_after(self):
-        return self.spec.get('retryAfter')
+        return self.status.get('retryAfter')
 
     @property
     def retry_after_datetime(self):
-        return datetime.strptime(
-            self.spec['retryAfter'], '%Y-%m-%dT%H:%M:%SZ'
-        ) if 'retryAfter' in self.spec else datetime.utcnow()
+        retry_after = self.retry_after
+        if retry_after:
+            return datetime.strptime(retry_after, '%Y-%m-%dT%H:%M:%SZ')
+        else:
+            return datetime.utcnow()
 
     @property
     def run_post_datetime(self):
-        if 'runPostTimestamp' in self.spec:
-            return datetime.strptime(self.spec['runPostTimestamp'], '%Y-%m-%dT%H:%M:%SZ')
-        else:
-            return None
+        timestamp = self.run_post_timestamp
+        if timestamp:
+            return datetime.strptime(timestamp, '%Y-%m-%dT%H:%M:%SZ')
 
     @property
     def run_post_timestamp(self):
-        return self.spec.get('runPostTimestamp')
+        return self.status.get('runPostTimestamp')
 
     @property
     def runner_name(self):
@@ -246,7 +245,7 @@ class AnarchyRun(object):
 
     @property
     def runner_reference(self):
-        return self.spec.get('runnerRef')
+        return self.status.get('runner')
 
     @property
     def runner_pod_name(self):
@@ -256,7 +255,7 @@ class AnarchyRun(object):
 
     @property
     def runner_pod_reference(self):
-        return self.spec.get('runnerPod', {})
+        return self.status.get('runnerPod', {})
 
     @property
     def subject_name(self):
@@ -340,7 +339,7 @@ class AnarchyRun(object):
         elif runner_label_value == 'queued':
             pass
         elif runner_label_value == 'failed':
-            if self.retry_after_datetime < datetime.utcnow():
+            if self.retry_after_datetime <= datetime.utcnow():
                 self.set_to_pending(anarchy_runtime)
         elif self.runner_pod_name:
             runner = self.get_runner()
@@ -370,64 +369,40 @@ class AnarchyRun(object):
             )
         )
 
-        patch = [{
-            'op': 'add',
-            'path': '/metadata/labels/' + anarchy_runtime.runner_label.replace('/', '~1'),
-            'value': 'pending' if result['status'] == 'lost' else result['status']
-        },{
-            'op': 'add',
-            'path': '/spec/result',
-            'value': result
-        },{
-            'op': 'add',
-            'path': '/spec/runPostTimestamp',
-            'value': datetime.utcnow().strftime('%FT%TZ')
-        }]
+        patch = {
+            "metadata": {
+                "labels": {
+                    anarchy_runtime.runner_label: 'pending' if result['status'] == 'lost' else result['status']
+                }
+            }
+        }
+
+        status_patch = {
+            'result': result,
+            'runPostTimestamp': datetime.utcnow().strftime('%FT%TZ'),
+        }
 
         if result['status'] == 'successful':
-            patch.append({
-                'op': 'add',
-                'path': '/metadata/labels/' + anarchy_runtime.finished_label.replace('/', '~1'),
-                'value': 'true',
-            })
-
+            patch['metadata']['labels'][anarchy_runtime.finished_label] = 'true'
         elif result['status'] == 'failed':
             if self.failures > 8:
                 retry_delay = timedelta(minutes=30)
             else:
                 retry_delay = timedelta(seconds=5 * 2**self.failures)
-            patch.append({
-                'op': 'add',
-                'path': '/spec/failures',
-                'value': self.failures + 1
-            })
-            patch.append({
-                'op': 'add',
-                'path': '/spec/retryAfter',
-                'value': (datetime.utcnow() + retry_delay).strftime('%FT%TZ')
-            })
+            status_patch['failures'] = self.failures + 1
+            status_patch['retryAfter'] = (datetime.utcnow() + retry_delay).strftime('%FT%TZ')
 
         try:
-            data = anarchy_runtime.custom_objects_api.api_client.call_api(
-                '/apis/{group}/{version}/namespaces/{namespace}/{plural}/{name}',
-                'PATCH',
-                { # path params
-                    'group': anarchy_runtime.operator_domain,
-                    'version': anarchy_runtime.api_version,
-                    'plural': 'anarchyruns',
-                    'namespace': anarchy_runtime.operator_namespace,
-                    'name': self.name
-                },
-                [], # query params
-                { # header params
-                    'Accept': 'application/json',
-                    'Content-Type': 'application/json-patch+json',
-                },
-                body=patch,
-                response_type='object',
-                auth_settings=['BearerToken'],
+            resource_object = anarchy_runtime.custom_objects_api.patch_namespaced_custom_object_status(
+                anarchy_runtime.operator_domain, anarchy_runtime.api_version,
+                self.namespace, 'anarchyruns', self.name, {"status": status_patch}
             )
-            self.__init__(resource_object=data[0])
+            self.__init__(resource_object)
+            resource_object = anarchy_runtime.custom_objects_api.patch_namespaced_custom_object(
+                anarchy_runtime.operator_domain, anarchy_runtime.api_version,
+                self.namespace, 'anarchyruns', self.name, patch
+            )
+            self.__init__(resource_object)
         except kubernetes.client.rest.ApiException as e:
             if e.status == 404:
                 self.local_logger.warning('Unable to updated deleted AnarchyRun')
@@ -445,8 +420,6 @@ class AnarchyRun(object):
 
         resource_object = self.to_dict()
         resource_object['metadata']['labels'][anarchy_runtime.runner_label] = runner_pod.metadata.name
-        resource_object['spec']['runnerRef'] = runner.reference
-        resource_object['spec']['runnerPod'] = runner_pod_reference
 
         try:
             resource_object = anarchy_runtime.custom_objects_api.replace_namespaced_custom_object(
@@ -454,6 +427,18 @@ class AnarchyRun(object):
                 self.namespace, 'anarchyruns', self.name, resource_object
             )
             self.__init__(resource_object=resource_object)
+            resource_object = anarchy_runtime.custom_objects_api.patch_namespaced_custom_object_status(
+                anarchy_runtime.operator_domain, anarchy_runtime.api_version,
+                self.namespace, 'anarchyruns', self.name,
+                {
+                    "status": {
+                        "runnerPod": runner_pod_reference,
+                        "runner": runner.reference,
+                    }
+                }
+            )
+            self.__init__(resource_object=resource_object)
+
             self.local_logger.info(
                 'Set runner',
                 extra = dict(
@@ -470,6 +455,17 @@ class AnarchyRun(object):
         return True
 
     def set_to_pending(self, anarchy_runtime):
+        resource_object = anarchy_runtime.custom_objects_api.patch_namespaced_custom_object_status(
+            anarchy_runtime.operator_domain, anarchy_runtime.api_version,
+            self.namespace, 'anarchyruns', self.name,
+            {
+                "status": {
+                    "runnerPod": None,
+                    "runner": None,
+                }
+            }
+        )
+        self.__init__(resource_object)
         resource_object = anarchy_runtime.custom_objects_api.patch_namespaced_custom_object(
             anarchy_runtime.operator_domain, anarchy_runtime.api_version,
             self.namespace, 'anarchyruns', self.name,
@@ -479,10 +475,6 @@ class AnarchyRun(object):
                         anarchy_runtime.runner_label: 'pending'
                     }
                 },
-                "spec": {
-                    "runnerPod": None,
-                    "runnerRef": None,
-                }
             }
         )
         self.__init__(resource_object)

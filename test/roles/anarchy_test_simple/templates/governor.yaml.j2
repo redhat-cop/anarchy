@@ -53,7 +53,7 @@ spec:
           or
           (
             fail_first_run | default(false) | bool and
-            anarchy_run.spec.failures | default(0) < 1
+            anarchy_run.status.failures | default(0) < 1
           )
 
       - name: Print message

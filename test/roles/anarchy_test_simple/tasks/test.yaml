@@ -64,7 +64,7 @@
     _action: >-
       {{ _run | json_query(_action_json_query) }}
     _action_json_query: >-
-      spec.result.ansibleRun.plays[0].tasks[?action=='anarchy_schedule_action'].hosts.localhost.result.action|[0]
+      status.result.ansibleRun.plays[0].tasks[?action=='anarchy_schedule_action'].hosts.localhost.result.action|[0]
   register: r_get_test_simple_1_configure_action
   failed_when: r_get_test_simple_1_configure_action.resources | length != 1
   until: r_get_test_simple_1_configure_action is success
@@ -189,7 +189,7 @@
     _action: >-
       {{ _run | json_query(_action_json_query) }}
     _action_json_query: >-
-      spec.result.ansibleRun.plays[0].tasks[?action=='anarchy_schedule_action'].hosts.localhost.result.action|[0]
+      status.result.ansibleRun.plays[0].tasks[?action=='anarchy_schedule_action'].hosts.localhost.result.action|[0]
   register: r_get_test_simple_1_configure_action
   failed_when: r_get_test_simple_1_configure_action.resources | length != 1
   until: r_get_test_simple_1_configure_action is success
@@ -342,7 +342,7 @@
     _run_ref: "{{ _action.status.runRef }}"
     _run: "{{ r_get_run.resources[0] }}"
   failed_when: >-
-    _run.spec.result.status | default('') != 'successful'
+    _run.status.result.status | default('') != 'successful'
   until: r_get_run is success
   retries: 10
   delay: 5
@@ -391,7 +391,7 @@
     _run_ref: "{{ _action.status.runRef }}"
     _run: "{{ r_get_run.resources[0] }}"
   failed_when: >-
-    _run.spec.result.status | default('') != 'successful'
+    _run.status.result.status | default('') != 'successful'
   until: r_get_run is success
   retries: 20
   delay: 5
@@ -439,7 +439,7 @@
     _run_ref: "{{ _action.status.runRef }}"
     _run: "{{ r_get_run.resources[0] }}"
   failed_when: >-
-    _run.spec.result.status | default('') != 'successful'
+    _run.status.result.status | default('') != 'successful'
   until: r_get_run is success
   retries: 20
   delay: 5
@@ -510,7 +510,7 @@
   vars:
     _run: "{{ r_get_run.resources[0] }}"
   failed_when: >-
-    _run.spec.result.status | default('') != 'successful'
+    _run.status.result.status | default('') != 'successful'
   until: r_get_run is success
   retries: 20
   delay: 5
@@ -573,7 +573,7 @@
   vars:
     _run: "{{ r_get_run.resources[0] | default({}) }}"
   failed_when: >-
-    _run.spec.result.status | default('') != 'successful'
+    _run.status.result.status | default('') != 'successful'
   until: r_get_run is success
   retries: 20
   delay: 5

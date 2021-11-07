@@ -60,6 +60,9 @@ def startup(settings: kopf.OperatorSettings, **_):
     # Use operator domain as finalizer
     settings.persistence.finalizer = anarchy_runtime.operator_domain
 
+    # Store progress in status. Some objects may be too large to store status in metadata annotations
+    settings.persistence.progress_storage = kopf.StatusProgressStorage(field='status.kopf.progress')
+
     # Only create events for warnings and errors
     settings.posting.level = logging.WARNING
 
@@ -437,13 +440,13 @@ def run_create_or_resume(**kwargs):
 def run_update(new, old, **kwargs):
     run = AnarchyRun.register(anarchy_runtime=anarchy_runtime, **kwargs)
 
-    new_spec = new['spec']
-    old_spec = old['spec']
-    new_run_post_timestamp = new_spec.get('runPostTimestamp')
-    old_run_post_timestamp = old_spec.get('runPostTimestamp')
+    new_labels = new['metadata'].get('labels', {})
+    old_labels = old['metadata'].get('labels', {})
+    new_runner_label_value = new_labels.get(anarchy_runtime.runner_label)
+    old_runner_label_value = old_labels.get(anarchy_runtime.runner_label)
 
-    # Only do something if new result was posted
-    if new_run_post_timestamp == old_run_post_timestamp:
+    # Only do something if runner value changes
+    if new_runner_label_value == old_runner_label_value:
         return
 
     governor = run.get_governor()
@@ -460,8 +463,7 @@ def run_update(new, old, **kwargs):
             delay = 5
         )
 
-    result_status = new_spec.get('result', {}).get('status')
-    if result_status == 'successful':
+    if run.result_status == 'successful':
         subject.remove_run_from_status(
             anarchy_runtime = anarchy_runtime,
             run_name = run.name,
@@ -531,7 +533,7 @@ def run_update(new, old, **kwargs):
 
 
 @kopf.on.delete(anarchy_runtime.operator_domain, anarchy_runtime.api_version, 'anarchyruns')
-def run_delete(logger, name, spec, **_):
+def run_delete(logger, name, spec, status, **_):
     AnarchyRun.unregister(name)
 
     subject_name = spec.get('subject', {}).get('name')
@@ -543,8 +545,8 @@ def run_delete(logger, name, spec, **_):
                 run_name = name,
             )
 
-    runner_ref = spec.get('runnerRef')
-    runner_pod = spec.get('runnerPod')
+    runner_ref = status.get('runner')
+    runner_pod = status.get('runnerPod')
     if runner_ref and runner_pod:
         runner = AnarchyRunner.get(runner_ref['name'])
         runner.clear_pod_run_reference(
