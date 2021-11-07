@@ -13,9 +13,14 @@ namespace:
   create: true
   name: anarchy
 
-# Install ClusterRoles
+# Control creation of cluster roles
 clusterroles:
   create: true
+
+# Just for odo usage, separate control for role creation, roles also
+# created when deploy is set to true
+roles:
+  create: false
 
 imagePullSecrets: []
 nameOverride: ""

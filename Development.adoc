@@ -38,6 +38,7 @@ odo create --devfile devfile.yaml
 --------------------------------
 helm template helm/ --include-crds \
 --set deploy=false \
+--set roles.create=true \
 --set clusterroles.create=true \
 | oc apply -f -
 --------------------------------
