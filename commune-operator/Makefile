@@ -182,7 +182,7 @@ FROM_INDEX_OPT := --from-index $(CATALOG_BASE_IMG)
 endif
 
 # Build a catalog image by adding bundle images to an empty catalog using the operator package manager tool, 'opm'.
-# This recipe invokes 'opm' in 'semver' bundle add mode. For more information on add modes, see:
+# This recipe invokes 'opm' in 'semver-skippatch' bundle add mode. For more information on add modes, see:
 # https://github.com/operator-framework/community-operators/blob/7f1438c/docs/packaging-operator.md#updating-your-existing-operator
 .PHONY: catalog-build
 catalog-build: opm ## Build a catalog image.
