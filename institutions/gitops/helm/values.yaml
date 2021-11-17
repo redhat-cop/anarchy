@@ -16,6 +16,10 @@ namespace:
 clusterroles:
   create: true
 
+# Create anarchy role
+roles:
+  create: true
+
 imagePullSecrets: []
 nameOverride: ""
 
