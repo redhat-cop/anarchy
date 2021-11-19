@@ -6,7 +6,9 @@ metadata:
 spec:
   runner: default
   ansibleGalaxyRequirements:
-    collections: []
+    collections:
+    - name: kubernetes.core
+      version: {{ .Values.k8s_core_collection.version }}
     roles:
     - name: k8s_config
       src: git+{{ .Values.k8s_config.repo }}
