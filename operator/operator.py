@@ -57,6 +57,12 @@ def startup(settings: kopf.OperatorSettings, **_):
     # Never give up from network errors
     settings.networking.error_backoffs = InfiniteRelativeBackoff()
 
+    # Store last handled configuration in status
+    settings.persistence.diffbase_storage = kopf.MultiDiffBaseStorage([
+        kopf.StatusDiffBaseStorage(field='status.diffBase'),
+        kopf.AnnotationsDiffBaseStorage(prefix='kopf.zalando.org', key='last-handled-configuration'),
+    ])
+
     # Use operator domain as finalizer
     settings.persistence.finalizer = anarchy_runtime.operator_domain
 
