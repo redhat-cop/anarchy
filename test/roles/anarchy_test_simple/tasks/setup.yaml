@@ -1,6 +1,6 @@
 ---
 - name: Create AnarchyGovernor test-simple
-  k8s:
+  kubernetes.core.k8s:
     apply: true
     state: present
     definition: "{{ lookup('template', 'governor.yaml.j2') | from_yaml }}"

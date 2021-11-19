@@ -9,7 +9,7 @@
     anarchy_namespace: "{{ r_get_current_project.stdout }}"
 
 - name: Get odo anarchy Deployment
-  k8s_info:
+  kubernetes.core.k8s_info:
     api_version: apps/v1
     kind: Deployment
     name: anarchy-app
@@ -22,7 +22,7 @@
     anarchy_odo_deployment: "{{ r_get_odo_deployment.resources[0] }}"
 
 - name: Get odo anarchy-app Pod
-  k8s_info:
+  kubernetes.core.k8s_info:
     api_version: v1
     kind: Pod
     namespace: "{{ anarchy_namespace }}"

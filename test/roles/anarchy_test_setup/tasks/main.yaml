@@ -9,7 +9,7 @@
     anarchy_namespace: "{{ r_get_current_project.stdout }}"
 
 - name: Get Route for anarchy
-  k8s_info:
+  kubernetes.core.k8s_info:
     api_version: route.openshift.io/v1
     kind: Route
     name: anarchy

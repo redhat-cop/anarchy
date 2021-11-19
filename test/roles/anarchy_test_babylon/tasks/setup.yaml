@@ -8,7 +8,7 @@
       aws_secret_access_key: th34cc355
 
 - name: Create anarchy-test-babylon-aws-creds Secret
-  k8s:
+  kubernetes.core.k8s:
     apply: true
     definition:
       apiVersion: v1
@@ -22,7 +22,7 @@
         aws_secret_access_key: "{{ anarchy_test_babylon_aws_vars.aws_secret_access_key | b64encode }}"
 
 - name: Create anarchy-test-babylon-server ImageStream
-  k8s:
+  kubernetes.core.k8s:
     apply: true
     definition: "{{ lookup('template', 'test-server.imagestream.yaml.j2') }}"
   register: r_anarchy_test_server_imagestream
@@ -38,7 +38,7 @@
 - when: anarchy_test_babylon_server_image == ''
   block:
   - name: Create anarchy-test-babylon-server BuildConfig
-    k8s:
+    kubernetes.core.k8s:
       apply: true
       definition: "{{ lookup('template', 'test-server.buildconfig.yaml.j2') | from_yaml }}"
 
@@ -50,7 +50,7 @@
       --follow
 
   - name: Get anarchy-test-babylon-server ImageStream
-    k8s_info:
+    kubernetes.core.k8s_info:
       api_version: image.openshift.io/v1
       kind: ImageStream
       name: anarchy-test-babylon-server
@@ -77,7 +77,7 @@
       resources[0].status.tags[?tag=='latest'].items[0].dockerImageReference|[0]
 
 - name: Create anarchy-test-babylon-server resources
-  k8s:
+  kubernetes.core.k8s:
     apply: true
     definition: "{{ lookup('template', _template) }}"
   loop:
@@ -88,7 +88,7 @@
     loop_var: _template
 
 - name: Get anarchy-test-babylon-server pod
-  k8s_info:
+  kubernetes.core.k8s_info:
     api_version: v1
     kind: Pod
     namespace: "{{ anarchy_namespace }}"
@@ -104,7 +104,7 @@
   delay: 5
 
 - name: Get anarchy-test-babylon-server Route
-  k8s_info:
+  kubernetes.core.k8s_info:
     api_version: route.openshift.io/v1
     kind: Route
     name: anarchy-test-babylon-server
@@ -113,7 +113,7 @@
   failed_when: r_get_anarchy_test_babylon_server_route.resources | default([]) | length != 1
 
 - name: Create anarchy-test-babylon-api-creds Secret
-  k8s:
+  kubernetes.core.k8s:
     apply: true
     definition:
       apiVersion: v1
@@ -128,6 +128,6 @@
         password: "{{ anarchy_test_babylon_password | b64encode }}"
 
 - name: Create test AnarchyGovernor
-  k8s:
+  kubernetes.core.k8s:
     state: present
     definition: "{{ lookup('template', 'governor.yaml.j2') | from_yaml }}"

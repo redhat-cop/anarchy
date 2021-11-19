@@ -1,6 +1,6 @@
 ---
 - name: Get test AnarchySubjects
-  k8s_info:
+  kubernetes.core.k8s_info:
     api_version: anarchy.gpte.redhat.com/v1
     kind: AnarchySubject
     namespace: "{{ anarchy_namespace }}"
@@ -9,7 +9,7 @@
   register: r_get_test_subjects
 
 - name: Remove finalizers from AnarchySubjects
-  k8s:
+  kubernetes.core.k8s:
     api_version: anarchy.gpte.redhat.com/v1
     kind: AnarchySubject
     name: "{{ _subject.metadata.name }}"
@@ -24,7 +24,7 @@
     loop_var: _subject
 
 - name: Delete test AnarchySubjects
-  k8s:
+  kubernetes.core.k8s:
     api_version: anarchy.gpte.redhat.com/v1
     kind: AnarchySubject
     name: "{{ _subject.metadata.name }}"
@@ -36,7 +36,7 @@
     loop_var: _subject
 
 - name: Get test AnarchyGovernors
-  k8s_info:
+  kubernetes.core.k8s_info:
     api_version: anarchy.gpte.redhat.com/v1
     kind: AnarchyGovernor
     namespace: "{{ anarchy_namespace }}"
@@ -45,7 +45,7 @@
   register: r_get_test_governors
 
 - name: Delete test AnarchyGovernors
-  k8s:
+  kubernetes.core.k8s:
     api_version: anarchy.gpte.redhat.com/v1
     kind: AnarchyGovernor
     name: "{{ _governor.metadata.name }}"

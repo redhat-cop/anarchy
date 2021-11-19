@@ -1,6 +1,6 @@
 ---
 - name: Create AnarchySubject test-babylon-1
-  k8s:
+  kubernetes.core.k8s:
     apply: true
     state: present
     definition: "{{ lookup('template', 'subject.yaml.j2') | from_yaml }}"
@@ -12,7 +12,7 @@
         test_subject_var: test-1
 
 - name: Check test-babylon-1 provision action
-  k8s_info:
+  kubernetes.core.k8s_info:
     api_version: anarchy.gpte.redhat.com/v1
     kind: AnarchyAction
     label_selectors:
@@ -30,7 +30,7 @@
   delay: 5
 
 - name: Confirm test-babylon-1 subject state
-  k8s_info:
+  kubernetes.core.k8s_info:
     api_version: anarchy.gpte.redhat.com/v1
     kind: AnarchySubject
     name: test-babylon-1
@@ -46,7 +46,7 @@
   delay: 5
 
 - name: Stop test-babylon-1 subject
-  k8s:
+  kubernetes.core.k8s:
     api_version: anarchy.gpte.redhat.com/v1
     kind: AnarchySubject
     name: test-babylon-1
@@ -58,7 +58,7 @@
           desired_state: stopped
 
 - name: Confirm test-babylon-1 subject stopped
-  k8s_info:
+  kubernetes.core.k8s_info:
     api_version: anarchy.gpte.redhat.com/v1
     kind: AnarchySubject
     name: test-babylon-1
@@ -71,7 +71,7 @@
   delay: 5
 
 - name: Start test-babylon-1 subject
-  k8s:
+  kubernetes.core.k8s:
     api_version: anarchy.gpte.redhat.com/v1
     kind: AnarchySubject
     name: test-babylon-1
@@ -83,7 +83,7 @@
           desired_state: started
 
 - name: Confirm test-babylon-1 subject started
-  k8s_info:
+  kubernetes.core.k8s_info:
     api_version: anarchy.gpte.redhat.com/v1
     kind: AnarchySubject
     name: test-babylon-1
@@ -98,7 +98,7 @@
 - when: anarchy_test_delete_subjects | bool
   block:
   - name: Delete test-babylon-1 subject
-    k8s:
+    kubernetes.core.k8s:
       state: absent
       api_version: anarchy.gpte.redhat.com/v1
       kind: AnarchySubject
@@ -106,7 +106,7 @@
       namespace: "{{ anarchy_namespace }}"
 
   - name: Verify AnarchySubject delete for test-babylon-1
-    k8s_info:
+    kubernetes.core.k8s_info:
       api_version: anarchy.gpte.redhat.com/v1
       kind: AnarchySubject
       name: test-babylon-1
@@ -118,7 +118,7 @@
     delay: 5
 
 - name: Create AnarchySubject test-babylon-2
-  k8s:
+  kubernetes.core.k8s:
     apply: true
     state: present
     definition: "{{ lookup('template', 'subject.yaml.j2') | from_yaml }}"
@@ -131,7 +131,7 @@
         simulate_job_result: failed
 
 - name: Wait for test-babylon-2 subject provision-failed
-  k8s_info:
+  kubernetes.core.k8s_info:
     api_version: anarchy.gpte.redhat.com/v1
     kind: AnarchySubject
     name: test-babylon-2
@@ -151,7 +151,7 @@
           simulate_job_result: successful
     _spec: >-
       {{ r_test_subject.resources[0].spec | combine(_patch, recursive=true) }}
-  k8s:
+  kubernetes.core.k8s:
     api_version: anarchy.gpte.redhat.com/v1
     kind: AnarchySubject
     name: test-babylon-2
@@ -166,7 +166,7 @@
 - when: anarchy_test_delete_subjects | bool
   block:
   - name: Delete test-babylon-2 subject
-    k8s:
+    kubernetes.core.k8s:
       state: absent
       api_version: anarchy.gpte.redhat.com/v1
       kind: AnarchySubject
@@ -174,7 +174,7 @@
       namespace: "{{ anarchy_namespace }}"
 
   - name: Verify AnarchySubject delete for test-babylon-2
-    k8s_info:
+    kubernetes.core.k8s_info:
       api_version: anarchy.gpte.redhat.com/v1
       kind: AnarchySubject
       name: test-babylon-2
@@ -186,7 +186,7 @@
     delay: 5
 
 - name: Create AnarchySubject test-babylon-3
-  k8s:
+  kubernetes.core.k8s:
     apply: true
     state: present
     definition: "{{ lookup('template', 'subject.yaml.j2') | from_yaml }}"
@@ -197,7 +197,7 @@
       tower_job_check_interval: 10s
 
 - name: Wait for test-babylon-3 subject started
-  k8s_info:
+  kubernetes.core.k8s_info:
     api_version: anarchy.gpte.redhat.com/v1
     kind: AnarchySubject
     name: test-babylon-3
@@ -217,7 +217,7 @@
           simulate_job_result: failed
     _spec: >-
       {{ r_test_subject.resources[0].spec | combine(_patch, recursive=true) }}
-  k8s:
+  kubernetes.core.k8s:
     api_version: anarchy.gpte.redhat.com/v1
     kind: AnarchySubject
     name: test-babylon-3
@@ -230,7 +230,7 @@
       spec: "{{ _spec }}"
 
 - name: Delete test-babylon-3 subject
-  k8s:
+  kubernetes.core.k8s:
     state: absent
     api_version: anarchy.gpte.redhat.com/v1
     kind: AnarchySubject
@@ -238,7 +238,7 @@
     namespace: "{{ anarchy_namespace }}"
 
 - name: Wait for test-babylon-3 subject destroy-failed
-  k8s_info:
+  kubernetes.core.k8s_info:
     api_version: anarchy.gpte.redhat.com/v1
     kind: AnarchySubject
     name: test-babylon-3
@@ -253,7 +253,7 @@
 - when: anarchy_test_delete_subjects | bool
   block:
   - name: Update AnarchySubject to complete delete
-    k8s:
+    kubernetes.core.k8s:
       api_version: anarchy.gpte.redhat.com/v1
       kind: AnarchySubject
       name: test-babylon-3
@@ -264,7 +264,7 @@
             force_delete: true
 
   - name: Verify AnarchySubject delete for test-babylon-3
-    k8s_info:
+    kubernetes.core.k8s_info:
       api_version: anarchy.gpte.redhat.com/v1
       kind: AnarchySubject
       name: test-babylon-3

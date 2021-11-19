@@ -1,6 +1,6 @@
 ---
 - name: Delete AnarchyGovernor test-babylon
-  k8s:
+  kubernetes.core.k8s:
     state: absent
     api_version: anarchy.gpte.redhat.com/v1
     kind: AnarchyGovernor
@@ -8,7 +8,7 @@
     namespace: "{{ anarchy_namespace }}"
 
 - name: Delete anarchy-test-babylon-server resources
-  k8s:
+  kubernetes.core.k8s:
     state: absent
     definition: "{{ lookup('template', _template) }}"
   loop:
@@ -21,7 +21,7 @@
     loop_var: _template
 
 - name: Delete anarchy-test-babylon-* Secrets
-  k8s:
+  kubernetes.core.k8s:
     api_version: v1
     kind: Secret
     name: "{{ item }}"

@@ -1,6 +1,6 @@
 ---
 - name: Create AnarchySubject test-simple-1
-  k8s:
+  kubernetes.core.k8s:
     apply: true
     state: present
     definition: "{{ lookup('template', 'subject.yaml.j2') | from_yaml }}"
@@ -9,7 +9,7 @@
     _a_var_from_subject: 23
 
 - name: Get AnarchySubject test-simple-1
-  k8s_info:
+  kubernetes.core.k8s_info:
     api_version: anarchy.gpte.redhat.com/v1
     kind: AnarchySubject
     namespace: "{{ anarchy_namespace }}"
@@ -18,7 +18,7 @@
   failed_when: r_get_test_simple_1.resources | default([]) | length != 1
 
 - name: Get AnarchyRun for create test-simple-1
-  k8s_info:
+  kubernetes.core.k8s_info:
     api_version: anarchy.gpte.redhat.com/v1
     kind: AnarchyRun
     namespace: "{{ anarchy_namespace }}"
@@ -53,7 +53,7 @@
       anarchy_event_name: create
 
 - name: Get AnarchyAction scheduled by AnarchyRun for create of test-simple-1
-  k8s_info:
+  kubernetes.core.k8s_info:
     api_version: anarchy.gpte.redhat.com/v1
     kind: AnarchyAction
     namespace: "{{ anarchy_namespace }}"
@@ -72,7 +72,7 @@
   delay: 5
 
 - name: Get AnarchyRun for configure test-simple-1
-  k8s_info:
+  kubernetes.core.k8s_info:
     api_version: anarchy.gpte.redhat.com/v1
     kind: AnarchyRun
     namespace: "{{ anarchy_namespace }}"
@@ -124,7 +124,7 @@
       anarchy_action_name: "{{ _action.metadata.name }}"
 
 - name: Update AnarchySubject test-simple-1
-  k8s:
+  kubernetes.core.k8s:
     apply: true
     state: present
     definition: "{{ lookup('template', 'subject.yaml.j2') | from_yaml }}"
@@ -133,7 +133,7 @@
     _a_var_from_subject: 42
 
 - name: Get AnarchyRun for update test-simple-1
-  k8s_info:
+  kubernetes.core.k8s_info:
     api_version: anarchy.gpte.redhat.com/v1
     kind: AnarchyRun
     namespace: "{{ anarchy_namespace }}"
@@ -178,7 +178,7 @@
             a_var_subject_should_override: true
 
 - name: Get AnarchyAction scheduled by AnarchyRun for update of test-simple-1
-  k8s_info:
+  kubernetes.core.k8s_info:
     api_version: anarchy.gpte.redhat.com/v1
     kind: AnarchyAction
     namespace: "{{ anarchy_namespace }}"
@@ -197,7 +197,7 @@
   delay: 5
 
 - name: Get AnarchyRun for configure test-simple-1
-  k8s_info:
+  kubernetes.core.k8s_info:
     api_version: anarchy.gpte.redhat.com/v1
     kind: AnarchyRun
     namespace: "{{ anarchy_namespace }}"
@@ -237,7 +237,7 @@
       anarchy_action_name: "{{ _action.metadata.name }}"
 
 - name: Create AnarchyAction without ownerReferences
-  k8s:
+  kubernetes.core.k8s:
     apply: true
     state: present
     definition:
@@ -252,7 +252,7 @@
           name: test-simple-1
 
 - name: Verify AnarchyAction Without ownerReferences is set
-  k8s_info:
+  kubernetes.core.k8s_info:
     api_version: anarchy.gpte.redhat.com/v1
     kind: AnarchyAction
     namespace: "{{ anarchy_namespace }}"
@@ -280,7 +280,7 @@
     _action: "{{ r_get_test_simple_configure_action.resources[0] }}"
 
 - name: Create AnarchyAction to test scheduling
-  k8s:
+  kubernetes.core.k8s:
     apply: true
     state: present
     definition:
@@ -300,7 +300,7 @@
     seconds: 5
 
 - name: Get AnarchyAction test-simple-1-future-execution before run
-  k8s_info:
+  kubernetes.core.k8s_info:
     api_version: anarchy.gpte.redhat.com/v1
     kind: AnarchyAction
     namespace: "{{ anarchy_namespace }}"
@@ -316,7 +316,7 @@
   delay: 5
 
 - name: Wait for AnarchyAction test-simple-1-future-execution run
-  k8s_info:
+  kubernetes.core.k8s_info:
     api_version: anarchy.gpte.redhat.com/v1
     kind: AnarchyAction
     namespace: "{{ anarchy_namespace }}"
@@ -331,7 +331,7 @@
   delay: 5
 
 - name: Check AnarchyRun for test-simple-1-future-execution
-  k8s_info:
+  kubernetes.core.k8s_info:
     api_version: anarchy.gpte.redhat.com/v1
     kind: AnarchyRun
     namespace: "{{ anarchy_namespace }}"
@@ -348,7 +348,7 @@
   delay: 5
 
 - name: Create AnarchyAction to test failure recovery
-  k8s:
+  kubernetes.core.k8s:
     apply: true
     state: present
     definition:
@@ -365,7 +365,7 @@
           fail_first_run: true
 
 - name: Get AnarchyAction test-simple-1-fail-first-run
-  k8s_info:
+  kubernetes.core.k8s_info:
     api_version: anarchy.gpte.redhat.com/v1
     kind: AnarchyAction
     namespace: "{{ anarchy_namespace }}"
@@ -380,7 +380,7 @@
   delay: 5
 
 - name: Check AnarchyRun for test-simple-1-fail-first-run
-  k8s_info:
+  kubernetes.core.k8s_info:
     api_version: anarchy.gpte.redhat.com/v1
     kind: AnarchyRun
     namespace: "{{ anarchy_namespace }}"
@@ -397,7 +397,7 @@
   delay: 5
 
 - name: Create AnarchyAction to test callback functionality
-  k8s:
+  kubernetes.core.k8s:
     apply: true
     state: present
     definition:
@@ -413,7 +413,7 @@
           name: test-simple-1
 
 - name: Verify run of AnarchyAction test-simple-1-callback-test
-  k8s_info:
+  kubernetes.core.k8s_info:
     api_version: anarchy.gpte.redhat.com/v1
     kind: AnarchyAction
     namespace: "{{ anarchy_namespace }}"
@@ -428,7 +428,7 @@
   delay: 5
 
 - name: Check AnarchyRun for test-simple-1-fail-first-run
-  k8s_info:
+  kubernetes.core.k8s_info:
     api_version: anarchy.gpte.redhat.com/v1
     kind: AnarchyRun
     namespace: "{{ anarchy_namespace }}"
@@ -445,7 +445,7 @@
   delay: 5
 
 - name: Verify run of AnarchyAction test-simple-1-callback-test not yet completed
-  k8s_info:
+  kubernetes.core.k8s_info:
     api_version: anarchy.gpte.redhat.com/v1
     kind: AnarchyAction
     namespace: "{{ anarchy_namespace }}"
@@ -460,7 +460,7 @@
   delay: 5
 
 - name: Verify AnarchyAction test-simple-1-callback-test still active for AnarchySubject
-  k8s_info:
+  kubernetes.core.k8s_info:
     api_version: anarchy.gpte.redhat.com/v1
     kind: AnarchySubject
     namespace: "{{ anarchy_namespace }}"
@@ -498,7 +498,7 @@
       event: done
 
 - name: Check AnarchyRun for test-simple-1-callback-test done event
-  k8s_info:
+  kubernetes.core.k8s_info:
     api_version: anarchy.gpte.redhat.com/v1
     kind: AnarchyRun
     namespace: "{{ anarchy_namespace }}"
@@ -516,7 +516,7 @@
   delay: 5
 
 - name: Verify AnarchyAction test-simple-1-callback-test finished
-  k8s_info:
+  kubernetes.core.k8s_info:
     api_version: anarchy.gpte.redhat.com/v1
     kind: AnarchyAction
     namespace: "{{ anarchy_namespace }}"
@@ -532,7 +532,7 @@
   delay: 5
 
 - name: Verify no AnarchyAction active for test-simple-1
-  k8s_info:
+  kubernetes.core.k8s_info:
     api_version: anarchy.gpte.redhat.com/v1
     kind: AnarchySubject
     namespace: "{{ anarchy_namespace }}"
@@ -547,7 +547,7 @@
   delay: 5
 
 - name: Create AnarchyAction to test action continuation
-  k8s:
+  kubernetes.core.k8s:
     apply: true
     state: present
     definition:
@@ -562,7 +562,7 @@
           name: test-simple-1
 
 - name: Check first AnarchyRun for test-simple-1-continuation-test
-  k8s_info:
+  kubernetes.core.k8s_info:
     api_version: anarchy.gpte.redhat.com/v1
     kind: AnarchyRun
     namespace: "{{ anarchy_namespace }}"
@@ -583,7 +583,7 @@
     seconds: 2
 
 - name: Check that test-simple-1-continuation-test is not finished
-  k8s_info:
+  kubernetes.core.k8s_info:
     api_version: anarchy.gpte.redhat.com/v1
     kind: AnarchyAction
     namespace: "{{ anarchy_namespace }}"
@@ -602,7 +602,7 @@
     seconds: 30
 
 - name: Check that test-simple-1-continuation-test is finished
-  k8s_info:
+  kubernetes.core.k8s_info:
     api_version: anarchy.gpte.redhat.com/v1
     kind: AnarchyAction
     namespace: "{{ anarchy_namespace }}"
@@ -617,7 +617,7 @@
   delay: 5
 
 - name: Create failure test
-  k8s:
+  kubernetes.core.k8s:
     apply: true
     state: present
     definition:
@@ -634,7 +634,7 @@
           fail_run: true
 
 - name: Wait for AnarchyRun failure
-  k8s_info:
+  kubernetes.core.k8s_info:
     api_version: anarchy.gpte.redhat.com/v1
     kind: AnarchyRun
     namespace:  "{{ anarchy_namespace }}"
@@ -649,7 +649,7 @@
   delay: 5
 
 - name: Verify AnarchySubject status.runStatus and status.runStatusMessage
-  k8s_info:
+  kubernetes.core.k8s_info:
     api_version: anarchy.gpte.redhat.com/v1
     kind: AnarchySubject
     name: test-simple-1
@@ -665,7 +665,7 @@
   delay: 5
 
 - name: Update test-simple-1
-  k8s:
+  kubernetes.core.k8s:
     api_version: anarchy.gpte.redhat.com/v1
     kind: AnarchySubject
     name: test-simple-1
@@ -676,7 +676,7 @@
           a_var_from_subject: 0
 
 - name: Verify update AnarchyRun in queued state
-  k8s_info:
+  kubernetes.core.k8s_info:
     api_version: anarchy.gpte.redhat.com/v1
     kind: AnarchyRun
     namespace:  "{{ anarchy_namespace }}"
@@ -691,7 +691,7 @@
   delay: 5
 
 - name: Delete test-simple-1-failure-test AnarchyAction
-  k8s:
+  kubernetes.core.k8s:
     api_version: anarchy.gpte.redhat.com/v1
     kind: AnarchyAction
     name: test-simple-1-failure-test
@@ -699,7 +699,7 @@
     state: absent
 
 - name: Verify that update AnarchyRun is now able to run
-  k8s_info:
+  kubernetes.core.k8s_info:
     api_version: anarchy.gpte.redhat.com/v1
     kind: AnarchyRun
     namespace:  "{{ anarchy_namespace }}"
@@ -714,7 +714,7 @@
   delay: 5
 
 - name: Verify all runs successful for test-simple-1
-  k8s_info:
+  kubernetes.core.k8s_info:
     api_version: anarchy.gpte.redhat.com/v1
     kind: AnarchyRun
     namespace:  "{{ anarchy_namespace }}"
@@ -729,7 +729,7 @@
   delay: 5
 
 - name: Verify that test-simple-1 status has no active runs
-  k8s_info:
+  kubernetes.core.k8s_info:
     api_version: anarchy.gpte.redhat.com/v1
     kind: AnarchySubject
     name: test-simple-1
@@ -745,7 +745,7 @@
 - when: anarchy_test_delete_subjects | bool
   block:
   - name: Delete AnarchySubject test-simple-1
-    k8s:
+    kubernetes.core.k8s:
       state: absent
       api_version: anarchy.gpte.redhat.com/v1
       kind: AnarchySubject
@@ -753,7 +753,7 @@
       namespace: "{{ anarchy_namespace }}"
 
   - name: Verify AnarchySubject delete for test-simple-1
-    k8s_info:
+    kubernetes.core.k8s_info:
       api_version: anarchy.gpte.redhat.com/v1
       kind: AnarchySubject
       name: test-simple-1

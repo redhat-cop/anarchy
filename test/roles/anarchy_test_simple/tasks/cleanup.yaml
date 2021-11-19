@@ -1,6 +1,6 @@
 ---
 - name: Delete AnarchyGovernor test-simple
-  k8s:
+  kubernetes.core.k8s:
     state: absent
     api_version: anarchy.gpte.redhat.com/v1
     kind: AnarchyGovernor
