@@ -216,35 +216,33 @@ def subject_event(event, logger, **_):
         and anarchy_runtime.subject_label in subject.metadata.get('finalizers', []):
             # Manually interact with the kopf last-handled-configuration
             # annotation that is usually managed by kopf.
-            last_handled_configuration = subject.last_handled_configuration
-            if last_handled_configuration and subject.spec != last_handled_configuration['spec']:
+            diff_base = subject.diff_base
+            if diff_base and subject.spec != diff_base['spec']:
                 # Updates are checked againts sha256 annotition to allow Anarchy to
                 # skip processing when this annotation is updated along with the spec
                 if subject.check_spec_changed(anarchy_runtime=anarchy_runtime):
                     subject.process_subject_event_handlers(
                         anarchy_runtime=anarchy_runtime,
                         event_name='update',
-                        old=last_handled_configuration,
+                        old=diff_base,
                     )
 
-                # Update kopf last-handled-configuration annotation
-                resource_object = anarchy_runtime.custom_objects_api.patch_namespaced_custom_object(
+                # Update diffBase in status
+                resource_object = anarchy_runtime.custom_objects_api.patch_namespaced_custom_object_status(
                     anarchy_runtime.operator_domain, anarchy_runtime.api_version,
                     subject.namespace, 'anarchysubjects', subject.name,
                     {
-                        'metadata': {
-                            'annotations': {
-                                'kopf.zalando.org/last-handled-configuration': json.dumps({
-                                    'metadata': {
-                                        'annotations': {
-                                            k: v for k, v in subject.metadata.get('annotations', {}).items()
-                                            if k != 'kopf.zalando.org/last-handled-configuration'
-                                        },
-                                        'labels': subject.metadata.get('labels', {})
+                        'status': {
+                            'diffBase': json.dumps({
+                                'metadata': {
+                                    'annotations': {
+                                        k: v for k, v in subject.metadata.get('annotations', {}).items()
+                                        if not k.startswith('kopf.zalando.org/') and not k.startswith('kopf-managed/')
                                     },
-                                    'spec': subject.spec,
-                                }),
-                            }
+                                    'labels': subject.metadata.get('labels', {})
+                                },
+                                'spec': subject.spec,
+                            })
                         }
                     }
                 )
@@ -320,7 +318,7 @@ def action_create(**kwargs):
     action.set_owner_references(
         anarchy_runtime = anarchy_runtime,
     )
-    subject = action.get_subject()
+    subject = action.get_subject(anarchy_runtime)
     subject.add_action_to_status(
         action = action,
         anarchy_runtime = anarchy_runtime,
@@ -330,7 +328,7 @@ def action_create(**kwargs):
 @kopf.on.resume(anarchy_runtime.operator_domain, anarchy_runtime.api_version, 'anarchyactions')
 def action_resume(**kwargs):
     action = AnarchyAction.register(anarchy_runtime=anarchy_runtime, **kwargs)
-    subject = action.get_subject()
+    subject = action.get_subject(anarchy_runtime)
     if not subject:
         raise kopf.TemporaryError(
             "Unable to find AnarchySubject for AnarchyAction",
@@ -347,7 +345,7 @@ def action_resume(**kwargs):
 @kopf.on.update(anarchy_runtime.operator_domain, anarchy_runtime.api_version, 'anarchyactions')
 def action_update(new, old, **kwargs):
     action = AnarchyAction.register(anarchy_runtime=anarchy_runtime, **kwargs)
-    subject = action.get_subject()
+    subject = action.get_subject(anarchy_runtime)
     if not subject:
         raise kopf.TemporaryError(
             "Unable to find AnarchySubject for AnarchyAction",
@@ -373,7 +371,10 @@ def action_delete(logger, name, spec, **kwargs):
     subject_name = spec.get('subjectRef', {}).get('name')
 
     if subject_name:
-        subject = AnarchySubject.get(subject_name)
+        subject = AnarchySubject.get(
+            anarchy_runtime = anarchy_runtime,
+            name = subject_name,
+        )
         if subject:
             subject.remove_action_from_status(
                 action_name = name,
@@ -388,7 +389,7 @@ async def action_daemon(stopped, **kwargs):
         while not stopped:
             if not action.has_run_scheduled:
                 if action.after_datetime <= datetime.utcnow():
-                    subject = action.get_subject()
+                    subject = action.get_subject(anarchy_runtime)
                     if not subject:
                         raise kopf.TemporaryError(
                             "Unable to find AnarchySubject for AnarchyAction",
@@ -425,7 +426,7 @@ def run_create_or_resume(**kwargs):
     if anarchy_runtime.finished_label in run.labels:
         return
 
-    subject = run.get_subject()
+    subject = run.get_subject(anarchy_runtime)
     if not subject:
         raise kopf.TemporaryError(
             "Unable to find AnarchySubject for AnarchyRun",
@@ -451,8 +452,9 @@ def run_update(new, old, **kwargs):
     new_runner_label_value = new_labels.get(anarchy_runtime.runner_label)
     old_runner_label_value = old_labels.get(anarchy_runtime.runner_label)
 
-    # Only do something if runner value changes
-    if new_runner_label_value == old_runner_label_value:
+    # Only do something if runner value changes to a completed state
+    if new_runner_label_value == old_runner_label_value \
+    or new_runner_label_value not in ('successful', 'failed', 'lost'):
         return
 
     governor = run.get_governor()
@@ -462,7 +464,7 @@ def run_update(new, old, **kwargs):
             delay = 5
         )
 
-    subject = run.get_subject()
+    subject = run.get_subject(anarchy_runtime)
     if not subject:
         raise kopf.TemporaryError(
             f"AnarchyRun posted result but cannot find AnarchySubject {run.subject_name}!",
@@ -529,7 +531,7 @@ def run_update(new, old, **kwargs):
         if run.action_reference:
             extra['action'] = run.action_reference
         run.logger.warning(
-            "AnarchyRun failed, will retry",
+            f"AnarchyRun {run.result_status}, will retry",
             extra = extra
         )
         subject.set_run_failure_in_status(
@@ -544,7 +546,10 @@ def run_delete(logger, name, spec, status, **_):
 
     subject_name = spec.get('subject', {}).get('name')
     if subject_name:
-        subject = AnarchySubject.get(subject_name)
+        subject = AnarchySubject.get(
+            anarchy_runtime = anarchy_runtime,
+            name = subject_name,
+        )
         if subject:
             subject.remove_run_from_status(
                 anarchy_runtime = anarchy_runtime,
@@ -567,7 +572,7 @@ async def run_daemon(stopped, **kwargs):
     run = AnarchyRun.register(anarchy_runtime=anarchy_runtime, **kwargs)
     try:
         while not stopped:
-            subject = run.get_subject()
+            subject = run.get_subject(anarchy_runtime)
             if not subject:
                 run.logger.info(
                     'AnarchySubject found deleted in AnarchyRun daemon',
@@ -716,7 +721,7 @@ def get_run():
             # If successfully set runner on anarchy run, then break from loop
             break
 
-    subject = run.get_subject()
+    subject = run.get_subject(anarchy_runtime)
     if not subject:
         logger.warning(
             'AnarchyRun was pending, but cannot find AnarchySubject!',
@@ -794,7 +799,10 @@ def post_run(run_name):
         )
         return flask.jsonify({'success': True, 'msg': 'AnarchyRun not found'})
 
-    anarchy_subject = run.get_subject()
+    anarchy_subject = AnarchySubject.get_from_api(
+        anarchy_runtime = anarchy_runtime,
+        name = run.subject_name,
+    )
     if not anarchy_subject:
         logger.info(
             'AnarchyRunner Pod posted result on deleted AnarchySubject',
@@ -863,7 +871,10 @@ def patch_or_delete_subject(subject_name):
         )
         flask.abort(400)
 
-    anarchy_subject = AnarchySubject.get(subject_name)
+    anarchy_subject = AnarchySubject.get_from_api(
+        anarchy_runtime = anarchy_runtime,
+        name = subject_name,
+    )
     if not anarchy_subject:
         operator_logger.warning(
             f"AnarchyRunner Pod attempted {flask.request.method} of a deleted AnarchySubject!",
@@ -925,7 +936,10 @@ def run_subject_action_post(subject_name):
         )
         flask.abort(400)
 
-    subject = AnarchySubject.get(subject_name)
+    subject = AnarchySubject.get(
+        anarchy_runtime = anarchy_runtime,
+        name = subject_name,
+    )
     if not subject:
         logger.warning(
             'AnarchyRunner pod attempted to create AnarchyAction on deleted AnarchySubject!',
@@ -1090,7 +1104,10 @@ def run_subject_action_patch(subject_name, action_name):
         )
         flask.abort(400)
 
-    subject = AnarchySubject.get(subject_name)
+    subject = AnarchySubject.get_from_api(
+        anarchy_runtime = anarchy_runtime,
+        name = subject_name,
+    )
     if not subject:
         logger.warning(
             'AnarchyRunner Pod attempted to update AnarchyAction for deleted AnarchySubject!',

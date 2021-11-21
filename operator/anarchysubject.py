@@ -23,7 +23,29 @@ class AnarchySubject(object):
     subjects = {}
 
     @staticmethod
-    def get(name):
+    def get(name, anarchy_runtime):
+        subject = AnarchySubject.get_from_cache(name)
+        if subject:
+            return subject
+        return AnarchySubject.get_from_api(
+            anarchy_runtime = anarchy_runtime,
+            name = name,
+        )
+
+    @staticmethod
+    def get_from_api(name, anarchy_runtime):
+        '''
+        Get AnarchyRun from api by name.
+        '''
+        resource_object = AnarchySubject.get_resource_from_api(
+            anarchy_runtime = anarchy_runtime,
+            name = name,
+        )
+        if resource_object:
+            return AnarchySubject(resource_object=resource_object)
+
+    @staticmethod
+    def get_from_cache(name):
         return AnarchySubject.subjects.get(name)
 
     @staticmethod
@@ -241,6 +263,15 @@ class AnarchySubject(object):
         return self.status and 'deleteHandlersStarted' in self.status
 
     @property
+    def diff_base(self):
+        diff_base_json = (
+            self.status.get('diffBase') or
+            self.metadata.get('annotations', {}).get('kopf.zalando.org/last-handled-configuration')
+        )
+        if diff_base_json:
+            return json.loads(diff_base_json)
+
+    @property
     def governor_name(self):
         return self.spec['governor']
 
@@ -256,12 +287,6 @@ class AnarchySubject(object):
     @property
     def is_pending_delete(self):
         return 'deletionTimestamp' in self.metadata
-
-    @property
-    def last_handled_configuration(self):
-        last_handled_configuration_json = self.metadata.get('annotations', {}).get('kopf.zalando.org/last-handled-configuration')
-        if last_handled_configuration_json:
-            return json.loads(last_handled_configuration_json)
 
     @property
     def name(self):

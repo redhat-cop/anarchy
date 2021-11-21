@@ -318,8 +318,11 @@ class AnarchyRun(object):
     def get_runner_label_value(self, anarchy_runtime):
         return self.metadata.get('labels', {}).get(anarchy_runtime.runner_label, None)
 
-    def get_subject(self):
-        return AnarchySubject.get(self.subject_name)
+    def get_subject(self, anarchy_runtime):
+        return AnarchySubject.get(
+            anarchy_runtime = anarchy_runtime,
+            name = self.subject_name,
+        )
 
     def handle_lost_runner(self, anarchy_runtime):
         """Notified that a runner has been lost, reset AnarchyRun to pending"""

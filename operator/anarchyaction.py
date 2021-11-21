@@ -241,8 +241,11 @@ class AnarchyAction(object):
     def get_governor(self):
         return AnarchyGovernor.get(self.governor_name)
 
-    def get_subject(self):
-        return AnarchySubject.get(self.subject_name)
+    def get_subject(self, anarchy_runtime):
+        return AnarchySubject.get(
+            anarchy_runtime = anarchy_runtime,
+            name = self.subject_name,
+        )
 
     def delete(self, anarchy_runtime):
         try:
@@ -255,7 +258,7 @@ class AnarchyAction(object):
                 raise
 
     def process_callback(self, anarchy_runtime, callback_name, callback_data):
-        subject = self.get_subject()
+        subject = self.get_subject(anarchy_runtime)
         if not subject:
             self.logger.info(
                 'Received callback but cannot find AnarchySubject',
@@ -430,7 +433,7 @@ class AnarchyAction(object):
         Anarchy when using on.event when an anarchyaction is added and modified
         we will verify that an ownerReferences exist and created it.
         '''
-        subject = self.get_subject()
+        subject = self.get_subject(anarchy_runtime)
         if not subject:
             raise kopf.TemporaryError('Cannot find AnarchySubject for AnarchyAction')
                 
@@ -473,7 +476,7 @@ class AnarchyAction(object):
 
     def start(self, anarchy_runtime):
         governor = self.get_governor()
-        subject = self.get_subject()
+        subject = self.get_subject(anarchy_runtime)
 
         # Subject may have been deleted, abort run of the action in this case
         if not subject:
