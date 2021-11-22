@@ -308,8 +308,6 @@ async def subject_daemon(stopped, **kwargs):
             await asyncio.sleep(cleanup_interval)
     except asyncio.CancelledError:
         pass
-    except asyncio.CancelledError:
-        pass
 
 
 @kopf.on.create(anarchy_runtime.operator_domain, anarchy_runtime.api_version, 'anarchyactions')
