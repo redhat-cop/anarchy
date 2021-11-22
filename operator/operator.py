@@ -7,13 +7,11 @@ import json
 import kopf
 import kubernetes
 import logging
-import math
 import os
 import prometheus_client
 import re
 import sys
 import threading
-import time
 import uuid
 import urllib3
 import yaml
@@ -37,20 +35,22 @@ operator_logger = logging.getLogger('operator')
 operator_logger.setLevel(os.environ.get('LOGGING_LEVEL', 'INFO'))
 anarchy_runtime = AnarchyRuntime()
 
+
 class InfiniteRelativeBackoff:
-    def __init__(self, n=2, maximum=60):
-        self.n = n
+    def __init__(self, initial_delay=0.1, scaling_factor=2, maximum=60):
+        self.initial_delay = initial_delay
+        self.scaling_factor = scaling_factor
         self.maximum = maximum
 
     def __iter__(self):
-        prev_t = []
-        max_age = self.maximum * math.ceil(math.log(self.maximum) / math.log(self.n))
+        delay = self.initial_delay
         while True:
-            t = time.monotonic()
-            prev_t = [p for p in prev_t if t - p < max_age]
-            delay = self.n ** len(prev_t)
-            prev_t.append(t)
-            yield delay if delay < self.maximum else self.maximum
+            if delay > self.maximum:
+                yield self.maximum
+            else:
+                yield delay
+                delay *= self.scaling_factor
+
 
 @kopf.on.startup()
 def startup(settings: kopf.OperatorSettings, **_):
