@@ -98,6 +98,10 @@ spec:
                 additionalProperties:
                   type: object
                   properties:
+                    description:
+                      description: >-
+                        Description of what this action does when run.
+                      type: string
                     finishOnSuccessfulRun:
                       description: >-
                         Flag to indicate whether this action should be marked as finished automatically
