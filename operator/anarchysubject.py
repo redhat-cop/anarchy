@@ -356,6 +356,16 @@ class AnarchySubject(object):
         ).encode('utf-8')).digest()).decode('utf-8')
 
     @property
+    def supported_actions(self):
+        '''
+        Actions supported by governor for this subject.
+        '''
+        if self.status:
+            return self.status.get('supportedActions', {})
+        else:
+            return {}
+
+    @property
     def uid(self):
         return self.metadata['uid']
 
@@ -487,6 +497,19 @@ class AnarchySubject(object):
                         'labels': {
                             anarchy_runtime.governor_label: self.governor_name
                         }
+                    }
+                }
+            )
+            self.__init__(resource_object)
+
+        governor = self.get_governor()
+        if not self.supported_actions == governor.supported_actions:
+            resource_object = anarchy_runtime.custom_objects_api.patch_namespaced_custom_object_status(
+                anarchy_runtime.operator_domain, anarchy_runtime.api_version,
+                self.namespace, 'anarchysubjects', self.name,
+                {
+                    'status': {
+                        'supportedActions': governor.supported_actions
                     }
                 }
             )

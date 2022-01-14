@@ -62,6 +62,10 @@ class AnarchyGovernor(object):
             return self.spec.get('callbackNameParameter', None)
 
         @property
+        def description(self):
+            return self.spec.get('description')
+
+        @property
         def finish_on_successful_run(self):
             """
             Boolean flag indicating whether actions using this action config are
@@ -305,6 +309,18 @@ class AnarchyGovernor(object):
     @property
     def resource_version(self):
         return self.metadata['resourceVersion']
+
+    @property
+    def supported_actions(self):
+        '''
+        Report supported actions for subjects.
+        '''
+        ret = {}
+        for name, action in self.actions.items():
+            ret[name] = {}
+            if action.description:
+                ret[name]['description'] = action.description
+        return ret
 
     @property
     def uid(self):

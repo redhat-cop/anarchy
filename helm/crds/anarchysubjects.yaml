@@ -172,3 +172,12 @@ spec:
                           type: string
                         uid:
                           type: string
+              supportedActions:
+                description: >-
+                  Actions supported by the governor for this subject.
+                type: object
+                additionalProperties:
+                  type: object
+                  properties:
+                    description:
+                      type: string
