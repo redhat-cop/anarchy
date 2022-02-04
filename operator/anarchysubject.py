@@ -74,7 +74,13 @@ class AnarchySubject(object):
             anarchy_runtime.operator_domain, anarchy_runtime.api_version,
             anarchy_runtime.operator_namespace, 'anarchysubjects'
         ).get('items', []):
-            AnarchySubject.register(resource_object=resource_object)
+            try:
+                AnarchySubject.register(resource_object=resource_object)
+            except:
+                metadata = resource_object['metadata']
+                operator_logger.exception(
+                    f"Error preloading AnarchySubject {metadata['name']} in namespace {metadata['namespace']}"
+                )
 
     @staticmethod
     def register(
