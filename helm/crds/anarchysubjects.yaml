@@ -63,6 +63,8 @@ spec:
             description: >-
               Definition of how the AnarchySubject.
             type: object
+            required:
+            - governor
             properties:
               governor:
                 description: >-
