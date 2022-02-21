@@ -58,10 +58,7 @@ def startup(settings: kopf.OperatorSettings, **_):
     settings.networking.error_backoffs = InfiniteRelativeBackoff()
 
     # Store last handled configuration in status
-    settings.persistence.diffbase_storage = kopf.MultiDiffBaseStorage([
-        kopf.StatusDiffBaseStorage(field='status.diffBase'),
-        kopf.AnnotationsDiffBaseStorage(prefix='kopf.zalando.org', key='last-handled-configuration'),
-    ])
+    settings.persistence.diffbase_storage = kopf.StatusDiffBaseStorage(field='status.diffBase')
 
     # Use operator domain as finalizer
     settings.persistence.finalizer = anarchy_runtime.operator_domain
