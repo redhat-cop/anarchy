@@ -1,9 +1,15 @@
+NAME ?= anarchy-operator
+
 # VERSION defines the project version for the bundle.
 # Update this value when you upgrade the version of your project.
 # To re-generate a bundle for another specific version without changing the standard setup, you can:
 # - use the VERSION as arg of the bundle target (e.g make bundle VERSION=0.0.2)
 # - use environment variables to overwrite this value (e.g export VERSION=0.0.2)
 VERSION ?= $(shell sed -ne 's/version: //p' ../helm/Chart.yaml)
+
+# Get current minor version and previous minor version for determining update path.
+MAJOR_VERSION ?= $(word 1,$(subst ., ,$(VERSION)))
+MINOR_VERSION ?= $(word 2,$(subst ., ,$(VERSION)))
 
 # CHANNELS define the bundle channels used in the bundle.
 # Add a new line here if you would like to change its default config. (E.g CHANNELS = "candidate,fast,stable")
@@ -139,10 +145,25 @@ endif
 endif
 
 .PHONY: bundle
-bundle: kustomize operator-sdk ## Generate bundle manifests and metadata, then validate generated files.
+bundle: kustomize opm operator-sdk ## Generate bundle manifests and metadata, then validate generated files.
 	$(OPERATOR_SDK) generate kustomize manifests -q
 	cd config/manager && $(KUSTOMIZE) edit set image controller=$(IMG)
 	$(KUSTOMIZE) build config/manifests | $(OPERATOR_SDK) generate bundle -q --overwrite --version $(VERSION) $(BUNDLE_METADATA_OPTS)
+ifneq ($(origin CATALOG_BASE_IMG), undefined)
+	$(eval TMPDIR := $(shell mktemp -d))
+	# Download catalog index
+	$(OPM) index export --container-tool podman --index $(CATALOG_BASE_IMG) --download-folder $(TMPDIR)
+	# Find all versions in catalog base for current and previous minor version.
+	PREVIOUS_VERSIONS=($$(ls $(TMPDIR)/$(NAME) | awk -F . '{if ($$1 == $(MAJOR_VERSION) && ($$2 == $(MINOR_VERSION) || $$2 == $(MINOR_VERSION) - 1)) print}')); \
+	REPLACE_VERSION=$${PREVIOUS_VERSIONS[0]}; \
+	SKIP_VERSIONS=($${PREVIOUS_VERSIONS[@]:1}); \
+	echo "  replaces: $(NAME).v$${REPLACE_VERSION}" >> ./bundle/manifests/$(NAME).clusterserviceversion.yaml; \
+	echo "  skips:" >> ./bundle/manifests/$(NAME).clusterserviceversion.yaml; \
+	for VERSION in "$${SKIP_VERSIONS[@]}"; do \
+	  echo "  - $(NAME).v$$VERSION" >> ./bundle/manifests/$(NAME).clusterserviceversion.yaml; \
+	done
+	rm -rf $(TMPDIR)
+endif
 	$(OPERATOR_SDK) bundle validate ./bundle
 
 .PHONY: bundle-build
@@ -169,14 +190,10 @@ OPM = $(shell which opm)
 endif
 endif
 
-# A comma-separated list of bundle images (e.g. make catalog-build BUNDLE_IMGS=example.com/operator-bundle:v0.1.0,example.com/operator-bundle:v0.2.0).
-# These images MUST exist in a registry and be pull-able.
-BUNDLE_IMGS ?= $(BUNDLE_IMG)
-
 # The image tag given to the resulting catalog image (e.g. make catalog-build CATALOG_IMG=example.com/operator-catalog:v0.2.0).
 CATALOG_IMG ?= $(IMAGE_TAG_BASE):catalog-v$(VERSION)
 
-# Set CATALOG_BASE_IMG to an existing catalog image tag to add $BUNDLE_IMGS to that image.
+# Set CATALOG_BASE_IMG to an existing catalog image tag to add $BUNDLE_IMG to that image.
 ifneq ($(origin CATALOG_BASE_IMG), undefined)
 FROM_INDEX_OPT := --from-index $(CATALOG_BASE_IMG)
 endif
@@ -186,7 +203,7 @@ endif
 # https://github.com/operator-framework/community-operators/blob/7f1438c/docs/packaging-operator.md#updating-your-existing-operator
 .PHONY: catalog-build
 catalog-build: opm ## Build a catalog image.
-	$(OPM) index add --container-tool docker --mode semver-skippatch --tag $(CATALOG_IMG) --bundles $(BUNDLE_IMGS) $(FROM_INDEX_OPT)
+	$(OPM) index add --container-tool podman --mode replaces --tag $(CATALOG_IMG) --bundles $(BUNDLE_IMG) $(FROM_INDEX_OPT)
 
 # Push the catalog image.
 .PHONY: catalog-push
