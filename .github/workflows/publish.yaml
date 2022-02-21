@@ -93,6 +93,7 @@ jobs:
           CATALOG_BASE_IMG="${CATALOG_IMG_LATEST}" \
           CHANNELS=stable \
           DEFAULT_CHANNEL=stable \
+          SHELL=/bin/bash \
           VERSION='${{ steps.image_tags.outputs.VERSION }}';
         docker tag "${IMG}" "${IMG_LATEST}"
         docker tag "${IMG}" "${IMG_MAJOR_VERSION}"
