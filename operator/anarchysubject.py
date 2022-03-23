@@ -171,7 +171,7 @@ class AnarchySubject(object):
         for event in kubernetes.watch.Watch().stream(
             anarchy_runtime.custom_objects_api.list_namespaced_custom_object,
             anarchy_runtime.operator_domain, anarchy_runtime.api_version,
-            anarchy_runtime.operator_namespace, 'anarchygovernors'
+            anarchy_runtime.operator_namespace, 'anarchysubjects'
         ):
             obj = event.get('object')
             if not obj:
