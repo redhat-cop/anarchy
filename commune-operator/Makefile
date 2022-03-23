@@ -152,7 +152,7 @@ bundle: kustomize opm operator-sdk ## Generate bundle manifests and metadata, th
 ifneq ($(origin CATALOG_BASE_IMG), undefined)
 	$(eval TMPDIR := $(shell mktemp -d))
 	# Download catalog index
-	$(OPM) index export --container-tool podman --index $(CATALOG_BASE_IMG) --download-folder $(TMPDIR)
+	$(OPM) index export --container-tool docker --index $(CATALOG_BASE_IMG) --download-folder $(TMPDIR)
 	# Find all versions in catalog base for current and previous minor version.
 	PREVIOUS_VERSIONS=($$(ls $(TMPDIR)/$(NAME) | awk -F . '{if ($$1 == $(MAJOR_VERSION) && ($$2 == $(MINOR_VERSION) || $$2 == $(MINOR_VERSION) - 1)) print}')); \
 	REPLACE_VERSION=$${PREVIOUS_VERSIONS[0]}; \
@@ -203,7 +203,7 @@ endif
 # https://github.com/operator-framework/community-operators/blob/7f1438c/docs/packaging-operator.md#updating-your-existing-operator
 .PHONY: catalog-build
 catalog-build: opm ## Build a catalog image.
-	$(OPM) index add --container-tool podman --mode replaces --tag $(CATALOG_IMG) --bundles $(BUNDLE_IMG) $(FROM_INDEX_OPT)
+	$(OPM) index add --container-tool docker --mode replaces --tag $(CATALOG_IMG) --bundles $(BUNDLE_IMG) $(FROM_INDEX_OPT)
 
 # Push the catalog image.
 .PHONY: catalog-push
