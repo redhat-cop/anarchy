@@ -1146,10 +1146,3 @@ def run_subject_action_patch(subject_name, action_name):
 def run_api():
     http_server = gevent.pywsgi.WSGIServer(('', 5000), api)
     http_server.serve_forever()
-
-def watch_active_change():
-    while True:
-        with anarchy_runtime.is_active_condition:
-            if not anarchy_runtime.is_active:
-                AnarchyRun.cancel_timers()
-            anarchy_runtime.is_active_condition.wait()
