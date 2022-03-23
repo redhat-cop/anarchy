@@ -167,6 +167,7 @@ def api_v2_projects_get():
             "scm_clean": False,
             "scm_delete_on_update": False,
             "scm_refspec": "",
+            "scm_revision": "",
             "scm_type": "git",
             "scm_url": "https://github.com/redhat-cop/agnosticd.git",
             "scm_update_cache_timeout": 30,
@@ -184,6 +185,7 @@ def api_v2_projects_patch(project_id):
     ret['created']: datetime.utcnow().isoformat() + 'Z'
     ret['modified']: datetime.utcnow().isoformat() + 'Z'
     ret['id'] = project_id
+    ret['scm_revision'] = ''
     ret['summary_fields'] = dict()
     ret['url'] = '/api/v2/projects/{}/'.format(project_id)
     return flask.jsonify(ret), 200
@@ -294,6 +296,15 @@ def api_v2_jobs_get():
             "previous": None,
             "results": []
         }), 200
+
+@api.route('/api/v2/jobs/<string:job_id>/job_events/', methods=['GET'])
+def api_v2_jobs_events_get(joib_id):
+    return flask.jsonify({
+        "count": 0,
+        "next": None,
+        "previous": None,
+        "results": []
+    }), 200
 
 @api.route('/api/v2/jobs/<string:job_id>/', methods=['GET'])
 def api_v2_jobs_id_get(job_id):

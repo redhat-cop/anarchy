@@ -17,15 +17,6 @@ class AnarchyAction(object):
     actions = {}
 
     @staticmethod
-    def cancel_timers():
-        with AnarchyAction.register_lock:
-            for action in AnarchyAction.actions.values():
-                if action.delete_timer:
-                    action.delete_timer.cancel()
-                if action.run_timer:
-                    action.run_timer.cancel()
-
-    @staticmethod
     def get_from_api(name, anarchy_runtime):
         '''
         Get AnarchyAction from api by name.
@@ -101,10 +92,6 @@ class AnarchyAction(object):
         with AnarchyAction.register_lock:
             if name in AnarchyAction.actions:
                 action = AnarchyAction.actions.pop(name)
-                if action.delete_timer:
-                    action.delete_timer.cancel()
-                if action.run_timer:
-                    action.run_timer.cancel()
                 action.local_logger.info("Unregistered AnarchyAction")
                 return action
 
@@ -114,13 +101,6 @@ class AnarchyAction(object):
         self.metadata = resource_object['metadata']
         self.spec = resource_object['spec']
         self.status = resource_object.get('status')
-
-        if not hasattr(self, 'delete_timer'):
-            self.delete_timer = None
-
-        if not hasattr(self, 'run_timer'):
-            self.run_timer = None
-
         self.local_logger = kopf.LocalObjectLogger(
             body = resource_object,
             settings = kopf.OperatorSettings(),

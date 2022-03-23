@@ -171,7 +171,7 @@ class AnarchySubject(object):
         for event in kubernetes.watch.Watch().stream(
             anarchy_runtime.custom_objects_api.list_namespaced_custom_object,
             anarchy_runtime.operator_domain, anarchy_runtime.api_version,
-            anarchy_runtime.operator_namespace, 'anarchygovernors'
+            anarchy_runtime.operator_namespace, 'anarchysubjects'
         ):
             obj = event.get('object')
             if not obj:
@@ -473,10 +473,11 @@ class AnarchySubject(object):
         return self.spec_sha256 != spec_sha256_annotation
 
     def delete(self, remove_finalizers, anarchy_runtime):
-        result = anarchy_runtime.custom_objects_api.delete_namespaced_custom_object(
+        resource_object = anarchy_runtime.custom_objects_api.delete_namespaced_custom_object(
             anarchy_runtime.operator_domain, anarchy_runtime.api_version,
             anarchy_runtime.operator_namespace, 'anarchysubjects', self.name
         )
+        self.__init__(resource_object)
         if remove_finalizers:
             self.remove_finalizers(anarchy_runtime)
         return result
