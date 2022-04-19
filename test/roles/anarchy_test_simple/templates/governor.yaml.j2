@@ -66,6 +66,8 @@ spec:
         failed_when: >-
           "module is required" in r_mysql_info.msg
 
+      timeEstimate: 10s
+
     callback_test:
       finishOnSuccessfulRun: false
       tasks:
@@ -78,6 +80,7 @@ spec:
           tasks:
           - name: Explicitly complete action
             anarchy_finish_action: {}
+      timeEstimate: 1m
 
     continuation_test:
       tasks:
@@ -96,6 +99,7 @@ spec:
         - name: Schedule continution
           anarchy_continue_action:
             after: 30s
+      timeEstimate: 1m
 
     destroy:
       tasks:
@@ -106,4 +110,5 @@ spec:
       - name: Complete anarchy subject delete by removing finalizers
         anarchy_subject_delete:
           remove_finalizers: true
+      timeEstimate: 10s
 {% endraw %}

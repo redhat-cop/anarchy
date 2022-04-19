@@ -90,6 +90,10 @@ class AnarchyGovernor(object):
             return self.spec.get('tasks', [])
 
         @property
+        def time_estimate(self):
+            return self.spec.get('timeEstimate')
+
+        @property
         def vars(self):
             return self.spec.get('vars', {})
 
@@ -320,6 +324,8 @@ class AnarchyGovernor(object):
             ret[name] = {}
             if action.description:
                 ret[name]['description'] = action.description
+            if action.time_estimate:
+                ret[name]['timeEstimate'] = action.time_estimate
         return ret
 
     @property
