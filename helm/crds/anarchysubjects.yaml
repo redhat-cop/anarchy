@@ -183,3 +183,5 @@ spec:
                   properties:
                     description:
                       type: string
+                    timeEstimate:
+                      type: string

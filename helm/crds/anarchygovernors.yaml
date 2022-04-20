@@ -136,6 +136,11 @@ spec:
                       items:
                         type: object
                         x-kubernetes-preserve-unknown-fields: true
+                    timeEstimate:
+                      description: >-
+                        Estimated time in seconds this action is expected to take to complete.
+                      type: string
+                      pattern: ^[0-9]+[hms]$
                     vars:
                       description: >-
                         Ansible "vars" for the dynamic ansible play used to run this action.
