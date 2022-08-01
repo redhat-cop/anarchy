@@ -480,7 +480,7 @@ def run_update(new, old, **kwargs):
             if not action:
                 action = AnarchyAction.get_from_api(
                     anarchy_runtime = anarchy_runtime,
-                    name = run.action_name, 
+                    name = run.action_name,
                 )
             if not action:
                 raise kopf.TemporaryError(
