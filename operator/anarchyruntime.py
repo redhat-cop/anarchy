@@ -24,7 +24,7 @@ class AnarchyRuntime(object):
         self.is_active_condition = threading.Condition()
         self.pod_name = os.environ.get('POD_NAME', os.environ.get('HOSTNAME', None))
         self.pod = self.core_v1_api.read_namespaced_pod(self.pod_name, self.operator_namespace)
-        self.running_all_in_one = '' != os.environ.get('ODO_S2I_SCRIPTS_URL', '')
+        self.running_all_in_one = 'true' == os.environ.get('ANARCHY_RUNNING_ALL_IN_ONE', '')
         if self.running_all_in_one:
             self.anarchy_service_name = os.environ.get('ANARCHY_SERVICE', os.environ.get('HOSTNAME'))
             self.anarchy_service = self.pod
