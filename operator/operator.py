@@ -1002,12 +1002,9 @@ def run_subject_action_post(subject_name):
         anarchy_runtime.operator_namespace, 'anarchyactions',
         label_selector=f"{anarchy_runtime.subject_label}={subject.name}"
     ).get('items', []):
-        if action_resource['spec']['action'] in cancel_actions \
-        and 'status' not in action_resource:
-            anarchy_runtime.custom_objects_api.delete_namespaced_custom_object(
-                anarchy_runtime.operator_domain, anarchy_runtime.api_version,
-                anarchy_runtime.operator_namespace, 'anarchyactions', action_resource['metadata']['name']
-            )
+        action = AnarchyAction(resource_object=action_resource)
+        if action.action in cancel_actions:
+            action.set_finished(anarchy_runtime=anarchy_runtime, state='canceled')
 
     if action_name:
         result = anarchy_runtime.custom_objects_api.create_namespaced_custom_object(
