@@ -473,14 +473,20 @@ class AnarchySubject(object):
         return self.spec_sha256 != spec_sha256_annotation
 
     def delete(self, remove_finalizers, anarchy_runtime):
-        resource_object = anarchy_runtime.custom_objects_api.delete_namespaced_custom_object(
-            anarchy_runtime.operator_domain, anarchy_runtime.api_version,
-            anarchy_runtime.operator_namespace, 'anarchysubjects', self.name
-        )
+        try:
+            resource_object = anarchy_runtime.custom_objects_api.delete_namespaced_custom_object(
+                anarchy_runtime.operator_domain, anarchy_runtime.api_version,
+                anarchy_runtime.operator_namespace, 'anarchysubjects', self.name
+            )
+        except kubernetes.client.rest.ApiException as e:
+            if e.status == 404:
+                return None
+            else:
+                raise
         self.__init__(resource_object)
         if remove_finalizers:
             self.remove_finalizers(anarchy_runtime)
-        return result
+        return resource_object
 
     def get_governor(self):
         return AnarchyGovernor.get(self.governor_name)
