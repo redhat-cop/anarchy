@@ -342,7 +342,7 @@ class AnarchyAction(object):
         else:
             raise Exception('Unable to find AnarchyAction {} to refresh'.format(self.name))
 
-    def schedule_continuation(self, after, anarchy_runtime):
+    def schedule_continuation(self, after, anarchy_runtime, vars):
         try:
             anarchy_runtime.custom_objects_api.patch_namespaced_custom_object_status(
                 anarchy_runtime.operator_domain, anarchy_runtime.api_version,
@@ -364,7 +364,8 @@ class AnarchyAction(object):
                         }
                     },
                     'spec': {
-                        'after': after.strftime('%FT%TZ')
+                        'after': after.strftime('%FT%TZ'),
+                        'vars': vars,
                     },
                 }
             )

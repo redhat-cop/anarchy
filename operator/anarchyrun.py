@@ -165,6 +165,10 @@ class AnarchyRun(object):
         return self.status.get('result', {}).get('continueAction', {}).get('after')
 
     @property
+    def continue_action_vars(self):
+        return self.status.get('result', {}).get('continueAction', {}).get('vars', {})
+
+    @property
     def creation_timestamp(self):
         return self.metadata.get('creationTimestamp')
 

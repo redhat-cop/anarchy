@@ -115,6 +115,7 @@
       name: "{{ _action.metadata.name }}"
       uid: "{{ _action.metadata.uid }}"
     _expected_vars:
+      a_var_from_action: create
       a_var_from_governor: foo
       a_var_from_subject: 23
       a_var_subject_should_override: true

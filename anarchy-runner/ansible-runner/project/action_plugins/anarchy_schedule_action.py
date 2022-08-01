@@ -42,6 +42,7 @@ class ActionModule(ActionBase):
         action = module_args.get('action', None)
         after = module_args.get('after', None)
         cancel = module_args.get('cancel', [])
+        vars = module_args.get('vars', {})
 
         if isinstance(after, datetime):
             after = after.strftime('%FT%TZ')
@@ -63,7 +64,7 @@ class ActionModule(ActionBase):
             headers={'Authorization': 'Bearer {}:{}:{}'.format(
                 anarchy_runner_name, anarchy_run_pod_name, anarchy_runner_token
             )},
-            json=dict(action=action, after=after, cancel=cancel)
+            json=dict(action=action, after=after, cancel=cancel, vars=vars)
         )
 
         result['action'] = response.json()['result']

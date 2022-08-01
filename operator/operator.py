@@ -504,6 +504,7 @@ def run_update(new, old, **kwargs):
                 action.schedule_continuation(
                     after = continue_action_after,
                     anarchy_runtime = anarchy_runtime,
+                    vars = run.continue_action_vars,
                 )
             elif action_config.finish_on_successful_run:
                 run.logger.info(
@@ -962,6 +963,7 @@ def run_subject_action_post(subject_name):
     action_name = flask.request.json.get('action', None)
     after_timestamp = flask.request.json.get('after', None)
     cancel_actions = flask.request.json.get('cancel', None)
+    action_vars = flask.request.json.get('vars', {})
 
     if not action_name and not cancel_actions:
         logger.warning(
@@ -1026,6 +1028,7 @@ def run_subject_action_post(subject_name):
                     "callbackToken": uuid.uuid4().hex,
                     "governorRef": governor.reference,
                     "subjectRef": subject.reference,
+                    "vars": action_vars,
                 }
             }
         )
@@ -1135,7 +1138,7 @@ def run_subject_action_patch(subject_name, action_name):
     elif flask.request.json.get('failed', False):
         finished_state = 'failed'
 
-    if finished_state != None:
+    if not action.is_finished:
         action.set_finished(
             anarchy_runtime = anarchy_runtime,
             state = finished_state,
