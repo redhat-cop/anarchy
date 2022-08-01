@@ -22,6 +22,7 @@ from anarchygovernor import AnarchyGovernor
 from anarchysubject import AnarchySubject
 from anarchyaction import AnarchyAction
 from anarchyrun import AnarchyRun
+from configure_kopf_logging import configure_kopf_logging
 from datetime import datetime
 
 api = flask.Flask('rest')
@@ -71,6 +72,8 @@ def startup(settings: kopf.OperatorSettings, **_):
 
     # Disable scanning for crds and namespaces
     settings.scanning.disabled = True
+
+    configure_kopf_logging()
 
     if anarchy_runtime.running_all_in_one:
         AnarchyRunner.start_all_in_one_runner(anarchy_runtime)
