@@ -285,6 +285,10 @@ spec:
                       after:
                         description: Timestamp for when to continue action
                         type: string
+                      vars:
+                        description: Variables to update in the AnarchyAction for continuation.
+                        type: object
+                        x-kubernetes-preserve-unknown-fields: true
                   rc:
                     type: integer
                   status:

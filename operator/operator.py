@@ -22,6 +22,7 @@ from anarchygovernor import AnarchyGovernor
 from anarchysubject import AnarchySubject
 from anarchyaction import AnarchyAction
 from anarchyrun import AnarchyRun
+from configure_kopf_logging import configure_kopf_logging
 from datetime import datetime
 
 api = flask.Flask('rest')
@@ -71,6 +72,8 @@ def startup(settings: kopf.OperatorSettings, **_):
 
     # Disable scanning for crds and namespaces
     settings.scanning.disabled = True
+
+    configure_kopf_logging()
 
     if anarchy_runtime.running_all_in_one:
         AnarchyRunner.start_all_in_one_runner(anarchy_runtime)
@@ -477,7 +480,7 @@ def run_update(new, old, **kwargs):
             if not action:
                 action = AnarchyAction.get_from_api(
                     anarchy_runtime = anarchy_runtime,
-                    name = run.action_name, 
+                    name = run.action_name,
                 )
             if not action:
                 raise kopf.TemporaryError(
@@ -504,6 +507,7 @@ def run_update(new, old, **kwargs):
                 action.schedule_continuation(
                     after = continue_action_after,
                     anarchy_runtime = anarchy_runtime,
+                    vars = run.continue_action_vars,
                 )
             elif action_config.finish_on_successful_run:
                 run.logger.info(
@@ -962,6 +966,7 @@ def run_subject_action_post(subject_name):
     action_name = flask.request.json.get('action', None)
     after_timestamp = flask.request.json.get('after', None)
     cancel_actions = flask.request.json.get('cancel', None)
+    action_vars = flask.request.json.get('vars', {})
 
     if not action_name and not cancel_actions:
         logger.warning(
@@ -997,12 +1002,9 @@ def run_subject_action_post(subject_name):
         anarchy_runtime.operator_namespace, 'anarchyactions',
         label_selector=f"{anarchy_runtime.subject_label}={subject.name}"
     ).get('items', []):
-        if action_resource['spec']['action'] in cancel_actions \
-        and 'status' not in action_resource:
-            anarchy_runtime.custom_objects_api.delete_namespaced_custom_object(
-                anarchy_runtime.operator_domain, anarchy_runtime.api_version,
-                anarchy_runtime.operator_namespace, 'anarchyactions', action_resource['metadata']['name']
-            )
+        action = AnarchyAction(resource_object=action_resource)
+        if action.action in cancel_actions:
+            action.set_finished(anarchy_runtime=anarchy_runtime, state='canceled')
 
     if action_name:
         result = anarchy_runtime.custom_objects_api.create_namespaced_custom_object(
@@ -1026,6 +1028,7 @@ def run_subject_action_post(subject_name):
                     "callbackToken": uuid.uuid4().hex,
                     "governorRef": governor.reference,
                     "subjectRef": subject.reference,
+                    "vars": action_vars,
                 }
             }
         )
@@ -1135,7 +1138,7 @@ def run_subject_action_patch(subject_name, action_name):
     elif flask.request.json.get('failed', False):
         finished_state = 'failed'
 
-    if finished_state != None:
+    if not action.is_finished:
         action.set_finished(
             anarchy_runtime = anarchy_runtime,
             state = finished_state,

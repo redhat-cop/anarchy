@@ -35,6 +35,7 @@ class ActionModule(ActionBase):
         anarchy_output_dir = task_vars['anarchy_output_dir']
         module_args = self._task.args.copy()
         after = module_args.get('after', None)
+        vars = module_args.get('vars', {})
 
         if not after:
             return dict(
@@ -52,7 +53,10 @@ class ActionModule(ActionBase):
         after_timestamp = (datetime.utcnow() + interval).strftime('%FT%TZ')
 
         with open(os.path.join(anarchy_output_dir, 'continue.yaml'), 'w') as f:
-            yaml.safe_dump({'after': after_timestamp}, f)
+            yaml.safe_dump({
+                'after': after_timestamp,
+                'vars': vars,
+            }, f)
 
         return dict(
             after = after_timestamp,

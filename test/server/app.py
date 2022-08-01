@@ -298,7 +298,7 @@ def api_v2_jobs_get():
         }), 200
 
 @api.route('/api/v2/jobs/<string:job_id>/job_events/', methods=['GET'])
-def api_v2_jobs_events_get(joib_id):
+def api_v2_jobs_events_get(job_id):
     return flask.jsonify({
         "count": 0,
         "next": None,

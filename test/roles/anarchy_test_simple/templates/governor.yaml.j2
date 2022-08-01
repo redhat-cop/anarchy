@@ -29,6 +29,8 @@ spec:
       - name: Schedule Configure
         anarchy_schedule_action:
           action: configure
+          vars:
+            a_var_from_action: create
 
     update:
       tasks:
@@ -93,12 +95,11 @@ spec:
         - name: Record change
           anarchy_subject_update:
             skip_update_processing: true
-            spec:
-              vars:
-                continued: true
         - name: Schedule continution
           anarchy_continue_action:
             after: 30s
+            vars:
+              continued: true
       timeEstimate: 1m
 
     destroy:
