@@ -60,6 +60,12 @@ spec:
     # anarchy_action_name
     provision:
       finishOnSuccessfulRun: false
+      preTasks:
+      - name: Set to simulate failure
+        when: action_provision_fail | default(false) | bool
+        set_fact:
+          dynamic_job_vars:
+            simulate_job_result: failed
       roles:
       - role: babylon_anarchy_governor
       callbackHandlers:
@@ -68,6 +74,17 @@ spec:
           - role: babylon_anarchy_governor
     stop:
       finishOnSuccessfulRun: false
+      preTasks:
+      - name: Set to simulate failure on first attempt
+        when: >-
+          action_stop_fail | default(false) | bool or
+          (
+            action_stop_fail_first_attempt | default(false) | bool and
+            action_retry_count | default(0) | int == 0
+          )
+        set_fact:
+          dynamic_job_vars:
+            simulate_job_result: failed
       roles:
       - role: babylon_anarchy_governor
       callbackHandlers:
@@ -76,6 +93,17 @@ spec:
           - role: babylon_anarchy_governor
     start:
       finishOnSuccessfulRun: false
+      preTasks:
+      - name: Set to simulate failure on first attempt
+        when: >-
+          action_start_fail | default(false) | bool or
+          (
+            action_start_fail_first_attempt | default(false) | bool and
+            action_retry_count | default(0) | int == 0
+          )
+        set_fact:
+          dynamic_job_vars:
+            simulate_job_result: failed
       roles:
       - role: babylon_anarchy_governor
       callbackHandlers:
@@ -84,6 +112,17 @@ spec:
           - role: babylon_anarchy_governor
     destroy:
       finishOnSuccessfulRun: false
+      preTasks:
+      - name: Set to simulate failure
+        when: >-
+          action_destroy_fail | default(false) | bool or
+          (
+            action_destroy_fail_first_attempt | default(false) | bool and
+            action_retry_count | default(0) | int == 0
+          )
+        set_fact:
+          dynamic_job_vars:
+            simulate_job_result: failed
       roles:
       - role: babylon_anarchy_governor
       callbackHandlers:

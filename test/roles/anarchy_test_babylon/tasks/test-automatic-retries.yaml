@@ -1,0 +1,172 @@
+---
+- name: Create AnarchySubject test-babylon-automatic-retries
+  kubernetes.core.k8s:
+    apply: true
+    state: present
+    definition:
+      apiVersion: anarchy.gpte.redhat.com/v1
+      kind: AnarchySubject
+      metadata:
+        name: test-babylon-automatic-retries
+        namespace: "{{ anarchy_namespace }}"
+        labels:
+          anarchy.gpte.redhat.com/test: babylon
+      spec:
+        governor: test-babylon
+        vars:
+          action_retry_intervals:
+          - 5s
+          - 10s
+          - 30s
+          desired_state: started
+          action_destroy_fail_first_attempt: true
+          action_start_fail_first_attempt: true
+          action_stop_fail_first_attempt: true
+          tower_job_check_interval: 10s
+
+- name: Check test-babylon-automatic-retries provision action
+  kubernetes.core.k8s_info:
+    api_version: anarchy.gpte.redhat.com/v1
+    kind: AnarchyAction
+    label_selectors:
+    - anarchy.gpte.redhat.com/action=provision
+    - anarchy.gpte.redhat.com/subject=test-babylon-automatic-retries
+    namespace: "{{ anarchy_namespace }}"
+  register: r_action
+  until:
+  - r_action.resources | default([]) | length == 1
+  - r_action.resources[0].spec.action == 'provision'
+  - r_action.resources[0].status is defined
+  - r_action.resources[0].status.callbackEvents is defined
+  - r_action.resources[0].status.callbackEvents | length == 1
+  - r_action.resources[0].status.callbackEvents[0].name == 'complete'
+  retries: 40
+  delay: 5
+
+- name: Confirm test-babylon-automatic-retries has current_state started
+  kubernetes.core.k8s_info:
+    api_version: anarchy.gpte.redhat.com/v1
+    kind: AnarchySubject
+    name: test-babylon-automatic-retries
+    namespace: "{{ anarchy_namespace }}"
+  register: r_subject
+  until:
+  - r_subject.resources[0].metadata.labels.state == 'started'
+  - r_subject.resources[0].spec.vars.current_state == 'started'
+  - r_subject.resources[0].status.towerJobs is defined
+  - r_subject.resources[0].status.towerJobs.provision is defined
+  - r_subject.resources[0].status.towerJobs.provision.deployerJob is defined
+  retries: 5
+  delay: 5
+
+- name: Stop test-babylon-automatic-retries subject
+  kubernetes.core.k8s:
+    api_version: anarchy.gpte.redhat.com/v1
+    kind: AnarchySubject
+    name: test-babylon-automatic-retries
+    namespace: "{{ anarchy_namespace }}"
+    merge_type: merge
+    definition:
+      spec:
+        vars:
+          desired_state: stopped
+
+- name: Confirm test-babylon-automatic-retries enters current_state stop-failed
+  kubernetes.core.k8s_info:
+    api_version: anarchy.gpte.redhat.com/v1
+    kind: AnarchySubject
+    name: test-babylon-automatic-retries
+    namespace: "{{ anarchy_namespace }}"
+  register: r_subject
+  until:
+  - r_subject.resources[0].metadata.labels.state == 'stop-failed'
+  - r_subject.resources[0].spec.vars.current_state == 'stop-failed'
+  retries: 20
+  delay: 2
+
+- name: Confirm test-babylon-automatic-retries stop recovers and completes
+  kubernetes.core.k8s_info:
+    api_version: anarchy.gpte.redhat.com/v1
+    kind: AnarchySubject
+    name: test-babylon-automatic-retries
+    namespace: "{{ anarchy_namespace }}"
+  register: r_subject
+  until:
+  - r_subject.resources[0].metadata.labels.state == 'stopped'
+  - r_subject.resources[0].spec.vars.current_state == 'stopped'
+  retries: 10
+  delay: 3
+
+- name: Start test-babylon-automatic-retries subject
+  kubernetes.core.k8s:
+    api_version: anarchy.gpte.redhat.com/v1
+    kind: AnarchySubject
+    name: test-babylon-automatic-retries
+    namespace: "{{ anarchy_namespace }}"
+    merge_type: merge
+    definition:
+      spec:
+        vars:
+          desired_state: started
+
+- name: Confirm test-babylon-automatic-retries enters current_state start-failed
+  kubernetes.core.k8s_info:
+    api_version: anarchy.gpte.redhat.com/v1
+    kind: AnarchySubject
+    name: test-babylon-automatic-retries
+    namespace: "{{ anarchy_namespace }}"
+  register: r_subject
+  until:
+  - r_subject.resources[0].metadata.labels.state == 'start-failed'
+  - r_subject.resources[0].spec.vars.current_state == 'start-failed'
+  retries: 20
+  delay: 2
+
+- name: Confirm test-babylon-automatic-retries start recovers and completes
+  kubernetes.core.k8s_info:
+    api_version: anarchy.gpte.redhat.com/v1
+    kind: AnarchySubject
+    name: test-babylon-automatic-retries
+    namespace: "{{ anarchy_namespace }}"
+  register: r_subject
+  until:
+  - r_subject.resources[0].metadata.labels.state == 'started'
+  - r_subject.resources[0].spec.vars.current_state == 'started'
+  retries: 10
+  delay: 3
+
+- when: anarchy_test_delete_subjects | bool
+  block:
+  - name: Delete test-babylon-automatic-retries subject
+    kubernetes.core.k8s:
+      state: absent
+      api_version: anarchy.gpte.redhat.com/v1
+      kind: AnarchySubject
+      name: test-babylon-automatic-retries
+      namespace: "{{ anarchy_namespace }}"
+
+  - name: Confirm test-babylon-automatic-retries enters current_state destroy-failed
+    kubernetes.core.k8s_info:
+      api_version: anarchy.gpte.redhat.com/v1
+      kind: AnarchySubject
+      name: test-babylon-automatic-retries
+      namespace: "{{ anarchy_namespace }}"
+    register: r_subject
+    until:
+    - r_subject.resources[0].metadata.labels.state == 'destroy-failed'
+    - r_subject.resources[0].spec.vars.current_state == 'destroy-failed'
+    retries: 20
+    delay: 2
+
+  - name: Verify AnarchySubject delete for test-babylon-automatic-retries
+    kubernetes.core.k8s_info:
+      api_version: anarchy.gpte.redhat.com/v1
+      kind: AnarchySubject
+      name: test-babylon-automatic-retries
+      namespace: "{{ anarchy_namespace }}"
+    register: r_subject
+    failed_when: r_subject.resources | default([]) | length != 0
+    until: r_subject is success
+    retries: 20
+    delay: 5
+...
