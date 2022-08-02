@@ -18,4 +18,3 @@
       loop_var: _anarchy_test
     vars:
       _anarchy_test_role: anarchy_test_{{ _anarchy_test }}
-      anarchy_test_action: cleanup

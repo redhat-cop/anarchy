@@ -1,0 +1,159 @@
+---
+- name: Create AnarchySubject test-babylon-recover-start-failure
+  kubernetes.core.k8s:
+    apply: true
+    state: present
+    definition:
+      apiVersion: anarchy.gpte.redhat.com/v1
+      kind: AnarchySubject
+      metadata:
+        name: test-babylon-recover-start-failure
+        namespace: "{{ anarchy_namespace }}"
+        labels:
+          anarchy.gpte.redhat.com/test: babylon
+      spec:
+        governor: test-babylon
+        vars:
+          action_retry_intervals:
+          - 5s
+          - 10s
+          - 30s
+          desired_state: started
+          action_start_fail: true
+          job_vars: {}
+          tower_job_check_interval: 10s
+
+- name: Confirm test-babylon-recover-start-failure subject started
+  kubernetes.core.k8s_info:
+    api_version: anarchy.gpte.redhat.com/v1
+    kind: AnarchySubject
+    name: test-babylon-recover-start-failure
+    namespace: "{{ anarchy_namespace }}"
+  register: r_subject
+  until:
+  - r_subject.resources[0].metadata.labels.state | default('') == 'started'
+  - r_subject.resources[0].spec.vars.current_state | default('') == 'started'
+  retries: 10 
+  delay: 5
+
+- name: Update AnarchySubject test-babylon-recover-start-failure to trigger stop
+  kubernetes.core.k8s:
+    api_version: anarchy.gpte.redhat.com/v1
+    kind: AnarchySubject
+    name: test-babylon-recover-start-failure
+    namespace: "{{ anarchy_namespace }}"
+    merge_type: merge
+    definition:
+      spec:
+        vars:
+          desired_state: stopped
+
+- name: Confirm test-babylon-recover-start-failure subject stopped
+  kubernetes.core.k8s_info:
+    api_version: anarchy.gpte.redhat.com/v1
+    kind: AnarchySubject
+    name: test-babylon-recover-start-failure
+    namespace: "{{ anarchy_namespace }}"
+  register: r_subject
+  until:
+  - r_subject.resources[0].metadata.labels.state | default('') == 'stopped'
+  - r_subject.resources[0].spec.vars.current_state | default('') == 'stopped'
+  retries: 10 
+  delay: 5
+
+- name: Update AnarchySubject test-babylon-recover-start-failure to trigger start
+  kubernetes.core.k8s:
+    api_version: anarchy.gpte.redhat.com/v1
+    kind: AnarchySubject
+    name: test-babylon-recover-start-failure
+    namespace: "{{ anarchy_namespace }}"
+    merge_type: merge
+    definition:
+      spec:
+        vars:
+          desired_state: started
+
+- name: Wait for test-babylon-recover-start-failure subject start-failed
+  kubernetes.core.k8s_info:
+    api_version: anarchy.gpte.redhat.com/v1
+    kind: AnarchySubject
+    name: test-babylon-recover-start-failure
+    namespace: "{{ anarchy_namespace }}"
+  register: r_subject
+  until:
+  - r_subject.resources[0].metadata.labels.state | default('') == 'start-failed'
+  - r_subject.resources[0].spec.vars.current_state | default('') == 'start-failed'
+  retries: 20
+  delay: 5
+
+- name: Update AnarchySubject test-babylon-recover-start-failure to recover to stopped
+  kubernetes.core.k8s:
+    api_version: anarchy.gpte.redhat.com/v1
+    kind: AnarchySubject
+    name: test-babylon-recover-start-failure
+    namespace: "{{ anarchy_namespace }}"
+    definition:
+      spec:
+        vars:
+          desired_state: stopped
+
+- name: Confirm test-babylon-recover-start-failure subject recovers to stopped
+  kubernetes.core.k8s_info:
+    api_version: anarchy.gpte.redhat.com/v1
+    kind: AnarchySubject
+    name: test-babylon-recover-start-failure
+    namespace: "{{ anarchy_namespace }}"
+  register: r_subject
+  until:
+  - r_subject.resources[0].metadata.labels.state | default('') == 'stopped'
+  - r_subject.resources[0].spec.vars.current_state | default('') == 'stopped'
+  retries: 10 
+  delay: 5
+
+- name: Update AnarchySubject test-babylon-recover-start-failure to trigger start again
+  kubernetes.core.k8s:
+    api_version: anarchy.gpte.redhat.com/v1
+    kind: AnarchySubject
+    name: test-babylon-recover-start-failure
+    namespace: "{{ anarchy_namespace }}"
+    merge_type: merge
+    definition:
+      spec:
+        vars:
+          desired_state: started
+
+- name: Wait for test-babylon-recover-start-failure subject start-failed again
+  kubernetes.core.k8s_info:
+    api_version: anarchy.gpte.redhat.com/v1
+    kind: AnarchySubject
+    name: test-babylon-recover-start-failure
+    namespace: "{{ anarchy_namespace }}"
+  register: r_subject
+  until:
+  - r_subject.resources[0].metadata.labels.state | default('') == 'start-failed'
+  - r_subject.resources[0].spec.vars.current_state | default('') == 'start-failed'
+  retries: 20
+  delay: 5
+
+- when: anarchy_test_delete_subjects | bool
+  block:
+  - name: Delete test-babylon-recover-start-failure subject
+    kubernetes.core.k8s:
+      state: absent
+      api_version: anarchy.gpte.redhat.com/v1
+      kind: AnarchySubject
+      name: test-babylon-recover-start-failure
+      namespace: "{{ anarchy_namespace }}"
+
+  - name: Verify AnarchySubject delete for test-babylon-recover-start-failure
+    kubernetes.core.k8s_info:
+      api_version: anarchy.gpte.redhat.com/v1
+      kind: AnarchySubject
+      name: test-babylon-recover-start-failure
+      namespace: "{{ anarchy_namespace }}"
+    register: r_subject
+    failed_when: r_subject.resources | default([]) | length != 0
+    until: r_subject is success
+    retries: 20
+    delay: 5
+...
