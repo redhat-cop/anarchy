@@ -154,7 +154,7 @@ class AnarchyGovernor(object):
     @staticmethod
     def unregister(name):
         '''
-        Unregister AnarchyGovernor 
+        Unregister AnarchyGovernor
         '''
         with AnarchyGovernor.register_lock:
             if name in AnarchyGovernor.governors:

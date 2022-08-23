@@ -33,7 +33,7 @@
   until:
   - r_subject.resources[0].metadata.labels.state | default('') == 'started'
   - r_subject.resources[0].spec.vars.current_state | default('') == 'started'
-  retries: 10 
+  retries: 10
   delay: 5
 
 - name: Update AnarchySubject test-babylon-recover-stop-failure to trigger stop
@@ -82,7 +82,7 @@
   until:
   - r_subject.resources[0].metadata.labels.state | default('') == 'started'
   - r_subject.resources[0].spec.vars.current_state | default('') == 'started'
-  retries: 10 
+  retries: 15
   delay: 5
 
 - name: Update AnarchySubject test-babylon-recover-stop-failure to trigger stop again

@@ -417,7 +417,7 @@ class AnarchyAction(object):
         subject = self.get_subject(anarchy_runtime)
         if not subject:
             raise kopf.TemporaryError('Cannot find AnarchySubject for AnarchyAction')
-                
+
         governor = subject.get_governor()
         if not governor:
             raise kopf.TemporaryError('Cannot find AnarchyGovernor for AnarchyAction')
