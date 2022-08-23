@@ -925,7 +925,7 @@ def run_subject_action_post(subject_name):
 
     if not subject_ref or subject_name != subject_ref['name']:
         logger.error(
-            'AnarchyRunner Pod cannot update create AnarchyAction for AnarchySubject not associated with its AnarchyRun!',
+            'AnarchyRunner Pod cannot create AnarchyAction for AnarchySubject not associated with its AnarchyRun!',
             extra = dict(
                 pod = runner_pod_ref,
                 run = run_ref,
