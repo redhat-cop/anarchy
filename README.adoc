@@ -86,8 +86,7 @@ helm template anarchy helm/ | oc apply -f -
 
 == Anarchy Design
 
-The Anarchy Operator is configured with custom resource types AnarchyAPI and AnarchyGovernor in order to manage AnarchySubject resources.
-AnarchyAPI resources define how to communicate with an API endpoint while AnarchyGovernor resources define how to interact with APIs to create and manage AnarchySubject resources.
+The Anarchy Operator is configured with custom resource type AnarchyGovernor in order to manage AnarchySubject resources.
 Each AnarchySubject is managed according to a single AnarchyGovernor.
 The AnarchyGovernor defines actions to perform against APIs to instantiate and manage the AnarchySubject.
 Each action performed for an AnarchySubject according to the AnarchyGovernor definition is represented as an AnarchyAction custom resource.
