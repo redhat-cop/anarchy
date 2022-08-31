@@ -964,7 +964,7 @@ def run_subject_action_post(subject_name):
         flask.abort(400)
 
     action_name = flask.request.json.get('action', None)
-    after_timestamp = flask.request.json.get('after', None)
+    after_timestamp = flask.request.json.get('after', datetime.utcnow().strftime('%FT%TZ'))
     cancel_actions = flask.request.json.get('cancel', None)
     action_vars = flask.request.json.get('vars', {})
 
@@ -997,16 +997,25 @@ def run_subject_action_post(subject_name):
     if action_name not in cancel_actions:
         cancel_actions.append(action_name)
 
+    existing_action = result = None
+
     for action_resource in anarchy_runtime.custom_objects_api.list_namespaced_custom_object(
         anarchy_runtime.operator_domain, anarchy_runtime.api_version,
         anarchy_runtime.operator_namespace, 'anarchyactions',
         label_selector=f"{anarchy_runtime.subject_label}={subject.name}"
     ).get('items', []):
         action = AnarchyAction(resource_object=action_resource)
-        if action.action in cancel_actions:
+        if action.is_finished:
+            continue
+        if action.action == action_name and (
+            not action.after or action.after < after_timestamp
+        ):
+            existing_action = action
+            result = action_resource
+        elif action.action in cancel_actions and not action.is_finished:
             action.set_finished(anarchy_runtime=anarchy_runtime, state='canceled')
 
-    if action_name:
+    if action_name and not existing_action:
         result = anarchy_runtime.custom_objects_api.create_namespaced_custom_object(
             anarchy_runtime.operator_domain, anarchy_runtime.api_version,
             anarchy_runtime.operator_namespace, 'anarchyactions',
@@ -1032,8 +1041,6 @@ def run_subject_action_post(subject_name):
                 }
             }
         )
-    else:
-        result = None
 
     return flask.jsonify({'success': True, 'result': result})
 
