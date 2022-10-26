@@ -66,9 +66,6 @@ spec:
                   Pod template used to define AnarchyRunner pods.
                 type: object
                 x-kubernetes-preserve-unknown-fields: true
-              token:
-                description: Token used to validate communication with pods in the AnarchyRunner pool.
-                type: string
           status:
             description: >-
               AnarchyRunner status.

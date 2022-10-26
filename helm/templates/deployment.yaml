@@ -6,17 +6,18 @@ metadata:
   namespace: {{ include "anarchy.namespaceName" . }}
   labels:
     {{- include "anarchy.labels" . | nindent 4 }}
+    app.kburenetes.io/component: api
 spec:
   replicas: {{ .Values.replicaCount }}
   selector:
     matchLabels:
-      {{- include "anarchy.selectorLabels" . | nindent 6 }}
+      {{- include "anarchy.operatorComponentLabels" . | nindent 6 }}
   strategy:
     type: RollingUpdate
   template:
     metadata:
       labels:
-        {{- include "anarchy.selectorLabels" . | nindent 8 }}
+        {{- include "anarchy.operatorComponentLabels" . | nindent 8 }}
     spec:
     {{- with .Values.imagePullSecrets }}
       imagePullSecrets:
@@ -28,10 +29,6 @@ spec:
         env:
         - name: ANARCHY_SERVICE
           value: {{ include "anarchy.name" . }}
-        {{- if .Values.ingress.enabled }}
-        - name: CALLBACK_BASE_URL
-          value: https://{{ (index .Values.ingress.hosts 0).host }}
-        {{- end }}
         {{- range $k, $v := .Values.envVars }}
         - name: {{ $k | quote }}
           value: {{ $v | quote }}

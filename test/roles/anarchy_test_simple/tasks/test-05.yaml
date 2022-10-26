@@ -1,0 +1,221 @@
+---
+#
+# Test use case:
+# - subject event handler for create
+# - action with callback completion
+# - delete with callback completion
+#
+- name: Create AnarchyGovernor test-simple-05
+  kubernetes.core.k8s:
+    definition:
+      apiVersion: anarchy.gpte.redhat.com/v1
+      kind: AnarchyGovernor
+      metadata:
+        name: test-simple-05
+        namespace: "{{ anarchy_namespace }}"
+        labels:
+          anarchy.gpte.redhat.com/test: simple
+      spec:
+        actions:
+          cleanup:
+            callbackHandlers:
+              finished:
+                tasks:
+                - name: Finish action
+                  anarchy_finish_action:
+                    state: successful
+            finishOnSuccessfulRun: false
+            tasks:
+            - debug:
+                msg: "Starting cleanup."
+          test:
+            callbackHandlers:
+              finished:
+                tasks:
+                - name: Finish action
+                  anarchy_finish_action:
+                    state: successful
+            finishOnSuccessfulRun: false
+            tasks:
+            - debug:
+                msg: "Starting action."
+        subjectEventHandlers:
+          create:
+            tasks:
+            - anarchy_schedule_action:
+                action: test
+          delete:
+            tasks:
+            - anarchy_schedule_action:
+                action: cleanup
+
+- name: Create AnarchySubject test-simple-05-a
+  kubernetes.core.k8s:
+    definition:
+      apiVersion: anarchy.gpte.redhat.com/v1
+      kind: AnarchySubject
+      metadata:
+        name: test-simple-05-a
+        namespace: "{{ anarchy_namespace }}"
+        labels:
+          anarchy.gpte.redhat.com/test: simple
+      spec:
+        governor: test-simple-05
+
+- name: Wait for AnarchyAction for test of test-simple-05-a
+  kubernetes.core.k8s_info:
+    api_version: anarchy.gpte.redhat.com/v1
+    kind: AnarchyAction
+    label_selectors:
+    - anarchy.gpte.redhat.com/action = test
+    - anarchy.gpte.redhat.com/governor = test-simple-05
+    - anarchy.gpte.redhat.com/subject = test-simple-05-a
+    namespace: "{{ anarchy_namespace }}"
+  register: get_action
+  failed_when: >-
+    get_action.resources | default([]) | length != 1
+  until: get_action is successful
+  retries: 10
+  delay: 1
+
+- name: Wait for successful AnarchyRun for AnarchyAction for test of test-simple-05-a
+  kubernetes.core.k8s_info:
+    api_version: anarchy.gpte.redhat.com/v1
+    kind: AnarchyRun
+    label_selectors:
+    - anarchy.gpte.redhat.com/action = {{ get_action.resources[0].metadata.name }}
+    - anarchy.gpte.redhat.com/governor = test-simple-05
+    - anarchy.gpte.redhat.com/runner = successful
+    - anarchy.gpte.redhat.com/subject = test-simple-05-a
+    namespace: "{{ anarchy_namespace }}"
+  register: get_run
+  failed_when: >-
+    get_action.resources | default([]) | length != 1
+  until: get_run is successful
+  retries: 10
+  delay: 1
+
+- name: Wait for AnarchySubject test-simple-05-a empty run list in status
+  kubernetes.core.k8s_info:
+    api_version: anarchy.gpte.redhat.com/v1
+    kind: AnarchySubject
+    name: test-simple-05-a
+    namespace: "{{ anarchy_namespace }}"
+  register: get_subject
+  failed_when: >-
+    get_subject.resources[0].status.runs.active | length != 0
+  until: get_subject is successful
+  retries: 5
+  delay: 1
+
+- name: Verify that AnarchyAction for test of test-simple-05-a is not finished
+  kubernetes.core.k8s_info:
+    api_version: anarchy.gpte.redhat.com/v1
+    kind: AnarchyAction
+    label_selectors:
+    - anarchy.gpte.redhat.com/action = test
+    - anarchy.gpte.redhat.com/governor = test-simple-05
+    - anarchy.gpte.redhat.com/subject = test-simple-05-a
+    - "!anarchy.gpte.redhat.com/finished"
+    namespace: "{{ anarchy_namespace }}"
+  register: get_action
+  failed_when: >-
+    get_action.resources | default([]) | length != 1
+
+- name: Send finish callback to AnarchyAction by path
+  vars:
+    _action: "{{ get_action.resources[0] }}"
+  uri:
+    body:
+      foo: bar
+    body_format: json
+    headers:
+      Authorization: "Bearer {{ _action.spec.callbackToken }}"
+    method: POST
+    url: "{{ anarchy_simulated_callback_base_url }}/action/{{ _action.metadata.name }}/finished"
+    validate_certs: false
+
+- name: Wait until AnarchyAction for test of test-simple-05-a is finished
+  kubernetes.core.k8s_info:
+    api_version: anarchy.gpte.redhat.com/v1
+    kind: AnarchyAction
+    label_selectors:
+    - anarchy.gpte.redhat.com/action = test
+    - anarchy.gpte.redhat.com/governor = test-simple-05
+    - anarchy.gpte.redhat.com/subject = test-simple-05-a
+    - anarchy.gpte.redhat.com/finished
+    namespace: "{{ anarchy_namespace }}"
+  register: get_action
+  failed_when: >-
+    get_action.resources | default([]) | length != 1
+  until: get_action is successful
+  retries: 10
+  delay: 1
+
+- name: Start delete of AnarchySubject test-simple-05-a
+  kubernetes.core.k8s:
+    api_version: anarchy.gpte.redhat.com/v1
+    kind: AnarchySubject
+    name: test-simple-05-a
+    namespace: "{{ anarchy_namespace }}"
+    state: absent
+
+- name: Wait AnarchyAction created to cleanup test-simple-05-a
+  kubernetes.core.k8s_info:
+    api_version: anarchy.gpte.redhat.com/v1
+    kind: AnarchyAction
+    label_selectors:
+    - anarchy.gpte.redhat.com/action = cleanup
+    - anarchy.gpte.redhat.com/governor = test-simple-05
+    - anarchy.gpte.redhat.com/subject = test-simple-05-a
+    namespace: "{{ anarchy_namespace }}"
+  register: get_action
+  failed_when: >-
+    get_action.resources | default([]) | length != 1
+  until: get_action is successful
+  retries: 10
+  delay: 1
+
+- name: Wait for successful AnarchyRun for cleanup AnarchyAction for test-simple-05-a
+  kubernetes.core.k8s_info:
+    api_version: anarchy.gpte.redhat.com/v1
+    kind: AnarchyRun
+    label_selectors:
+    - anarchy.gpte.redhat.com/action = {{ get_action.resources[0].metadata.name }}
+    - anarchy.gpte.redhat.com/governor = test-simple-05
+    - anarchy.gpte.redhat.com/runner = successful
+    - anarchy.gpte.redhat.com/subject = test-simple-05-a
+    namespace: "{{ anarchy_namespace }}"
+  register: get_run
+  failed_when: >-
+    get_action.resources | default([]) | length != 1
+  until: get_run is successful
+  retries: 10
+  delay: 1
+
+- name: Send finish callback to AnarchyAction by event data
+  vars:
+    _action: "{{ get_action.resources[0] }}"
+  uri:
+    body:
+      event: finished
+    body_format: json
+    headers:
+      Authorization: "Bearer {{ _action.spec.callbackToken }}"
+    method: POST
+    url: "{{ anarchy_simulated_callback_base_url }}/action/{{ _action.metadata.name }}"
+    validate_certs: false
+
+- name: Wait for AnarchySubject for test-simple-05-a to complete deletion
+  kubernetes.core.k8s_info:
+    api_version: anarchy.gpte.redhat.com/v1
+    kind: AnarchySubject
+    name: test-simple-05-a
+    namespace: "{{ anarchy_namespace }}"
+  register: get_subject
+  failed_when: >-
+    get_subject.resources | default([]) | length != 0
+  until: get_subject is successful
+  retries: 10
+  delay: 1
+...

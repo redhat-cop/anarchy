@@ -25,7 +25,6 @@ options:
     description:
     - "The anarchy output callback writes YAML to record details from the play"
     type: string
-    default: playbook-result.yaml
     version_added: n/a
     env:
     - name: ANSIBLE_ANARCHY_OUTPUT_DIR
@@ -63,7 +62,7 @@ class CallbackModule(CallbackModule_default):
         self.anarchy_result_fh = None
 
     def anarchy_open_result_file(self):
-        result_file_path = os.path.join(self.get_option('anarchy_output_dir'), 'anarchy-result.yaml')
+        result_file_path = os.path.join(self.get_option('anarchy_output_dir'), 'anarchy-run-data.yaml')
         if not self.anarchy_result_fh:
             self.anarchy_result_fh = open(result_file_path, 'w')
             self.anarchy_result_fh.write("---\nplays:\n")

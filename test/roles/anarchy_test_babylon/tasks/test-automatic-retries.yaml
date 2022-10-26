@@ -37,9 +37,6 @@
   - r_action.resources | default([]) | length == 1
   - r_action.resources[0].spec.action == 'provision'
   - r_action.resources[0].status is defined
-  - r_action.resources[0].status.callbackEvents is defined
-  - r_action.resources[0].status.callbackEvents | length == 1
-  - r_action.resources[0].status.callbackEvents[0].name == 'complete'
   retries: 40
   delay: 5
 
@@ -56,7 +53,7 @@
   - r_subject.resources[0].status.towerJobs is defined
   - r_subject.resources[0].status.towerJobs.provision is defined
   - r_subject.resources[0].status.towerJobs.provision.deployerJob is defined
-  retries: 5
+  retries: 10
   delay: 5
 
 - name: Stop test-babylon-automatic-retries subject

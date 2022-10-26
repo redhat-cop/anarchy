@@ -127,8 +127,6 @@ spec:
                 - name
                 - namespace
                 - uid
-              deleteHandlersStarted:
-                type: string
               pendingActions:
                 type: array
                 items:

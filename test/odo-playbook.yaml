@@ -10,11 +10,15 @@
   - anarchy_test_odo
   - anarchy_test_cleanup
   tasks:
-  - name: Run tests
-    include_role:
-      name: "{{ _anarchy_test_role }}"
-    loop: "{{ anarchy_tests }}"
-    loop_control:
-      loop_var: _anarchy_test
-    vars:
-      _anarchy_test_role: anarchy_test_{{ _anarchy_test }}
+  - block:
+    - name: Run tests
+      include_role:
+        name: "{{ _anarchy_test_role }}"
+      loop: "{{ anarchy_tests }}"
+      loop_control:
+        loop_var: _anarchy_test
+      vars:
+        _anarchy_test_role: anarchy_test_{{ _anarchy_test }}
+    always:
+    - name: Stop port forward
+      command: pkill -fx 'oc port-forward deployment/anarchy-app 5000'

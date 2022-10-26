@@ -25,6 +25,8 @@ components:
       value: "true"
     - name: CLEANUP_INTERVAL
       value: "10"
+    - name: RUNNER_TOKEN
+      value: "development-token"
     image: quay.io/redhat-cop/python-kopf-s2i:v1.35
     mountSources: true
     sourceMapping: /tmp/projects

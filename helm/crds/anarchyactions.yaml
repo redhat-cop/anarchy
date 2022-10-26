@@ -32,6 +32,9 @@ spec:
     - name: Run
       type: string
       jsonPath: .status.runRef.name
+    - name: State
+      type: string
+      jsonPath: .status.state
     - name: Finished
       type: date
       jsonPath: .status.finishedTimestamp
@@ -150,16 +153,6 @@ spec:
             type: object
             x-kubernetes-preserve-unknown-fields: true
             properties:
-              callbackEvents:
-                type: array
-                items:
-                  type: object
-                  properties:
-                    name:
-                      type: string
-                    data:
-                      type: object
-                      x-kubernetes-preserve-unknown-fields: true
               finishedTimestamp:
                 description: >-
                   Timestamp for when the action is completed.

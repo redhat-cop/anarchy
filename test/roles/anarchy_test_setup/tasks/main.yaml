@@ -19,4 +19,5 @@
 
 - name: Set anarchy_odo_pod, anarchy_odo_pod_ip, anarchy_callback_base_url
   set_fact:
-    anarchy_callback_base_url: "https://{{ r_get_route.resources[0].spec.host }}"
+    anarchy_simulated_callback_base_url: "https://{{ r_get_route.resources[0].spec.host }}"
+...

@@ -5,6 +5,7 @@ set -eo pipefail
 shopt -s dotglob
 
 mkdir -p /opt/app-root/src || :
+cp --preserve=mode --recursive /tmp/src/api /opt/app-root/
 cp --preserve=mode --recursive /tmp/src/anarchy-runner /opt/app-root/
 
 touch \

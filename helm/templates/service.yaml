@@ -16,5 +16,5 @@ spec:
     targetPort: {{ $v }}
   {{- end }}
   selector:
-    {{- include "anarchy.selectorLabels" . | nindent 4 }}
+    {{- include "anarchy.apiComponentLabels" . | nindent 4 }}
 {{- end }}

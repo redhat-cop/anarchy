@@ -34,10 +34,11 @@
 
 - name: Set anarchy_odo_pod, anarchy_odo_pod_ip, anarchy_callback_base_url
   set_fact:
-    anarchy_odo_pod: "{{ _pod }}"
-    anarchy_odo_pod_ip: "{{ _pod.status.podIP }}"
-    anarchy_callback_base_url: "http://{{ _pod.status.podIP }}:5000"
+    anarchy_simulated_callback_base_url: "http://localhost:5000"
   vars:
     _pod: "{{ r_get_odo_pod.resources[0] }}"
 
-- debug: var=anarchy_odo_pod_ip
+- name: Setup port forward to api
+  command: oc port-forward deployment/anarchy-app 5000
+  async: 9999999
+  poll: 0

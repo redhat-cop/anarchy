@@ -100,7 +100,7 @@
     r_get_anarchy_test_babylon_server_pod.resources[0].status.phase != 'Running' or
     r_get_anarchy_test_babylon_server_pod.resources[0].status.conditions | json_query("[?type=='Ready'].status|[0]") != 'True'
   until: r_get_anarchy_test_babylon_server_pod is success
-  retries: 10
+  retries: 20
   delay: 5
 
 - name: Get anarchy-test-babylon-server Route

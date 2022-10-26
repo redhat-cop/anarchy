@@ -1,0 +1,114 @@
+---
+#
+# Test use case:
+# - subject event handler for create
+# - subject event handler for delete
+#
+- name: Create AnarchyGovernor test-simple-01
+  kubernetes.core.k8s:
+    definition:
+      apiVersion: anarchy.gpte.redhat.com/v1
+      kind: AnarchyGovernor
+      metadata:
+        name: test-simple-01
+        namespace: "{{ anarchy_namespace }}"
+        labels:
+          anarchy.gpte.redhat.com/test: simple
+      spec:
+        subjectEventHandlers:
+          create:
+            tasks:
+            - debug:
+                msg: "Hello, World!"
+          delete:
+            tasks:
+            - debug:
+                msg: "Goodbye, World!"
+
+- name: Create AnarchySubject test-simple-01-a
+  kubernetes.core.k8s:
+    definition:
+      apiVersion: anarchy.gpte.redhat.com/v1
+      kind: AnarchySubject
+      metadata:
+        name: test-simple-01-a
+        namespace: "{{ anarchy_namespace }}"
+        labels:
+          anarchy.gpte.redhat.com/test: simple
+      spec:
+        governor: test-simple-01
+
+- name: Wait for AnarchySubject test-simple-01-a initialization
+  kubernetes.core.k8s_info:
+    api_version: anarchy.gpte.redhat.com/v1
+    kind: AnarchySubject
+    name: test-simple-01-a
+    namespace: "{{ anarchy_namespace }}"
+  register: get_subject
+  failed_when: >-
+    get_subject.resources[0].status.pendingActions is not defined
+  until: get_subject is successful
+  retries: 3
+  delay: 1
+
+- name: Verify AnarchySubject test-simple-01-a
+  vars:
+    _subject: "{{ get_subject.resources[0] }}"
+  assert:
+    that:
+      - _subject.metadata.labels['anarchy.gpte.redhat.com/governor'] == 'test-simple-01'
+      - _subject.status.pendingActions == []
+      - _subject.status.runs.active is defined
+
+- name: Wait for AnarchyRun for create of AnarchySubject test-simple-01-a successful
+  kubernetes.core.k8s_info:
+    api_version: anarchy.gpte.redhat.com/v1
+    kind: AnarchyRun
+    label_selectors:
+    - anarchy.gpte.redhat.com/event = create
+    - anarchy.gpte.redhat.com/subject = test-simple-01-a
+    - anarchy.gpte.redhat.com/runner = successful
+    namespace: "{{ anarchy_namespace }}"
+  register: get_run
+  failed_when: >-
+    get_run.resources | default([]) | length != 1
+  until: get_run is successful
+  retries: 5
+  delay: 1
+
+- name: Delete AnarchySubject test-simple-01-a
+  kubernetes.core.k8s:
+    api_version: anarchy.gpte.redhat.com/v1
+    kind: AnarchySubject
+    name: test-simple-01-a
+    namespace: "{{ anarchy_namespace }}"
+    state: absent
+
+- name: Wait for AnarchyRun for delete of AnarchySubject test-simple-01-a successful
+  kubernetes.core.k8s_info:
+    api_version: anarchy.gpte.redhat.com/v1
+    kind: AnarchyRun
+    label_selectors:
+    - anarchy.gpte.redhat.com/event = delete
+    - anarchy.gpte.redhat.com/subject = test-simple-01-a
+    namespace: "{{ anarchy_namespace }}"
+  register: get_run
+  failed_when: >-
+    get_run.resources | default([]) | length != 1
+  until: get_run is successful
+  retries: 5
+  delay: 1
+
+- name: Wait for AnarchySubject test-simple-01-a deletion
+  kubernetes.core.k8s_info:
+    api_version: anarchy.gpte.redhat.com/v1
+    kind: AnarchySubject
+    name: test-simple-01-a
+    namespace: "{{ anarchy_namespace }}"
+  register: get_subject
+  failed_when: >-
+    get_subject.resources | length != 0
+  until: get_subject is successful
+  retries: 10
+  delay: 1
+...
