@@ -36,6 +36,22 @@ app.kubernetes.io/instance: {{ .Release.Name }}
 {{- end -}}
 
 {{/*
+API component labels
+*/}}
+{{- define "anarchy.apiComponentLabels" -}}
+{{-   include "anarchy.selectorLabels" . }}
+app.kubernetes.io/component: api
+{{- end -}}
+
+{{/*
+Operator component labels
+*/}}
+{{- define "anarchy.operatorComponentLabels" -}}
+{{-   include "anarchy.selectorLabels" . }}
+app.kubernetes.io/component: operator
+{{- end -}}
+
+{{/*
 Create the name of the service account to use
 */}}
 {{- define "anarchy.serviceAccountName" -}}
@@ -56,3 +72,11 @@ Create the name of the namespace to use
     {{ default "default" .Values.namespace.name }}
 {{- end -}}
 {{- end -}}
+
+{{/*
+Name to use for API
+*/}}
+{{- define "anarchy.apiName" -}}
+{{-   printf "%s-api" (include "anarchy.name" .) -}}
+{{- end -}}
+

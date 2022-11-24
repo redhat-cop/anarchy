@@ -1,215 +1,157 @@
-import copy
 import kopf
-import kubernetes
-import threading
+import kubernetes_asyncio
+import logging
 
-from anarchyrunner import AnarchyRunner
-from anarchygovernor import AnarchyGovernor
-from anarchysubject import AnarchySubject
-from anarchyaction import AnarchyAction
-from datetime import datetime, timedelta
+from datetime import datetime, timezone
 
-class AnarchyRun(object):
-    """
-    AnarchyRun class
-    """
+from anarchy import Anarchy
+from anarchycachedkopfobject import AnarchyCachedKopfObject
 
-    register_lock = threading.Lock()
-    runs = {}
+import anarchyaction
+import anarchygovernor
+import anarchysubject
 
-    @staticmethod
-    def get_from_api(name, anarchy_runtime):
-        '''
-        Get AnarchyRun from api by name.
-        '''
-        resource_object = AnarchyRun.get_resource_from_api(name, anarchy_runtime)
-        if resource_object:
-            return AnarchyRun(resource_object=resource_object)
+class AnarchyRun(AnarchyCachedKopfObject):
+    cache = {}
+    kind = 'AnarchyRun'
+    plural = 'anarchyruns'
 
-    @staticmethod
-    def get_from_cache(name):
-        return AnarchyRun.runs.get(name)
+    @classmethod
+    def have_unfinished_runs_for_action(cls, anarchy_action):
+        for anarchy_run in cls.cache.values():
+            if anarchy_run.action_name == anarchy_action.name \
+            and not anarchy_run.is_finished:
+                return True
+        return False
 
-    @staticmethod
-    def get_pending(anarchy_runtime):
-        '''
-        Get pending AnarchyRun from api, if one exists.
-        '''
-        items = anarchy_runtime.custom_objects_api.list_namespaced_custom_object(
-            anarchy_runtime.operator_domain, anarchy_runtime.api_version,
-            anarchy_runtime.operator_namespace, 'anarchyruns',
-            label_selector='{}=pending'.format(anarchy_runtime.runner_label), limit=1
-        ).get('items', [])
-        if items:
-            return AnarchyRun(resource_object=items[0])
-        else:
-            return None
-
-    @staticmethod
-    def get_resource_from_api(name, anarchy_runtime):
-        '''
-        Get raw AnarchyRun resource from api by name, if one exists.
-        '''
-        try:
-            return anarchy_runtime.custom_objects_api.get_namespaced_custom_object(
-                anarchy_runtime.operator_domain, anarchy_runtime.api_version,
-                anarchy_runtime.operator_namespace, 'anarchyruns', name
-            )
-        except kubernetes.client.rest.ApiException as e:
-            if e.status == 404:
-                return None
-            else:
-                raise
-
-    @staticmethod
-    def register(
-        anarchy_runtime=None,
-        annotations=None,
-        labels=None,
-        logger=None,
-        meta=None,
-        name=None,
-        namespace=None,
-        resource_object=None,
-        spec=None,
-        status=None,
-        uid=None,
-        **_
+    @classmethod
+    async def create(cls,
+        handler,
+        anarchy_action = None,
+        anarchy_subject = None,
     ):
-        with AnarchyRun.register_lock:
-            if resource_object:
-                name = resource_object['metadata']['name']
+        if anarchy_action:
+            anarchy_subject = await anarchy_action.get_subject()
+        anarchy_governor = anarchy_subject.get_governor()
+
+        labels = {
+            Anarchy.governor_label: anarchy_governor.name,
+            Anarchy.runner_label: 'queued' if anarchy_subject.has_active_runs else 'pending',
+            Anarchy.subject_label: anarchy_subject.name,
+        }
+        # Mark this AnarchyRun for delete handling.
+        if anarchy_subject.is_deleting:
+            labels[Anarchy.delete_handler_label] = ''
+
+        if 'name' in handler:
+            labels[Anarchy.event_label] = handler['name']
+
+        run_spec = {
+            "governor": anarchy_governor.as_reference(),
+            "handler": handler,
+            "subject": {
+                "vars": anarchy_subject.vars,
+                **anarchy_subject.as_reference(),
+            }
+        }
+
+        if anarchy_action:
+            owner = anarchy_action
+            labels[Anarchy.action_label] = anarchy_action.name
+            run_spec['action'] = anarchy_action.as_reference()
+            if 'name' in handler:
+                generate_name = f"{anarchy_action.name}-{handler['name']}-"
             else:
-                resource_object = dict(
-                    apiVersion = anarchy_runtime.api_group_version,
-                    kind = 'AnarchyRun',
-                    metadata = dict(
-                        annotations = dict(annotations) if annotations else None,
-                        creationTimestamp = meta["creationTimestamp"],
-                        deletionTimestamp = meta.get("deletionTimestamp"),
-                        labels = dict(labels) if labels else None,
-                        name = name,
-                        namespace = namespace,
-                        resourceVersion = meta["resourceVersion"],
-                        uid = uid,
-                    ),
-                    spec = dict(spec),
-                    status = dict(status) if status else {},
-                )
-            run = AnarchyRun.runs.get(name)
-            if run:
-                run.__init__(logger=logger, resource_object=resource_object)
-                run.local_logger.debug("Refreshed AnarchyRun")
-            else:
-                run = AnarchyRun(resource_object=resource_object, logger=logger)
-                AnarchyRun.runs[run.name] = run
-                run.local_logger.info("Registered AnarchyRun")
-            return run
+                generate_name = f"{anarchy_action.name}-"
+        else:
+            owner = anarchy_subject
+            generate_name = f"{anarchy_subject.name}-{handler['name']}-"
 
-    @staticmethod
-    def unregister(name):
-        with AnarchyRun.register_lock:
-            if name in AnarchyRun.runs:
-                run = AnarchyRun.runs.pop(name)
-                run.local_logger.info("Unregistered AnarchyRun")
-                return run
-
-    def __init__(self, resource_object, logger=None):
-        self.api_version = resource_object['apiVersion']
-        self.kind = resource_object['kind']
-        self.metadata = resource_object['metadata']
-        self.spec = resource_object['spec']
-        self.status = resource_object.get('status', {})
-
-        self.local_logger = kopf.LocalObjectLogger(
-            body = resource_object,
-            settings = kopf.OperatorSettings(),
+        definition = await Anarchy.custom_objects_api.create_namespaced_custom_object(
+            group = Anarchy.domain,
+            namespace = Anarchy.namespace,
+            plural = 'anarchyruns',
+            version = Anarchy.version,
+            body = {
+                "apiVersion": Anarchy.api_version,
+                "kind": "AnarchyRun",
+                "metadata": {
+                    "generateName": generate_name,
+                    "labels": labels,
+                    "namespace": Anarchy.namespace,
+                    "ownerReferences": [owner.as_owner_ref()],
+                },
+                "spec": run_spec,
+            }
         )
-        if logger:
-            self.logger = logger
-        elif not hasattr(self, 'logger'):
-            self.logger = self.local_logger
+        anarchy_run = cls.load_definition(definition)
+        await anarchy_subject.add_run_to_status(anarchy_run)
+        return anarchy_run
 
     @property
     def action_name(self):
-        action = self.spec.get('action')
-        if action:
-            return action['name']
+        if 'action' in self.spec:
+            return self.spec['action']['name']
 
     @property
-    def action_namespace(self):
-        action = self.spec.get('action')
-        if action:
-            return action['namespace']
+    def cleanup_after_datetime(self):
+        anarchy_governor = self.get_governor()
+        return self.run_post_datetime + anarchy_governor.remove_successful_runs_after_timedelta
 
     @property
-    def action_reference(self):
-        action = self.spec.get('action')
-        if action:
-            return dict(
-                apiVersion = action['apiVersion'],
-                kind = action['kind'],
-                name = action['name'],
-                namespace = action['namespace'],
-                uid = action['uid'],
-            )
+    def continue_action(self):
+        return self.status.get('result', {}).get('continueAction')
 
     @property
-    def continue_action_after(self):
-        timestamp = self.continue_action_after_timestamp
-        if timestamp:
-            return datetime.strptime(timestamp, '%Y-%m-%dT%H:%M:%SZ')
+    def delete_subject(self):
+        return 'deleteSubject' in self.status.get('result', {})
 
     @property
-    def continue_action_after_timestamp(self):
-        return self.status.get('result', {}).get('continueAction', {}).get('after')
+    def delete_subject_finalizers(self):
+        return self.status.get('result', {}).get('deleteSubject', {}).get('removeFinalizers', False)
 
     @property
-    def continue_action_vars(self):
-        return self.status.get('result', {}).get('continueAction', {}).get('vars', {})
+    def finish_action(self):
+        return self.status.get('result', {}).get('finishAction')
 
     @property
-    def creation_timestamp(self):
-        return self.metadata.get('creationTimestamp')
-
-    @property
-    def failures(self):
-        return self.status.get('failures', 0)
+    def finish_action_state(self):
+        return self.status.get('result', {}).get('finishAction', {}).get('state', 'successful')
 
     @property
     def governor_name(self):
         return self.spec['governor']['name']
 
     @property
-    def governor_reference(self):
-        return dict(
-            apiVersion = self.api_version,
-            kind = 'AnarchyGovernor',
-            name = self.governor_name,
-            namespace = self.namespace,
-        )
+    def has_action(self):
+        return 'action' in self.spec
 
     @property
-    def labels(self):
-        return self.metadata.get('labels', {})
+    def is_delete_handler(self):
+        return Anarchy.delete_handler_label in self.labels
 
     @property
-    def name(self):
-        return self.metadata['name']
+    def is_failed(self):
+        return self.runner_state == 'failed'
 
     @property
-    def namespace(self):
-        return self.metadata['namespace']
+    def is_labeled_for_cancelation(self):
+        """
+        Cancel label may be set on run to indicate that it should be skipped and not retried.
+        """
+        return Anarchy.canceled_label in self.labels
 
     @property
-    def reference(self):
-        return dict(
-            apiVersion = self.api_version,
-            kind = self.kind,
-            name = self.name,
-            namespace = self.namespace,
-            uid = self.uid,
-        )
+    def is_lost(self):
+        return self.runner_state == 'lost'
+
+    @property
+    def is_finished(self):
+        return self.runner_state in ('successful', 'canceled')
+
+    @property
+    def is_pending_or_running(self):
+        return self.runner_state not in ('queued', 'failed', 'lost', 'canceled', 'successful')
 
     @property
     def result_status(self):
@@ -220,277 +162,232 @@ class AnarchyRun(object):
         return self.status.get('result', {}).get('statusMessage')
 
     @property
-    def retry_after(self):
-        return self.status.get('retryAfter')
-
-    @property
     def retry_after_datetime(self):
-        retry_after = self.retry_after
-        if retry_after:
-            return datetime.strptime(retry_after, '%Y-%m-%dT%H:%M:%SZ')
+        retry_after_timestamp = self.status.get('retryAfter')
+        if retry_after_timestamp:
+            return datetime.strptime(retry_after_timestamp, '%Y-%m-%dT%H:%M:%SZ').replace(tzinfo=timezone.utc)
         else:
-            return datetime.utcnow()
+            return datetime.now(timezone.utc)
 
     @property
     def run_post_datetime(self):
-        timestamp = self.run_post_timestamp
-        if timestamp:
-            return datetime.strptime(timestamp, '%Y-%m-%dT%H:%M:%SZ')
+        ts = self.run_post_timestamp
+        if ts:
+            return datetime.strptime(ts, '%Y-%m-%dT%H:%M:%SZ').replace(tzinfo=timezone.utc)
 
     @property
     def run_post_timestamp(self):
         return self.status.get('runPostTimestamp')
 
     @property
-    def runner_name(self):
-        ref = self.runner_reference
-        if ref:
-            return ref['name']
-
-    @property
-    def runner_reference(self):
-        return self.status.get('runner')
-
-    @property
-    def runner_pod_name(self):
-        ref = self.runner_pod_reference
-        if ref:
-            return ref['name']
-
-    @property
-    def runner_pod_reference(self):
-        return self.status.get('runnerPod', {})
+    def runner_state(self):
+        return self.labels.get(Anarchy.runner_label)
 
     @property
     def subject_name(self):
         return self.spec['subject']['name']
 
-    @property
-    def subject_reference(self):
-        return dict(
-            apiVersion = self.spec['subject']['apiVersion'],
-            kind = self.spec['subject']['kind'],
-            name = self.spec['subject']['name'],
-            namespace = self.spec['subject']['namespace'],
-            uid = self.spec['subject']['uid'],
-        )
-
-    @property
-    def uid(self):
-        return self.metadata['uid']
-
-    def add_to_action_status(self, anarchy_runtime):
-        try:
-            resource_object = anarchy_runtime.custom_objects_api.patch_namespaced_custom_object_status(
-                anarchy_runtime.operator_domain, anarchy_runtime.api_version,
-                self.action_namespace, 'anarchyactions', self.action_name,
-                {
-                    'status': {
-                        'runRef': self.reference,
-                        'runScheduled': self.creation_timestamp,
-                    }
-                }
-            )
-            action = AnarchyAction.get_from_cache(self.action_name)
-            if action:
-                action.__init__(resource_object)
-                return action
-            else:
-                return AnarchyAction(resource_object)
-        except kubernetes.client.rest.ApiException as e:
-            # If error is 404, not found, then subject or action must have been deleted
-            if e.status != 404:
-                raise
-
-    def delete(self, anarchy_runtime):
-        try:
-            anarchy_runtime.custom_objects_api.delete_namespaced_custom_object(
-                anarchy_runtime.operator_domain, anarchy_runtime.api_version,
-                self.namespace, 'anarchyruns', self.name
-            )
-        except kubernetes.client.rest.ApiException as e:
-            if e.status != 404:
-                raise
-
     def get_governor(self):
-        return AnarchyGovernor.get(self.governor_name)
+        return anarchygovernor.AnarchyGovernor.get(self.governor_name)
 
-    def get_runner(self):
-        name = self.runner_name
-        return AnarchyRunner.get(name) if name else None
+    async def cancel(self):
+        """
+        Mark AnarchyRun as canceled.
 
-    def get_runner_label_value(self, anarchy_runtime):
-        return self.metadata.get('labels', {}).get(anarchy_runtime.runner_label, None)
+        Immediately cancel from queued or retry states, apply canceled label otherwise.
+        """
+        if self.runner_state in ('failed', 'lost', 'queued'):
+            await self.finish('canceled')
+        elif self.is_pending_or_running:
+            await self.json_patch([{
+                "op": "add",
+                "path": f"/metadata/labels/{Anarchy.canceled_label.replace('/', '~1')}",
+                "value": "",
+            }])
 
-    def get_subject(self, anarchy_runtime):
-        return AnarchySubject.get(
-            anarchy_runtime = anarchy_runtime,
-            name = self.subject_name,
-        )
+    async def finish(self, state):
+        await self.json_patch_status([{
+            "op": "add",
+            "path": "/status/runPostTimestamp",
+            "value": datetime.now(timezone.utc).strftime('%FT%TZ'),
+        }])
+        await self.json_patch([{
+            "op": "add",
+            "path": f"/metadata/labels/{Anarchy.finished_label.replace('/', '~1')}",
+            "value": state,
+        }, {
+            "op": "add",
+            "path": f"/metadata/labels/{Anarchy.runner_label.replace('/', '~1')}",
+            "value": state,
+        }])
 
-    def handle_lost_runner(self, anarchy_runtime):
-        """Notified that a runner has been lost, reset AnarchyRun to pending"""
-        self.local_logger.warning(
-            'AnarchyRun lost runner pod',
-            extra = dict(runnerPod = self.runner_pod_reference)
-        )
-        self.post_result(
-            anarchy_runtime = anarchy_runtime,
-            result = {'status': 'lost'},
-        )
-
-    def manage(self, anarchy_runtime):
-        runner_label_value = self.get_runner_label_value(anarchy_runtime)
-        if runner_label_value == 'pending':
-            pass
-        elif runner_label_value == 'queued':
-            pass
-        elif runner_label_value == 'failed':
-            if self.retry_after_datetime <= datetime.utcnow():
-                self.set_to_pending(anarchy_runtime)
-        elif self.runner_pod_name:
-            runner = self.get_runner()
-            if runner:
-                if runner.get_pod(self.runner_pod_name):
-                    pass # FIXME - Timeout?
-                else:
-                    self.handle_lost_runner(anarchy_runtime)
-            else:
-                self.local_logger.warning(
-                    'Unable to find AnarchyRunner',
-                    extra = dict(
-                        runner = dict(
-                            apiVersion = anarchy_runtime.api_group_version,
-                            kind = 'AnarchyRunner',
-                            name = runner_name,
-                            namespace = anarchy_runtime.operator_namespace,
-                        )
-                    )
-                )
-
-    def post_result(self, result, anarchy_runtime):
-        self.local_logger.info(
-            'Post result for AnarchyRun',
-            extra = dict(
-                status = result['status']
-            )
-        )
-
-        patch = {
-            "metadata": {
-                "labels": {
-                    anarchy_runtime.runner_label: 'pending' if result['status'] == 'lost' else result['status']
-                }
-            }
-        }
-
-        status_patch = {
-            'result': result,
-            'runPostTimestamp': datetime.utcnow().strftime('%FT%TZ'),
-        }
-
-        if result['status'] == 'successful':
-            patch['metadata']['labels'][anarchy_runtime.finished_label] = 'true'
-        elif result['status'] == 'failed':
-            if self.failures > 8:
-                retry_delay = timedelta(minutes=30)
-            else:
-                retry_delay = timedelta(seconds=5 * 2**self.failures)
-            status_patch['failures'] = self.failures + 1
-            status_patch['retryAfter'] = (datetime.utcnow() + retry_delay).strftime('%FT%TZ')
-
+    async def get_action(self):
+        if not self.has_action:
+            return
         try:
-            resource_object = anarchy_runtime.custom_objects_api.patch_namespaced_custom_object_status(
-                anarchy_runtime.operator_domain, anarchy_runtime.api_version,
-                self.namespace, 'anarchyruns', self.name, {"status": status_patch}
-            )
-            self.__init__(resource_object)
-            resource_object = anarchy_runtime.custom_objects_api.patch_namespaced_custom_object(
-                anarchy_runtime.operator_domain, anarchy_runtime.api_version,
-                self.namespace, 'anarchyruns', self.name, patch
-            )
-            self.__init__(resource_object)
-        except kubernetes.client.rest.ApiException as e:
+            return await anarchyaction.AnarchyAction.get(self.action_name)
+        except kubernetes_asyncio.client.rest.ApiException as e:
             if e.status == 404:
-                self.local_logger.warning('Unable to updated deleted AnarchyRun')
+                return
             else:
                 raise
 
-    def set_runner_pod(self, runner, runner_pod, anarchy_runtime):
-        runner_pod_reference = dict(
-            apiVersion = 'v1',
-            kind = 'Pod',
-            name = runner_pod.metadata.name,
-            namespace = runner_pod.metadata.namespace,
-            uid = runner_pod.metadata.uid,
-        )
-
-        resource_object = self.to_dict()
-        resource_object['metadata']['labels'][anarchy_runtime.runner_label] = runner_pod.metadata.name
-
+    async def get_subject(self):
         try:
-            resource_object = anarchy_runtime.custom_objects_api.replace_namespaced_custom_object(
-                anarchy_runtime.operator_domain, anarchy_runtime.api_version,
-                self.namespace, 'anarchyruns', self.name, resource_object
-            )
-            self.__init__(resource_object=resource_object)
-            resource_object = anarchy_runtime.custom_objects_api.patch_namespaced_custom_object_status(
-                anarchy_runtime.operator_domain, anarchy_runtime.api_version,
-                self.namespace, 'anarchyruns', self.name,
-                {
-                    "status": {
-                        "runnerPod": runner_pod_reference,
-                        "runner": runner.reference,
-                    }
-                }
-            )
-            self.__init__(resource_object=resource_object)
-
-            self.local_logger.info(
-                'Set runner',
-                extra = dict(
-                    runner = runner.reference,
-                    runner_pod = runner_pod_reference,
-                )
-            )
-        except kubernetes.client.rest.ApiException as e:
-            if e.status == 409:
-                # Failed to set runner due to conflict
-                return False
-            else:
+            return await anarchysubject.AnarchySubject.get(self.subject_name)
+        except kubernetes_asyncio.client.rest.ApiException as e:
+            if e.status != 404:
                 raise
-        return True
 
-    def set_to_pending(self, anarchy_runtime):
-        resource_object = anarchy_runtime.custom_objects_api.patch_namespaced_custom_object_status(
-            anarchy_runtime.operator_domain, anarchy_runtime.api_version,
-            self.namespace, 'anarchyruns', self.name,
-            {
-                "status": {
-                    "runnerPod": None,
-                    "runner": None,
-                }
-            }
-        )
-        self.__init__(resource_object)
-        resource_object = anarchy_runtime.custom_objects_api.patch_namespaced_custom_object(
-            anarchy_runtime.operator_domain, anarchy_runtime.api_version,
-            self.namespace, 'anarchyruns', self.name,
-            {
-                "metadata": {
-                    "labels": {
-                        anarchy_runtime.runner_label: 'pending'
-                    }
-                },
-            }
-        )
-        self.__init__(resource_object)
+    async def handle_canceled(self, anarchy_subject, anarchy_action):
+        if anarchy_action and self.name == anarchy_action.run_name:
+            await anarchy_action.finish('canceled')
+        await anarchy_subject.remove_run_from_status(self)
 
-    def to_dict(self):
-        return dict(
-            apiVersion = self.api_version,
-            kind = self.kind,
-            metadata = copy.deepcopy(self.metadata),
-            spec = copy.deepcopy(self.spec),
-            status = copy.deepcopy(self.status),
-        )
+    async def handle_delete(self, anarchy_subject, anarchy_action):
+        try:
+            await anarchy_subject.remove_run_from_status(self)
+        except kubernetes_asyncio.client.rest.ApiException as e:
+            if e.status != 404:
+                raise
+
+    async def handle_failed(self, anarchy_subject, anarchy_action):
+        await anarchy_subject.set_run_status(self.result_status, self.result_status_message)
+        if anarchy_action:
+            if anarchy_action.is_labeled_for_cancelation:
+                logging.info(f"Canceling {self} after failed run for canceled {anarchy_action}")
+                await self.finish('canceled')
+                await anarchy_action.finish('canceled')
+            else:
+                await anarchy_action.set_state('run failed')
+
+    async def handle_lost(self, anarchy_subject, anarchy_action):
+        await anarchy_subject.set_run_status('lost')
+        if anarchy_action:
+            if anarchy_action.is_labeled_for_cancelation:
+                logging.info(f"Canceling {self} after lost run for canceled {anarchy_action}")
+                await self.finish('canceled')
+                await anarchy_action.finish('canceled')
+            else:
+                await anarchy_action.set_state('run lost')
+
+    async def handle_pending(self, anarchy_subject, anarchy_action):
+        anarchy_action = await self.get_action()
+        if anarchy_action:
+            await anarchy_action.set_state('run pending')
+
+    async def handle_running(self, anarchy_subject, anarchy_action):
+        anarchy_action = await self.get_action()
+        if anarchy_action:
+            await anarchy_action.set_state('running')
+
+    async def handle_success(self, anarchy_subject, anarchy_action):
+        await anarchy_subject.set_run_status('successful')
+
+        if self.delete_subject_finalizers:
+            if not anarchy_subject.is_deleting:
+                await anarchy_subject.delete()
+            await anarchy_subject.remove_finalizers()
+            return
+
+        if anarchy_action:
+            anarchy_governor = self.get_governor()
+            action_config = anarchy_governor.get_action_config(anarchy_action.action)
+            if not action_config:
+                raise kopf.TemporaryError(
+                    f"{anarchy_action} action {anarchy_action.action} has no configuration in {anarchy_governor}"
+                )
+
+            if self.continue_action:
+                if anarchy_action.is_labeled_for_cancelation:
+                    logging.info(f"Ignoring continue action from {self} on canceled {anarchy_action}")
+                if anarchy_action.is_finished:
+                    logging.info(f"Ignoring continue action from {self} on finished {anarchy_action}")
+                else:
+                    await anarchy_action.reschedule(**self.continue_action)
+
+            elif self.finish_action:
+                await anarchy_action.finish(self.finish_action_state)
+
+            elif not AnarchyRun.have_unfinished_runs_for_action(anarchy_action):
+                if action_config.finish_on_successful_run:
+                    logging.info(f"Finishing {anarchy_action} on successful run of {self}")
+                    await anarchy_action.finish('successful')
+                elif not action_config.has_callback_handlers:
+                    logging.warning(f"Finishing {anarchy_action} as it has no further runs or callback handlers")
+                    await anarchy_action.finish('successful')
+
+        await anarchy_subject.remove_run_from_status(self)
+
+        if self.delete_subject and not anarchy_subject.is_deleting:
+            await anarchy_subject.delete()
+
+        if self.is_delete_handler:
+            if await anarchy_subject.check_complete_delete():
+                return
+
+    async def handle_resume(self, anarchy_subject, anarchy_action):
+        if self.is_finished:
+            if anarchy_subject.active_run_name == self.name:
+                logging.warning(f"{self} is successful but still listed as the active run in {anarchy_subject}")
+            elif anarchy_subject.has_run_in_status(self):
+                logging.warning(f"{self} is successful but still listed in {anarchy_subject}?")
+            await anarchy_subject.remove_run_from_status(self)
+        else:
+            if not anarchy_subject.has_run_in_status(self):
+                logging.warning(f"{self} is {self.runner_state} but was not listed in {anarchy_subject}")
+                await anarchy_subject.add_run_to_status(self)
+            if self.runner_state == 'queued' and self.name == anarchy_subject.active_run_name:
+                logging.warning(f"{self} is active run for {anarchy_subject} but was still marked as queued")
+                await self.set_to_pending()
+
+    async def manage(self, anarchy_subject, anarchy_action):
+        if self.is_finished:
+            return await self.manage_finished(anarchy_subject, anarchy_action)
+        else:
+            return await self.manage_active(anarchy_subject, anarchy_action)
+
+    async def manage_active(self, anarchy_subject, anarchy_action):
+        if self.is_pending_or_running:
+            # Anything pending or running is managed by the API component
+            pass
+        elif anarchy_action and anarchy_action.is_labeled_for_cancelation:
+            logging.info("Canceling {self} for canceled {anarchy_action}")
+            await self.finish('canceled')
+            await anarchy_action.finish('canceled')
+        elif anarchy_action and anarchy_action.is_finished:
+            logging.info("Canceling {self} for finished {anarchy_action}")
+            await self.finish('canceled')
+        elif self.is_labeled_for_cancelation:
+            await self.finish('canceled')
+        elif self.runner_state in ('failed', 'lost'):
+            seconds_to_retry = (
+                self.retry_after_datetime - datetime.now(timezone.utc)
+            ).total_seconds()
+            if seconds_to_retry < 0:
+                await self.retry()
+            elif seconds_to_retry < Anarchy.run_check_interval:
+                return seconds_to_retry
+        elif self.runner_state == 'queued':
+            await anarchy_subject.add_run_to_status(self)
+            if self.name == anarchy_subject.active_run_name:
+                logging.info(f"{self} transition to pending")
+                await self.set_to_pending()
+
+        return Anarchy.run_check_interval
+
+    async def manage_finished(self, anarchy_subject, anarchy_action):
+        if self.cleanup_after_datetime <= datetime.now(timezone.utc):
+            await self.delete()
+        return Anarchy.run_check_interval
+
+    async def retry(self):
+        logging.info(f"{self} retrying")
+        await self.set_to_pending()
+
+    async def set_to_pending(self):
+        await self.json_patch([{
+            "op": "add",
+            "path": f"/metadata/labels/{Anarchy.runner_label.replace('/', '~1')}",
+            "value": "pending",
+        }])

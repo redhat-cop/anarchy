@@ -32,7 +32,14 @@ def parse_time_interval(interval):
 class ActionModule(ActionBase):
     def run(self, tmp=None, task_vars=None, **_):
         result = super(ActionModule, self).run(tmp, task_vars)
-        anarchy_output_dir = task_vars['anarchy_output_dir']
+
+        anarchy_action_name = task_vars.get('anarchy_action_name')
+        if not anarchy_action_name:
+            return dict(
+                failed = True,
+                msg = 'Run not executing for an action!'
+            )
+
         module_args = self._task.args.copy()
         after = module_args.get('after', None)
         vars = module_args.get('vars', {})
@@ -52,13 +59,22 @@ class ActionModule(ActionBase):
 
         after_timestamp = (datetime.utcnow() + interval).strftime('%FT%TZ')
 
-        with open(os.path.join(anarchy_output_dir, 'continue.yaml'), 'w') as f:
-            yaml.safe_dump({
-                'after': after_timestamp,
-                'vars': vars,
-            }, f)
+        anarchy_output_dir = task_vars['anarchy_output_dir']
+        anarchy_result_path = os.path.join(anarchy_output_dir, 'anarchy-result.yaml')
 
-        return dict(
-            after = after_timestamp,
-            failed = False,
-        )
+        if os.path.exists(anarchy_result_path):
+            with open(anarchy_result_path) as f:
+                result_data = yaml.safe_load(f)
+        else:
+            result_data = {}
+
+        result_data['continueAction'] = {
+            "after": after_timestamp,
+            "vars": vars,
+        }
+
+        with open(os.path.join(anarchy_output_dir, 'anarchy-result.yaml'), 'w') as f:
+            yaml.safe_dump(result_data, f)
+
+        result['failed'] = False
+        return result

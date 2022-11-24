@@ -1,0 +1,156 @@
+---
+#
+# Test case:
+# - anarchy_subject_update with skip_update_processing
+#
+- name: Create AnarchyGovernor test-simple-10
+  kubernetes.core.k8s:
+    definition:
+      apiVersion: anarchy.gpte.redhat.com/v1
+      kind: AnarchyGovernor
+      metadata:
+        name: test-simple-10
+        namespace: "{{ anarchy_namespace }}"
+        labels:
+          anarchy.gpte.redhat.com/test: simple
+      spec:
+        actions:
+          test:
+            tasks:
+            - anarchy_subject_update:
+                skip_update_processing: true
+                spec:
+                  vars:
+                    foo: bar
+        subjectEventHandlers:
+          update:
+            tasks:
+            - debug:
+                msg: "In update handler"
+
+- name: Create AnarchySubject test-simple-10-a
+  kubernetes.core.k8s:
+    definition:
+      apiVersion: anarchy.gpte.redhat.com/v1
+      kind: AnarchySubject
+      metadata:
+        name: test-simple-10-a
+        namespace: "{{ anarchy_namespace }}"
+        labels:
+          anarchy.gpte.redhat.com/test: simple
+      spec:
+        governor: test-simple-10
+
+- name: Wait for test-simple-10-a initialization
+  kubernetes.core.k8s_info:
+    api_version: anarchy.gpte.redhat.com/v1
+    kind: AnarchySubject
+    name: test-simple-10-a
+    namespace: "{{ anarchy_namespace }}"
+  register: get_subject
+  failed_when: >-
+    get_subject.resources | default([]) | length != 1 or
+    get_subject.resources[0].status.pendingActions is not defined or
+    get_subject.resources[0].status.supportedActions != {"test": {}}
+  until: get_subject is successful
+  retries: 10
+  delay: 1
+
+- name: Create AnarchyAction to test test-simple-10-a-test
+  kubernetes.core.k8s:
+    definition:
+      apiVersion: anarchy.gpte.redhat.com/v1
+      kind: AnarchyAction
+      metadata:
+        name: test-simple-10-a-test
+        namespace: "{{ anarchy_namespace }}"
+      spec:
+        action: test
+        subjectRef:
+          name: test-simple-10-a
+
+- name: Wait for AnarchyAction for test test-simple-10-a-test to initialize
+  kubernetes.core.k8s_info:
+    api_version: anarchy.gpte.redhat.com/v1
+    kind: AnarchyAction
+    name: test-simple-10-a-test
+    namespace: "{{ anarchy_namespace }}"
+  register: get_action
+  failed_when: >-
+    get_action.resources | length != 1 or
+    get_action.resources[0].metadata.ownerReferences is undefined
+  until: get_action is successful
+  retries: 10
+  delay: 1
+
+- name: Verify AnarchyAction or test test-simple-10-a-test initialization
+  assert:
+    that:
+    - _action.metadata.labels['anarchy.gpte.redhat.com/action'] == 'test'
+    - _action.metadata.labels['anarchy.gpte.redhat.com/governor'] == 'test-simple-10'
+    - _action.metadata.labels['anarchy.gpte.redhat.com/subject'] == 'test-simple-10-a'
+    - _action.spec.governorRef.name == 'test-simple-10'
+    - _action.spec.governorRef.namespace == anarchy_namespace
+    - _action.spec.subjectRef.namespace == anarchy_namespace
+  vars:
+    _action: "{{ get_action.resources[0] }}"
+
+- name: Wait for AnarchyAction for test test-simple-10-a-test to succeed
+  kubernetes.core.k8s_info:
+    api_version: anarchy.gpte.redhat.com/v1
+    kind: AnarchyAction
+    name: test-simple-10-a-test
+    namespace: "{{ anarchy_namespace }}"
+  register: get_action
+  failed_when: >-
+    get_action.resources | length != 1 or
+    get_action.resources[0].status.state != 'successful'
+  until: get_action is successful
+  retries: 10
+  delay: 1
+
+- name: Verify that AnarchySubject was updated
+  kubernetes.core.k8s_info:
+    api_version: anarchy.gpte.redhat.com/v1
+    kind: AnarchySubject
+    name: test-simple-10-a
+    namespace: "{{ anarchy_namespace }}"
+  register: get_subject
+  failed_when: >-
+    get_subject.resources | length != 1 or
+    get_subject.resources[0].spec.vars.foo != 'bar'
+
+- name: Verify that no AnarchyRun for update was created
+  kubernetes.core.k8s_info:
+    api_version: anarchy.gpte.redhat.com/v1
+    kind: AnarchySubject
+    label_selectors:
+    - anarchy.gpte.redhat.com/event = update
+    - anarchy.gpte.redhat.com/governor = test-simple-10
+    - anarchy.gpte.redhat.com/subject = test-simple-10-a
+    namespace: "{{ anarchy_namespace }}"
+  register: get_run
+  failed_when: >-
+    get_run.resources | length != 0
+
+- name: Delete AnarchySubject test-simple-10-a
+  kubernetes.core.k8s:
+    api_version: anarchy.gpte.redhat.com/v1
+    kind: AnarchySubject
+    name: test-simple-10-a
+    namespace: "{{ anarchy_namespace }}"
+    state: absent
+
+- name: Wait for AnarchySubject for test-simple-10-a to complete deletion
+  kubernetes.core.k8s_info:
+    api_version: anarchy.gpte.redhat.com/v1
+    kind: AnarchySubject
+    name: test-simple-10-a
+    namespace: "{{ anarchy_namespace }}"
+  register: get_subject
+  failed_when: >-
+    get_subject.resources | default([]) | length != 0
+  until: get_subject is successful
+  retries: 10
+  delay: 1
+...

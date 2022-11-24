@@ -1,0 +1,77 @@
+---
+#
+# Test case:
+# - delete with remove finalizers
+#
+- name: Create AnarchyGovernor test-simple-09
+  kubernetes.core.k8s:
+    definition:
+      apiVersion: anarchy.gpte.redhat.com/v1
+      kind: AnarchyGovernor
+      metadata:
+        name: test-simple-09
+        namespace: "{{ anarchy_namespace }}"
+        labels:
+          anarchy.gpte.redhat.com/test: simple
+      spec:
+        subjectEventHandlers:
+          delete:
+            tasks:
+            - fail:
+          update:
+            tasks:
+            - when: delete_now | default(false) | bool
+              anarchy_subject_delete:
+                remove_finalizers: true
+
+- name: Create AnarchySubject test-simple-09-a
+  kubernetes.core.k8s:
+    definition:
+      apiVersion: anarchy.gpte.redhat.com/v1
+      kind: AnarchySubject
+      metadata:
+        name: test-simple-09-a
+        namespace: "{{ anarchy_namespace }}"
+        labels:
+          anarchy.gpte.redhat.com/test: simple
+      spec:
+        governor: test-simple-09
+
+- name: Wait for test-simple-09-a initialization
+  kubernetes.core.k8s_info:
+    api_version: anarchy.gpte.redhat.com/v1
+    kind: AnarchySubject
+    name: test-simple-09-a
+    namespace: "{{ anarchy_namespace }}"
+  register: get_subject
+  failed_when: >-
+    get_subject.resources | default([]) | length != 1 or
+    get_subject.resources[0].status.pendingActions is not defined
+  until: get_subject is successful
+  retries: 10
+  delay: 1
+
+- name: Update AnarchySubject test-simple-09-a to trigger delete
+  kubernetes.core.k8s:
+    api_version: anarchy.gpte.redhat.com/v1
+    kind: AnarchySubject
+    name: test-simple-09-a
+    namespace: "{{ anarchy_namespace }}"
+    definition:
+      spec:
+        vars:
+          delete_now: true
+
+- name: Wait for AnarchySubject for test-simple-09-a to complete deletion
+  kubernetes.core.k8s_info:
+    api_version: anarchy.gpte.redhat.com/v1
+    kind: AnarchySubject
+    name: test-simple-09-a
+    namespace: "{{ anarchy_namespace }}"
+  register: get_subject
+  failed_when: >-
+    get_subject.resources | default([]) | length != 0
+  until: get_subject is successful
+  retries: 15
+  delay: 1
+...

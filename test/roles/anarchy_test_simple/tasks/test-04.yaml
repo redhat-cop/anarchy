@@ -1,0 +1,98 @@
+---
+#
+# Test use case:
+# - subject event handler for create
+# - delete with action created by subject event handler
+#
+- name: Create AnarchyGovernor test-simple-04
+  kubernetes.core.k8s:
+    definition:
+      apiVersion: anarchy.gpte.redhat.com/v1
+      kind: AnarchyGovernor
+      metadata:
+        name: test-simple-04
+        namespace: "{{ anarchy_namespace }}"
+        labels:
+          anarchy.gpte.redhat.com/test: simple
+      spec:
+        actions:
+          delete:
+            tasks:
+            - debug:
+                msg: "Goodbye, World!"
+        subjectEventHandlers:
+          create:
+            tasks:
+            - debug:
+                msg: "Hello, World!"
+          delete:
+            tasks:
+            - anarchy_schedule_action:
+                action: delete
+
+- name: Create AnarchySubject test-simple-04-a
+  kubernetes.core.k8s:
+    definition:
+      apiVersion: anarchy.gpte.redhat.com/v1
+      kind: AnarchySubject
+      metadata:
+        name: test-simple-04-a
+        namespace: "{{ anarchy_namespace }}"
+        labels:
+          anarchy.gpte.redhat.com/test: simple
+      spec:
+        governor: test-simple-04
+
+- name: Wait for AnarchyRun for create of AnarchySubject test-simple-04-a successful
+  kubernetes.core.k8s_info:
+    api_version: anarchy.gpte.redhat.com/v1
+    kind: AnarchyRun
+    label_selectors:
+    - anarchy.gpte.redhat.com/event = create
+    - anarchy.gpte.redhat.com/subject = test-simple-04-a
+    - anarchy.gpte.redhat.com/runner = successful
+    namespace: "{{ anarchy_namespace }}"
+  register: get_run
+  failed_when: >-
+    get_run.resources | default([]) | length != 1
+  until: get_run is successful
+  retries: 10
+  delay: 1
+
+- name: Delete AnarchySubject test-simple-04-a
+  kubernetes.core.k8s:
+    api_version: anarchy.gpte.redhat.com/v1
+    kind: AnarchySubject
+    name: test-simple-04-a
+    namespace: "{{ anarchy_namespace }}"
+    state: absent
+
+- name: Wait for AnarchyAction for delete of test-simple-04-a
+  kubernetes.core.k8s_info:
+    api_version: anarchy.gpte.redhat.com/v1
+    kind: AnarchyAction
+    label_selectors:
+    - anarchy.gpte.redhat.com/action = delete
+    - anarchy.gpte.redhat.com/governor = test-simple-04
+    - anarchy.gpte.redhat.com/subject = test-simple-04-a
+    namespace: "{{ anarchy_namespace }}"
+  register: get_action
+  failed_when: >-
+    get_action.resources | default([]) | length != 1
+  until: get_action is successful
+  retries: 10
+  delay: 1
+
+- name: Wait for delete of test-simple-04-a to complete
+  kubernetes.core.k8s_info:
+    api_version: anarchy.gpte.redhat.com/v1
+    kind: AnarchyAction
+    name: test-simple-04-a
+    namespace: "{{ anarchy_namespace }}"
+  register: get_subject
+  failed_when: >-
+    get_subject.resources | default([]) | length != 0
+  until: get_subject is successful
+  retries: 10
+  delay: 1
+...

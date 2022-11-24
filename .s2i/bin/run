@@ -1,20 +1,27 @@
 #!/bin/sh
 
-if [ "${ANARCHY_COMPONENT}" == 'runner' ]
+
+if [ "${ANARCHY_COMPONENT}" == 'api' ]
 then
-  export HOME=/opt/app-root/anarchy-runner
-  export ANSIBLE_CONFIG=$HOME/ansible-runner/ansible.cfg
-  export KUBECONFIG=$HOME/kubeconfig
-  export LD_PRELOAD=libnss_wrapper.so
-  export NSS_WRAPPER_PASSWD=$HOME/passwd
-  export NSS_WRAPPER_GROUP=$HOME/group
-  export OPERATOR_NAMESPACE="$(cat /run/secrets/kubernetes.io/serviceaccount/namespace)"
-
-  cp /etc/passwd $NSS_WRAPPER_PASSWD
-  cp /etc/group $NSS_WRAPPER_GROUP
-  echo ansible:x:$(id -u):$(id -g):ansible:$HOME:/bin/bash >> $NSS_WRAPPER_PASSWD
-
-  exec /opt/app-root/bin/python3 $HOME/anarchy-runner.py
+    export HOME=/opt/app-root/api
+    cd $HOME
+    exec uvicorn app:app --host 0.0.0.0 --port 5000 --lifespan on --log-level info --log-config logconfig.yaml
+elif [ "${ANARCHY_COMPONENT}" == 'runner' ]
+then
+    export HOME=/opt/app-root/anarchy-runner
+    cd $HOME
+    export ANSIBLE_CONFIG=$HOME/ansible-runner/ansible.cfg
+    export KUBECONFIG=$HOME/kubeconfig
+    exec /opt/app-root/bin/python3 $HOME/main.py
+elif [ "true" == "${ANARCHY_RUNNING_ALL_IN_ONE}" ]
+then
+    if [ -z "${RUNNER_TOKEN}" ]
+    then
+        export RUNNER_TOKEN="$(openssl rand -base64 15)"
+    fi
+    ANARCHY_COMPONENT=api $0 &
+    ANARCHY_COMPONENT=runner ANARCHY_URL=http://$HOSTNAME:5000 RUNNER_NAME=default $0 &
+    exec /usr/libexec/s2i/run
 else
-  exec /usr/libexec/s2i/run
+    exec /usr/libexec/s2i/run
 fi

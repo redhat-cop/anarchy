@@ -1,0 +1,191 @@
+---
+#
+# Test use case:
+# - subject event handler for create
+# - action with continuation
+# - no subject event handler for delete
+#
+- name: Create AnarchyGovernor test-simple-03
+  kubernetes.core.k8s:
+    definition:
+      apiVersion: anarchy.gpte.redhat.com/v1
+      kind: AnarchyGovernor
+      metadata:
+        name: test-simple-03
+        namespace: "{{ anarchy_namespace }}"
+        labels:
+          anarchy.gpte.redhat.com/test: simple
+      spec:
+        actions:
+          test:
+            tasks:
+            - when: not was_continued | default(false) | bool
+              anarchy_continue_action:
+                after: 5s
+                vars:
+                  was_continued: true
+        subjectEventHandlers:
+          create:
+            tasks:
+            - anarchy_schedule_action:
+                action: test
+
+- name: Create AnarchySubject test-simple-03-a
+  kubernetes.core.k8s:
+    definition:
+      apiVersion: anarchy.gpte.redhat.com/v1
+      kind: AnarchySubject
+      metadata:
+        name: test-simple-03-a
+        namespace: "{{ anarchy_namespace }}"
+        labels:
+          anarchy.gpte.redhat.com/test: simple
+      spec:
+        governor: test-simple-03
+
+- name: Wait for AnarchyAction for test action for test-simple-03-a
+  kubernetes.core.k8s_info:
+    api_version: anarchy.gpte.redhat.com/v1
+    kind: AnarchyAction
+    label_selectors:
+    - anarchy.gpte.redhat.com/action = test
+    - anarchy.gpte.redhat.com/governor = test-simple-03
+    - anarchy.gpte.redhat.com/subject = test-simple-03-a
+    namespace: "{{ anarchy_namespace }}"
+  register: get_action
+  failed_when: >-
+    get_action.resources | default([]) | length != 1
+  until: get_action is successful
+  retries: 10
+  delay: 1
+
+- name: Verify AnarchyAction for test action for test-simple-03-a
+  vars:
+    _action: "{{ get_action.resources[0] }}"
+  assert:
+    that:
+    - _action.spec.action == "test"
+    - _action.spec.governorRef.name == "test-simple-03"
+    - _action.spec.subjectRef.name == "test-simple-03-a"
+    - _action.spec.vars | default({}) == {}
+
+- name: Wait for AnarchyRun for AnarchyAction for test-simple-03-a
+  kubernetes.core.k8s_info:
+    api_version: anarchy.gpte.redhat.com/v1
+    kind: AnarchyRun
+    label_selectors:
+    - anarchy.gpte.redhat.com/action = {{ get_action.resources[0].metadata.name }}
+    - anarchy.gpte.redhat.com/governor = test-simple-03
+    - anarchy.gpte.redhat.com/subject = test-simple-03-a
+    namespace: "{{ anarchy_namespace }}"
+  register: get_run
+  failed_when: >-
+    get_run.resources | default([]) | length != 1
+  until: get_run is successful
+  retries: 5
+  delay: 1
+
+- name: Wait for AnarchyRun for AnarchyAction for test-simple-03-a to be successful
+  kubernetes.core.k8s_info:
+    api_version: anarchy.gpte.redhat.com/v1
+    kind: AnarchyRun
+    name: "{{ get_run.resources[0].metadata.name }}"
+    namespace: "{{ anarchy_namespace }}"
+  register: get_run_successful
+  failed_when: >-
+    get_run_successful.resources | default([]) | length != 1 or
+    get_run_successful.resources[0].metadata.labels['anarchy.gpte.redhat.com/runner'] != 'successful'
+  until: get_run_successful is successful
+  retries: 5
+  delay: 1
+
+- name: Verify successful AnarchyRun for AnarchyAction for test-simple-03-a
+  vars:
+    _run: "{{ get_run_successful.resources[0] }}"
+  assert:
+    that:
+    - _run.status.result.continueAction.after is defined
+    - _run.status.result.continueAction.vars.was_continued is defined
+
+- name: Wait for continuation of AnarchyAction for test action for test-simple-03-a
+  kubernetes.core.k8s_info:
+    api_version: anarchy.gpte.redhat.com/v1
+    kind: AnarchyAction
+    name: "{{ get_action.resources[0].metadata.name }}"
+    namespace: "{{ anarchy_namespace }}"
+  register: get_continued_action
+  failed_when: >-
+    get_continued_action.resources | default([]) | length != 1 or
+    get_continued_action.resources[0].spec.after == get_action.resources[0].spec.after
+  until: get_continued_action is successful
+  retries: 5
+  delay: 1
+
+- name: Verify continuation of AnarchyAction for test action for test-simple-03-a
+  vars:
+    _action: "{{ get_continued_action.resources[0] }}"
+  assert:
+    that:
+    - _action.spec.vars.was_continued == true
+
+- name: Wait for second AnarchyRun for AnarchyAction for test-simple-03-a successful
+  kubernetes.core.k8s_info:
+    api_version: anarchy.gpte.redhat.com/v1
+    kind: AnarchyRun
+    label_selectors:
+    - anarchy.gpte.redhat.com/action = {{ get_action.resources[0].metadata.name }}
+    - anarchy.gpte.redhat.com/governor = test-simple-03
+    - anarchy.gpte.redhat.com/subject = test-simple-03-a
+    - anarchy.gpte.redhat.com/runner = successful
+    namespace: "{{ anarchy_namespace }}"
+  register: get_second_run
+  failed_when: >-
+    get_second_run.resources | default([]) | length != 2
+  until: get_second_run is successful
+  retries: 5
+  delay: 1
+
+- name: Verify successful second AnarchyRun for AnarchyAction for test-simple-03-a
+  vars:
+    _first_run: "{{ get_run.resources[0] }}"
+    _second_run: "{{ get_second_run.resources | json_query(_second_run_query) }}"
+    _second_run_query: >-
+      [?metadata.name != `{{ _first_run.metadata.name | to_json }}`]|[0]
+  assert:
+    that:
+    - _second_run.status.result.continueAction is undefined
+
+- name: Wait for AnarchySubject test-simple-03-a empty run list in status
+  kubernetes.core.k8s_info:
+    api_version: anarchy.gpte.redhat.com/v1
+    kind: AnarchySubject
+    name: test-simple-03-a
+    namespace: "{{ anarchy_namespace }}"
+  register: get_subject
+  failed_when: >-
+    get_subject.resources[0].status.runs.active | length != 0
+  until: get_subject is successful
+  retries: 5
+  delay: 1
+
+- name: Delete AnarchySubject test-simple-03-a
+  kubernetes.core.k8s:
+    api_version: anarchy.gpte.redhat.com/v1
+    kind: AnarchySubject
+    name: test-simple-03-a
+    namespace: "{{ anarchy_namespace }}"
+    state: absent
+
+- name: Wait for AnarchySubject test-simple-03-a deletion
+  kubernetes.core.k8s_info:
+    api_version: anarchy.gpte.redhat.com/v1
+    kind: AnarchySubject
+    name: test-simple-03-a
+    namespace: "{{ anarchy_namespace }}"
+  register: get_subject
+  failed_when: >-
+    get_subject.resources | length != 0
+  until: get_subject is successful
+  retries: 5
+  delay: 1
+...

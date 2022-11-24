@@ -1,4 +1,17 @@
 ---
+- include_tasks: test-00.yaml
+- include_tasks: test-01.yaml
+- include_tasks: test-02.yaml
+- include_tasks: test-03.yaml
+- include_tasks: test-04.yaml
+- include_tasks: test-05.yaml
+- include_tasks: test-06.yaml
+- include_tasks: test-07.yaml
+- include_tasks: test-08.yaml
+- include_tasks: test-09.yaml
+- include_tasks: test-10.yaml
+
+## OLD TESTS FOLLOW
 - name: Create AnarchySubject test-simple-1
   kubernetes.core.k8s:
     apply: true
@@ -36,7 +49,7 @@
   assert:
     that:
     - _run.metadata.ownerReferences == _expected_owner_references
-    - _run.spec.vars == _expected_vars
+    - _run.spec.subject.vars == _expected_vars
   vars:
     _run: "{{ r_get_test_simple_1_create_run.resources[0] }}"
     _subject: "{{ r_get_test_simple_1.resources[0] }}"
@@ -47,10 +60,8 @@
       name: test-simple-1
       uid: "{{ _subject.metadata.uid }}"
     _expected_vars:
-      a_var_from_governor: foo
       a_var_from_subject: 23
       a_var_subject_should_override: true
-      anarchy_event_name: create
 
 - name: Get AnarchyAction scheduled by AnarchyRun for create of test-simple-1
   kubernetes.core.k8s_info:
@@ -92,7 +103,6 @@
   assert:
     that:
     - _run.metadata.ownerReferences == _expected_owner_references
-    - _run.spec.vars == _expected_vars
     fail_msg: |
       AnarchyRun {{ _run.metadata.name }} not defined as expected:
 
@@ -101,10 +111,6 @@
       Expected metadata.ownerReferences:
 
       {{ _expected_owner_references | to_nice_yaml }}
-
-      Expected spec.vars:
-
-      {{ _expected_vars | to_nice_yaml }}
   vars:
     _action: "{{ r_get_test_simple_1_configure_action.resources[0] }}"
     _run: "{{ r_get_test_simple_1_configure_run.resources[0] }}"
@@ -114,15 +120,6 @@
       kind: AnarchyAction
       name: "{{ _action.metadata.name }}"
       uid: "{{ _action.metadata.uid }}"
-    _expected_vars:
-      a_var_from_action: create
-      a_var_from_governor: foo
-      a_var_from_subject: 23
-      a_var_subject_should_override: true
-      anarchy_action_callback_name_parameter: event
-      anarchy_action_callback_token: "{{ _action.spec.callbackToken }}"
-      anarchy_action_callback_url: "{{ anarchy_callback_base_url }}/action/{{ _action.metadata.name }}"
-      anarchy_action_name: "{{ _action.metadata.name }}"
 
 - name: Update AnarchySubject test-simple-1
   kubernetes.core.k8s:
@@ -152,7 +149,6 @@
   assert:
     that:
     - _run.metadata.ownerReferences == _expected_owner_references
-    - _run.spec.vars == _expected_vars
   vars:
     _run: "{{ r_get_test_simple_1_update_run.resources[0] }}"
     _subject: "{{ r_get_test_simple_1.resources[0] }}"
@@ -162,21 +158,6 @@
       kind: AnarchySubject
       name: test-simple-1
       uid: "{{ _subject.metadata.uid }}"
-    _expected_vars:
-      a_var_from_governor: foo
-      a_var_from_subject: 42
-      a_var_subject_should_override: true
-      anarchy_event_name: update
-      anarchy_subject_previous_state:
-        metadata:
-          labels:
-            anarchy.gpte.redhat.com/governor: test-simple
-            anarchy.gpte.redhat.com/test: simple
-        spec:
-          governor: test-simple
-          vars:
-            a_var_from_subject: 23
-            a_var_subject_should_override: true
 
 - name: Get AnarchyAction scheduled by AnarchyRun for update of test-simple-1
   kubernetes.core.k8s_info:
@@ -218,7 +199,6 @@
   assert:
     that:
     - _run.metadata.ownerReferences == _expected_owner_references
-    - _run.spec.vars == _expected_vars
   vars:
     _action: "{{ r_get_test_simple_1_configure_action.resources[0] }}"
     _run: "{{ r_get_test_simple_1_configure_run.resources[0] }}"
@@ -228,14 +208,6 @@
       kind: AnarchyAction
       name: "{{ _action.metadata.name }}"
       uid: "{{ _action.metadata.uid }}"
-    _expected_vars:
-      a_var_from_governor: foo
-      a_var_from_subject: 42
-      a_var_subject_should_override: true
-      anarchy_action_callback_name_parameter: event
-      anarchy_action_callback_token: "{{ _action.spec.callbackToken }}"
-      anarchy_action_callback_url: "{{ anarchy_callback_base_url }}/action/{{ _action.metadata.name }}"
-      anarchy_action_name: "{{ _action.metadata.name }}"
 
 - name: Create AnarchyAction without ownerReferences
   kubernetes.core.k8s:
@@ -489,7 +461,7 @@
 - name: Execute callback for test-simple-1-callback-test
   when: anarchy_odo_pod is not defined
   uri:
-    url: "{{ anarchy_callback_base_url }}/action/test-simple-1-callback-test"
+    url: "{{ anarchy_simulated_callback_base_url }}/action/test-simple-1-callback-test"
     validate_certs: false
     method: POST
     headers:
@@ -509,7 +481,7 @@
     - anarchy.gpte.redhat.com/event=done
   register: r_get_run
   vars:
-    _run: "{{ r_get_run.resources[0] }}"
+    _run: "{{ r_get_run.resources[0] | default({}) }}"
   failed_when: >-
     _run.status.result.status | default('') != 'successful'
   until: r_get_run is success
@@ -524,7 +496,7 @@
     name: test-simple-1-callback-test
   register: r_get_action
   vars:
-    _action: "{{ r_get_action.resources[0] }}"
+    _action: "{{ r_get_action.resources[0] | default({}) }}"
   failed_when: >-
     '' == _action.status.finishedTimestamp | default('') or
     'successful' != _action.status.state | default('')
@@ -764,3 +736,4 @@
     until: r_get_test_simple_1_subject is success
     retries: 10
     delay: 5
+...

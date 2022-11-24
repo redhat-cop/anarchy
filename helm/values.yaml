@@ -39,7 +39,6 @@ service:
   type: ClusterIP
   port:
     api: 5000
-    metrics: 8000
 
 ingress:
   enabled: false

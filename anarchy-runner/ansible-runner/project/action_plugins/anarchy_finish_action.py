@@ -4,39 +4,38 @@
 # GNU General Public License v3.0+ (see COPYING or https://www.gnu.org/licenses/gpl-3.0.txt)
 
 import os
-import re
-import requests
+import yaml
 
 from ansible.plugins.action import ActionBase
-from ansible.module_utils.parsing.convert_bool import boolean
 
 class ActionModule(ActionBase):
     def run(self, tmp=None, task_vars=None, **_):
         result = super(ActionModule, self).run(tmp, task_vars)
-        module_args = self._task.args.copy()
+
         anarchy_action_name = task_vars.get('anarchy_action_name')
-        anarchy_subject_name = task_vars['anarchy_subject_name']
-        anarchy_url = task_vars['anarchy_url']
-        anarchy_run_pod_name = task_vars['anarchy_run_pod_name']
-        anarchy_runner_name = task_vars['anarchy_runner_name']
-        anarchy_runner_token = task_vars['anarchy_runner_token']
-
-        finished_state = module_args.get('state', 'successful')
-
         if not anarchy_action_name:
             return dict(
                 failed = True,
                 msg = 'Run not executing for an action!'
             )
 
-        response = requests.patch(
-            anarchy_url + '/run/subject/' + anarchy_subject_name + '/actions/' + anarchy_action_name,
-            headers={'Authorization': 'Bearer {}:{}:{}'.format(
-                anarchy_runner_name, anarchy_run_pod_name, anarchy_runner_token
-            )},
-            json={finished_state: True}
-        )
-        result['action'] = response.json()['result']
-        result['failed'] = not response.json()['success']
+        module_args = self._task.args.copy()
+        finished_state = module_args.get('state', 'successful')
 
+        anarchy_output_dir = task_vars['anarchy_output_dir']
+        anarchy_result_path = os.path.join(anarchy_output_dir, 'anarchy-result.yaml')
+        if os.path.exists(anarchy_result_path):
+            with open(anarchy_result_path) as f:
+                result_data = yaml.safe_load(f)
+        else:
+            result_data = {}
+
+        result_data['finishAction'] = {
+            "state": str(finished_state),
+        }
+
+        with open(os.path.join(anarchy_output_dir, 'anarchy-result.yaml'), 'w') as f:
+            yaml.safe_dump(result_data, f)
+
+        result['failed'] = False
         return result

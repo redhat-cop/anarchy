@@ -30,9 +30,6 @@
   - r_action.resources | default([]) | length == 1
   - r_action.resources[0].spec.action == 'provision'
   - r_action.resources[0].status is defined
-  - r_action.resources[0].status.callbackEvents is defined
-  - r_action.resources[0].status.callbackEvents | length == 1
-  - r_action.resources[0].status.callbackEvents[0].name == 'complete'
   retries: 40
   delay: 5
 

@@ -29,9 +29,6 @@ spec:
         resources:
           {{- toYaml $runner.resources | nindent 10 }}
       serviceAccountName: {{ $serviceAccountName }}
-{{- if $runner.token }}
-      token: {{ $runner.token }}
-{{- end }}
 {{- with $runner.clusterRoleRules }}
 ---
 apiVersion: rbac.authorization.k8s.io/v1
