@@ -323,17 +323,6 @@ if not Anarchy.running_all_in_one:
         async with anarchy_runner.lock:
             await anarchy_runner.handle_update()
 
-    @kopf.daemon(Anarchy.domain, Anarchy.version, 'anarchyrunners', cancellation_timeout=1)
-    async def runner_daemon(stopped, **kwargs):
-        anarchy_runner = AnarchyRunner.load(**kwargs)
-        try:
-            while not stopped:
-                async with anarchy_runner.lock:
-                    await anarchy_runner.manage()
-                await asyncio.sleep(Anarchy.cleanup_interval)
-        except asyncio.CancelledError:
-            pass
-
     @kopf.on.event('pods', labels={Anarchy.runner_label: kopf.PRESENT})
     async def runner_pod_event(event, logger, **kwargs):
         obj = event.get('object')

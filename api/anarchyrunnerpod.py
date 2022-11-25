@@ -98,7 +98,7 @@ class AnarchyRunnerPod(AnarchyWatchObject):
         logging.info(f"Cache preloaded {all_in_one}")
 
     def __str__(self):
-        return f"AnarchyRunner pod {self.name} [{self.pod_ip}]"
+        return f"AnarchyRunnerPod {self.name} [{self.pod_ip}]"
 
     @property
     def is_deleting(self):

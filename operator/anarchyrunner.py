@@ -106,25 +106,31 @@ class AnarchyRunner(AnarchyCachedKopfObject):
     async def create_runner_pod(self):
         pod_template = self.make_pod_template()
         pod = await Anarchy.core_v1_api.create_namespaced_pod(Anarchy.namespace, pod_template)
+        logging.info("Created pod {pod.metadata.name} for {self}")
         self.pods[pod.metadata.name] = pod
 
     async def handle_create(self):
         await self.manage_service_account()
+        await self.manage_pods()
 
     async def handle_delete(self):
         pass
 
     async def handle_resume(self):
         await self.manage_service_account()
+        await self.manage_pods()
 
     async def handle_runner_pod_deleted(self, pod):
         self.pods.pop(pod.metadata.name, None)
+        await self.manage_pods()
 
     async def handle_runner_pod_deleting(self, pod):
         self.pods.pop(pod.metadata.name, None)
+        await self.manage_pods()
 
     async def handle_runner_pod_labeled_for_temination(self, pod):
         self.pods.pop(pod.metadata.name, None)
+        await self.manage_pods()
 
     async def handle_runner_pod_event(self, pod):
         if pod.metadata.deletion_timestamp:
@@ -142,9 +148,6 @@ class AnarchyRunner(AnarchyCachedKopfObject):
 
     async def handle_update(self):
         await self.manage_service_account()
-        await self.manage()
-
-    async def manage(self):
         await self.manage_pods()
 
     async def manage_pods(self):
