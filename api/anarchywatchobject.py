@@ -16,7 +16,10 @@ class AnarchyWatchObject(AnarchyObject):
 
     @classmethod
     def handle_watch_deleted(cls, event_object):
-        name = event_object['metadata']['name']
+        if isinstance(event_object, dict):
+            name = event_object['metadata']['name']
+        else:
+            name = event_object.metadata.name
         if cls.cache_remove(name):
             logging.info(f"Watch cache removed {cls.__name__} {name}")
 
@@ -123,7 +126,9 @@ class AnarchyWatchObject(AnarchyObject):
                 logging.info(f"Watch {cls.__name__} exiting")
                 return
             except Exception as e:
-                if not isinstance(e, kubernetes_asyncio.client.exceptions.ApiException) and e.status == 410:
+                if isinstance(e, kubernetes_asyncio.client.exceptions.ApiException) and e.status == 410:
+                    logging.debug(f"Watch {cls.__name__} received 410 GONE")
+                else:
                     logging.exception(f"Watch {cls.__name__} Exception")
 
                 # If watch is repeatedly crashing then backoff retry
