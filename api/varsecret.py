@@ -18,7 +18,7 @@ class VarSecret:
 
     async def get_data(self):
         secret, secret_fetch_datetime = self.cache.get((self.name, self.namespace), (None, None))
-        if not secret or datetime.now(timezone.utc) - self.secret_fetch_datetime > timedelta(minutes=1):
+        if not secret or datetime.now(timezone.utc) - secret_fetch_datetime > timedelta(minutes=1):
             secret = await Anarchy.core_v1_api.read_namespaced_secret(name=self.name, namespace=self.namespace)
             self.cache[(self.namespace, self.name)] = (secret, datetime.now(timezone.utc))
 
