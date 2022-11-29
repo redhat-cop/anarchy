@@ -1,4 +1,5 @@
 import json
+import kopf
 import kubernetes_asyncio
 
 from base64 import b64decode
