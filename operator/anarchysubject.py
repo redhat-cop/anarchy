@@ -62,10 +62,6 @@ class AnarchySubject(AnarchyCachedKopfObject):
         return True if self.status.get('activeAction') else False
 
     @property
-    def has_active_action(self):
-        return 'activeAction' in self.status
-
-    @property
     def has_active_runs(self):
         return len(self.active_runs) > 0
 
@@ -476,7 +472,7 @@ class AnarchySubject(AnarchyCachedKopfObject):
             except kubernetes_asyncio.client.rest.ApiException as e:
                 if e.status == 404:
                     logging.warning(f"Removing missing active AnarchyAction {self.active_action_name} from {self}")
-                    patch.apppend({
+                    patch.append({
                         "op": "remove",
                         "path": f"/status/activeAction",
                     })
@@ -521,7 +517,7 @@ class AnarchySubject(AnarchyCachedKopfObject):
                         remove_run = True
                 except kubernetes_asyncio.client.rest.ApiException as e:
                     if e.status == 404:
-                        removeRun = True
+                        remove_run = True
                         logging.warning(f"Removing missing AnarchyRun {run_name} from {self}")
                     else:
                         raise
@@ -632,8 +628,7 @@ class AnarchySubject(AnarchyCachedKopfObject):
         except kubernetes_asyncio.client.rest.ApiException as e:
             if e.status == 404:
                 return
-            else:
-                raise
+            raise
 
     async def remove_finalizers(self):
         await self.merge_patch({

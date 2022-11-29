@@ -1,5 +1,6 @@
 import json
 import kubernetes_asyncio
+import logging
 
 from base64 import b64decode
 from copy import deepcopy
@@ -68,9 +69,8 @@ class VarSecretMixin:
                     deep_merge(ret, secret_data)
             except kubernetes_asyncio.client.rest.ApiException as e:
                 if e.status == 404:
-                    raise kopf.TemporaryError(
-                        f"{self} missing var sercret {var_secret.name} in namespace {var_secret.namespace}",
-                        delay = 60,
+                    logging.warning(
+                        f"{self} missing var sercret {var_secret.name} in namespace {var_secret.namespace}"
                     )
                 else:
                     raise
