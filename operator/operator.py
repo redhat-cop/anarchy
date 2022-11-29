@@ -5,8 +5,6 @@ import kopf
 import kubernetes_asyncio
 import logging
 
-from datetime import datetime, timezone
-
 from anarchy import Anarchy
 from anarchygovernor import AnarchyGovernor
 from anarchysubject import AnarchySubject
@@ -43,7 +41,7 @@ async def on_startup(settings: kopf.OperatorSettings, logger, **_):
 
 @kopf.on.cleanup()
 async def on_cleanup():
-    await AnarchyRuntime.on_cleanup()
+    await Anarchy.on_cleanup()
 
 @kopf.on.event(Anarchy.domain, Anarchy.version, 'anarchygovernors')
 async def governor_event(event, logger, **_):
@@ -66,7 +64,7 @@ async def subject_delete(**kwargs):
 async def subject_resume(meta, name, **kwargs):
     if 'deletionTimestamp' in meta \
     and Anarchy.domain not in meta['finalizers'] \
-    and Anarchy.deleting_label not in meta['finalizers']:
+    and Anarchy.subject_label not in meta['finalizers']:
         logging.info(f"Ignoring functionally deleted AnarchySubject {name} on resume")
         return
 
@@ -106,7 +104,7 @@ async def subject_event(event, **_):
                 await anarchy_subject.handle_post_delete_event()
         else:
             logging.error(
-                f"AnarchySubject {name} does not have {anarchy.domain} label "
+                f"AnarchySubject {name} does not have {Anarchy.domain} label "
                 f"but does have {Anarchy.subject_label} but is not deleting?"
             )
     else:
@@ -324,7 +322,7 @@ if not Anarchy.running_all_in_one:
             await anarchy_runner.handle_update()
 
     @kopf.on.event('pods', labels={Anarchy.runner_label: kopf.PRESENT})
-    async def runner_pod_event(event, logger, **kwargs):
+    async def runner_pod_event(event, logger, **_):
         obj = event.get('object')
         if not obj or obj.get('kind') != 'Pod':
             logging.warning(f"Weird event {event}")

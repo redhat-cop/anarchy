@@ -14,8 +14,7 @@ class AnarchyCachedKopfObject(AnarchyKopfObject):
     def load(cls, definition=None, **kwargs):
         if definition:
             return cls.load_definition(definition)
-        else:
-            return cls.load_kopf_object(**kwargs)
+        return cls.load_kopf_object(**kwargs)
 
     @classmethod
     def load_definition(cls, definition):

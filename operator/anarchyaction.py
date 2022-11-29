@@ -276,8 +276,7 @@ class AnarchyAction(AnarchyCachedKopfObject):
         """
         if self.is_finished:
             return await self.manage_finished(anarchy_subject)
-        else:
-            return await self.manage_active(anarchy_subject)
+        return await self.manage_active(anarchy_subject)
 
     async def manage_active(self, anarchy_subject):
         await anarchy_subject.add_action_to_status(self)
@@ -295,7 +294,7 @@ class AnarchyAction(AnarchyCachedKopfObject):
             if seconds_to_start <= 0:
                 await self.check_start()
                 return 1
-            elif seconds_to_start < Anarchy.action_check_interval:
+            if seconds_to_start < Anarchy.action_check_interval:
                 return seconds_to_start
 
         return Anarchy.action_check_interval

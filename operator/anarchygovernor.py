@@ -84,8 +84,8 @@ class AnarchyGovernor:
         return self.spec.get('ansibleGalaxyRequirements', [])
 
     @property
-    def apiVersion(self):
-        return self.definition['apiVersion']
+    def api_version(self):
+        return self.definition['api_version']
 
     @property
     def has_create_handler(self):
