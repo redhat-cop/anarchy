@@ -131,6 +131,15 @@ class AnarchyRunner:
                 result['ansibleRun'] = e.ansible_run
             self.post_result(anarchy_run, result)
             return
+        except Exception as e:
+            logging.exception("Unhandled exception when running ansible")
+            result = dict(
+                 rc = 1,
+                 status = 'failed',
+                 statusMessage = f"Unhandled exception: {e}",
+            )
+            self.post_result(anarchy_run, result)
+            return
 
         self.post_result(anarchy_run, result)
 
@@ -162,8 +171,8 @@ class AnarchyRunner:
             # Get 'msg' from last task of last play on localhost for failure message
             try:
                 status_message = run_data['plays'][-1]['tasks'][-1]['hosts']['localhost'].get('result', {}).get('msg', '')
-            except (KeyError, IndexError):
-                status_message = "Unable to determine failure from run data!"
+            except Exception as e:
+                status_message = "Unable to determine failure from run data: {e}"
             raise AnarchyRunException(
                 ansible_run = run_data,
                 rc = ansible_run.rc,
