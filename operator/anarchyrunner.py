@@ -106,7 +106,7 @@ class AnarchyRunner(AnarchyCachedKopfObject):
     async def create_runner_pod(self):
         pod_template = self.make_pod_template()
         pod = await Anarchy.core_v1_api.create_namespaced_pod(Anarchy.namespace, pod_template)
-        logging.info("Created pod {pod.metadata.name} for {self}")
+        logging.info(f"Created pod {pod.metadata.name} for {self}")
         self.pods[pod.metadata.name] = pod
 
     async def handle_create(self):
