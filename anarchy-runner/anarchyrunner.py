@@ -172,7 +172,7 @@ class AnarchyRunner:
             try:
                 status_message = run_data['plays'][-1]['tasks'][-1]['hosts']['localhost'].get('result', {}).get('msg', '')
             except Exception as e:
-                status_message = "Unable to determine failure from run data: {e}"
+                status_message = f"Unable to determine failure from run data: {e}"
             raise AnarchyRunException(
                 ansible_run = run_data,
                 rc = ansible_run.rc,
