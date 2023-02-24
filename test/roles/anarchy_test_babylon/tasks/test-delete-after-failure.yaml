@@ -16,7 +16,7 @@
         vars:
           action_provision_fail: true
           desired_state: started
-          tower_job_check_interval: 10s
+          job_check_interval: 10s
 
 - name: Wait for test-babylon-delete-after-failure subject provision-failed
   kubernetes.core.k8s_info:

@@ -21,7 +21,7 @@
           desired_state: started
           action_stop_fail: true
           job_vars: {}
-          tower_job_check_interval: 10s
+          job_check_interval: 10s
 
 - name: Confirm test-babylon-recover-stop-failure subject started
   kubernetes.core.k8s_info:
