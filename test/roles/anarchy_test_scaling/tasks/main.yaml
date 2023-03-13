@@ -1,0 +1,10 @@
+---
+- name: Setup for scaling test
+  include_tasks: setup.yaml
+
+- name: Setup for scaling test
+  include_tasks: test.yaml
+
+- name: Cleanup for scaling test
+  include_tasks: cleanup.yaml
+  when: anarchy_test_cleanup | bool

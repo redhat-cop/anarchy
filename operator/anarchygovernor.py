@@ -15,7 +15,7 @@ class AnarchyGovernor:
     def get(cls, name):
         anarchy_governor = cls.cache.get(name)
         if not anarchy_governor:
-            raise kopf.TemporaryError("AnarchyGovernor not found: {name}", delay=60)
+            raise kopf.TemporaryError(f"AnarchyGovernor not found: {name}", delay=60)
         return anarchy_governor
 
     @classmethod

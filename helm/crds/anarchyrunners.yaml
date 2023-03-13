@@ -53,12 +53,19 @@ spec:
               Definition of the AnarchyRunner.
             type: object
             properties:
+              consecutiveFailureLimit:
+                description: >-
+                  Maximum number of consecutive failures before runner pod is restarted.
+                type: integer
+                minimum: 0
               minReplicas:
-                description: Minimum number of replicas for dynamic scaling of the AnarchyRunner pool.
+                description: >-
+                  Minimum number of replicas for dynamic scaling of the AnarchyRunner pool.
                 type: integer
                 minimum: 0
               maxReplicas:
-                description: Maximum number of replicas for dynamic scaling of the AnarchyRunner pool.
+                description: >-
+                  Maximum number of replicas for dynamic scaling of the AnarchyRunner pool.
                 type: integer
                 minimum: 0
               podTemplate:
@@ -66,12 +73,47 @@ spec:
                   Pod template used to define AnarchyRunner pods.
                 type: object
                 x-kubernetes-preserve-unknown-fields: true
+              runLimit:
+                description: >-
+                  Maximum number of AnarchyRuns assigned to runner pod before it is restarted.
+                type: integer
+                minimum: 0
+              scaleUpDelay:
+                description: >-
+                  Delay between scale-up events for AnarchyRunner pods.
+                  Formatted as time interval, ex: 30s, 5m, 1h.
+                  Default: 5m.
+                type: string
+                pattern: ^[0-9]+[smh]$
+              scaleUpThreshold:
+                description: >-
+                  Scale-up is triggered when more runs are in pending than this threshhold.
+                type: integer
+                minimum: 3
+              scalingCheckInterval:
+                description: >-
+                  Interval at which to check if scaling should occur.
+                  Formatted as time interval, ex: 30s, 5m, 1h.
+                  Default: 1m.
+                type: string
+                pattern: ^[0-9]+[smh]$
           status:
             description: >-
               AnarchyRunner status.
             type: object
             x-kubernetes-preserve-unknown-fields: true
             properties:
+              lastScaleUpTimestamp:
+                type: string
+              pendingRuns:
+                type: array
+                items:
+                  type: object
+                  required:
+                  - name
+                  properties:
+                    name:
+                      type: string
               pods:
                 type: array
                 items:
@@ -79,6 +121,8 @@ spec:
                   required:
                   - name
                   properties:
+                    consecutiveFailureCount:
+                      type: integer
                     name:
                       type: string
                     run:
@@ -100,22 +144,5 @@ spec:
                           type: string
                         uid:
                           type: string
-                    subject:
-                      type: object
-                      required:
-                      - apiVersion
-                      - kind
-                      - name
-                      - namespace
-                      - uid
-                      properties:
-                        apiVersion:
-                          type: string
-                        kind:
-                          type: string
-                        name:
-                          type: string
-                        namespace:
-                          type: string
-                        uid:
-                          type: string
+                    runCount:
+                      type: integer

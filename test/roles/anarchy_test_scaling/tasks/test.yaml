@@ -1,0 +1,83 @@
+---
+- name: Get AnarchyRunner pod
+  kubernetes.core.k8s_info:
+    api_version: v1
+    kind: Pod
+    label_selectors: anarchy.gpte.redhat.com/runner=default
+    namespace: "{{ anarchy_namespace }}"
+  register: r_get_runner_pods
+  failed_when: r_get_runner_pods.resources | length != 1
+
+- name: Create AnarchySubject that will trigger failures
+  kubernetes.core.k8s:
+    definition:
+      apiVersion: anarchy.gpte.redhat.com/v1
+      kind: AnarchySubject
+      metadata:
+        name: test-scaling-fail
+        namespace: "{{ anarchy_namespace }}"
+      spec:
+        governor: test-scaling
+        vars:
+          fail_on_pod: "{{ r_get_runner_pods.resources[0].metadata.name }}"
+
+- name: Wait for AnarchyRun failure for AnarchySubject test-scaling-fail to fail
+  kubernetes.core.k8s_info:
+    api_version: anarchy.gpte.redhat.com/v1
+    kind: AnarchyRun
+    label_selectors:
+    - anarchy.gpte.redhat.com/event=create
+    - anarchy.gpte.redhat.com/subject=test-scaling-fail
+    namespace: "{{ anarchy_namespace }}"
+  register: r_get_runner_pods
+  failed_when: >-
+    r_get_runner_pods.resources | length != 1 or
+    r_get_runner_pods.resources[0].metadata.labels['anarchy.gpte.redhat.com/runner'] != 'failed'
+  until: r_get_runner_pods is successful
+  delay: 5
+  retries: 30
+
+- name: Wait for AnarchyRun failure for AnarchySubject test-scaling-fail successful on new pod
+  kubernetes.core.k8s_info:
+    api_version: anarchy.gpte.redhat.com/v1
+    kind: AnarchyRun
+    label_selectors:
+    - anarchy.gpte.redhat.com/event=create
+    - anarchy.gpte.redhat.com/subject=test-scaling-fail
+    namespace: "{{ anarchy_namespace }}"
+  register: r_get_runner_pods
+  failed_when: >-
+    r_get_runner_pods.resources | length != 1 or
+    r_get_runner_pods.resources[0].metadata.labels['anarchy.gpte.redhat.com/runner'] != 'successful'
+  until: r_get_runner_pods is successful
+  delay: 5
+  retries: 30
+
+- name: Create AnarchySubjects for test-scaling
+  kubernetes.core.k8s:
+    definition:
+      apiVersion: anarchy.gpte.redhat.com/v1
+      kind: AnarchySubject
+      metadata:
+        name: test-scaling-{{ item }}
+        namespace: "{{ anarchy_namespace }}"
+      spec:
+        governor: test-scaling
+  loop: "{{ range(0, 10) | list }}"
+
+- name: Pause for processing
+  pause:
+    seconds: 30
+
+- name: Wait for AnarchyRunner scale-up
+  kubernetes.core.k8s_info:
+    api_version: v1
+    kind: Pod
+    label_selectors: anarchy.gpte.redhat.com/runner=default
+    namespace: "{{ anarchy_namespace }}"
+  register: r_get_runner_pods
+  failed_when: r_get_runner_pods.resources | length < 2
+  until: r_get_runner_pods is successful
+  delay: 5
+  retries: 30
+...

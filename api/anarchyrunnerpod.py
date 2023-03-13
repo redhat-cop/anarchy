@@ -97,6 +97,11 @@ class AnarchyRunnerPod(AnarchyWatchObject):
         await cls.cache_put(all_in_one)
         logging.info(f"Cache preloaded {all_in_one}")
 
+    def __init__(self, definition):
+        super().__init__(definition)
+        self.consecutive_failure_count = 0
+        self.run_count = 0
+
     def __str__(self):
         return f"AnarchyRunnerPod {self.name} [{self.pod_ip}]"
 

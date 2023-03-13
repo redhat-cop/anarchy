@@ -46,7 +46,7 @@
   - r_subject.resources[0].status.towerJobs is defined
   - r_subject.resources[0].status.towerJobs.provision is defined
   - r_subject.resources[0].status.towerJobs.provision.deployerJob is defined
-  retries: 5
+  retries: 10
   delay: 5
 
 - name: Stop test-babylon-basic-functionality subject

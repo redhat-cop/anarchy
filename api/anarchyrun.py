@@ -9,6 +9,7 @@ from anarchywatchobject import AnarchyWatchObject
 
 import anarchyaction
 import anarchygovernor
+import anarchyrunner
 import anarchysubject
 import anarchyrunnerpod
 
@@ -101,6 +102,7 @@ class AnarchyRun(AnarchyWatchObject):
         lost_run_names = []
         for run_name, runner_pod_name in cls.runner_assignments.items():
             if runner_pod_name == anarchy_runner_pod.name:
+                anarchy_runner_pod.consecutive_failure_count += 1
                 lost_run_names.append(run_name)
         for lost_run_name in lost_run_names:
             anarchy_run = cls.cache.get(lost_run_name)
@@ -145,6 +147,10 @@ class AnarchyRun(AnarchyWatchObject):
             return timedelta(minutes=10)
         else:
             return timedelta(seconds=2 ** self.failure_count)
+
+    @property
+    def runner_name(self):
+        return self.status.get('runner', {}).get('name')
 
     @property
     def runner_state(self):
@@ -236,6 +242,9 @@ class AnarchyRun(AnarchyWatchObject):
     async def get_governor(self):
         return await anarchygovernor.AnarchyGovernor.get(self.governor_name)
 
+    async def get_runner(self):
+        return await anarchyrunner.AnarchyRunner.get(self.runner_name)
+
     async def get_subject(self):
         return await anarchysubject.AnarchySubject.get(self.subject_name)
 
@@ -296,6 +305,8 @@ class AnarchyRun(AnarchyWatchObject):
             "path": f"/metadata/labels/{Anarchy.runner_label.replace('/', '~1')}",
             "value": "pending",
         }])
+        runner = await self.get_runner()
+        await runner.update_status()
 
     async def set_runner_state_successful(self, result):
         await self.json_patch_status([{

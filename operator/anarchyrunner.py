@@ -2,8 +2,10 @@ import asyncio
 import kubernetes_asyncio
 import logging
 import os
+import pytimeparse
 
 from copy import deepcopy
+from datetime import datetime, timezone
 
 from anarchy import Anarchy
 from anarchycachedkopfobject import AnarchyCachedKopfObject
@@ -20,6 +22,19 @@ class AnarchyRunner(AnarchyCachedKopfObject):
         self.lock = asyncio.Lock()
         self.pods = {}
         self.pods_preloaded = False
+        self.last_scale_up_datetime = datetime.now(timezone.utc)
+
+    @property
+    def consecutive_failure_limit(self):
+        return self.spec.get('consecutiveFailureLimit')
+
+    @property
+    def last_scale_up_timestamp(self):
+        return self.status.get('lastScaleUpTimestamp')
+
+    @property
+    def max_replicas(self):
+        return self.spec.get('maxReplicas')
 
     @property
     def min_replicas(self):
@@ -30,8 +45,24 @@ class AnarchyRunner(AnarchyCachedKopfObject):
         return self.spec.get('podTemplate', {})
 
     @property
+    def run_limit(self):
+        return self.spec.get('runLimit')
+
+    @property
     def runner_image(self):
         return os.environ.get('RUNNER_IMAGE', Anarchy.pod.spec.containers[0].image)
+
+    @property
+    def scale_up_delay(self):
+        return pytimeparse.parse(self.spec.get('scaleUpDelay', '5m'))
+
+    @property
+    def scale_up_threshold(self):
+        return self.spec.get('scaleUpThreshold')
+
+    @property
+    def scaling_check_interval(self):
+        return pytimeparse.parse(self.spec.get('scalingCheckInterval', '1m'))
 
     @property
     def service_account_name(self):
@@ -103,64 +134,105 @@ class AnarchyRunner(AnarchyCachedKopfObject):
 
         return ret
 
-    async def create_runner_pod(self):
+    async def create_runner_pod(self, logger):
         pod_template = self.make_pod_template()
         pod = await Anarchy.core_v1_api.create_namespaced_pod(Anarchy.namespace, pod_template)
-        logging.info(f"Created pod {pod.metadata.name} for {self}")
+        logger.info(f"Created pod {pod.metadata.name} for {self}")
         self.pods[pod.metadata.name] = pod
+        self.last_scale_up_datetime = datetime.now(timezone.utc)
 
-    async def handle_create(self):
+    async def handle_create(self, logger):
         await self.manage_service_account()
-        await self.manage_pods()
+        await self.manage_pods(logger=logger)
 
-    async def handle_delete(self):
+    async def handle_delete(self, logger):
         pass
 
-    async def handle_resume(self):
+    async def handle_resume(self, logger):
         await self.manage_service_account()
-        await self.manage_pods()
+        await self.manage_pods(logger=logger)
 
-    async def handle_runner_pod_deleted(self, pod):
+    async def handle_runner_pod_deleted(self, pod, logger):
         self.pods.pop(pod.metadata.name, None)
-        await self.manage_pods()
+        await self.manage_pods(logger=logger)
 
-    async def handle_runner_pod_deleting(self, pod):
+    async def handle_runner_pod_deleting(self, pod, logger):
         self.pods.pop(pod.metadata.name, None)
-        await self.manage_pods()
+        await self.manage_pods(logger=logger)
 
-    async def handle_runner_pod_labeled_for_temination(self, pod):
+    async def handle_runner_pod_labeled_for_temination(self, pod, logger):
         self.pods.pop(pod.metadata.name, None)
-        await self.manage_pods()
+        await self.manage_pods(logger=logger)
 
-    async def handle_runner_pod_event(self, pod):
+    async def handle_runner_pod_event(self, pod, logger):
         if pod.metadata.deletion_timestamp:
-            await self.handle_runner_pod_deleting(pod)
+            await self.handle_runner_pod_deleting(pod=pod, logger=logger)
         elif Anarchy.runner_terminating_label in pod.metadata.labels:
-            await self.handle_runner_pod_labeled_for_temination(pod)
+            await self.handle_runner_pod_labeled_for_temination(pod=pod, logger=logger)
         else:
-            await self.handle_runner_pod_update(pod)
+            await self.handle_runner_pod_update(pod=pod, logger=logger)
 
-    async def handle_runner_pod_labeled_for_termination(self, pod):
+    async def handle_runner_pod_labeled_for_termination(self, pod, logger):
         pass
 
-    async def handle_runner_pod_update(self, pod):
-        await self.manage_pod(pod)
+    async def handle_runner_pod_update(self, pod, logger):
+        await self.manage_pod(pod=pod, logger=logger)
 
-    async def handle_update(self):
+    async def handle_update(self, logger):
         await self.manage_service_account()
-        await self.manage_pods()
+        await self.manage_pods(logger=logger)
 
-    async def manage_pods(self):
+    async def manage_pods(self, logger):
         if not self.pods_preloaded:
             await self.preload_pods()
 
+        have_pending_pod = False
         for name, pod in list(self.pods.items()):
-            await self.manage_pod(pod)
+            await self.manage_pod(pod=pod, logger=logger)
+            if pod.status.phase == 'Pending':
+                have_pending_pod = True
 
         while len(self.pods) < self.min_replicas:
-            await self.create_runner_pod()
+            await self.create_runner_pod(logger=logger)
 
-    async def manage_pod(self, pod):
+        idle_runner_count = 0
+        for pod in self.status.get('pods', []):
+            if 'run' not in pod:
+                idle_runner_count += 1
+
+        if not have_pending_pod \
+        and self.scale_up_threshold \
+        and self.scale_up_threshold < len(self.status.get('pendingRuns', [])) - idle_runner_count \
+        and (not self.max_replicas or len(self.pods) < self.max_replicas) \
+        and (datetime.now(timezone.utc) - self.last_scale_up_datetime).total_seconds() > self.scale_up_delay:
+            logger.info(f"Scaling up {self}")
+            await self.create_runner_pod(logger=logger)
+
+    async def manage_pod(self, pod, logger):
+        for entry in self.status.get('pods', []):
+            if entry['name'] == pod.metadata.name:
+                consecutive_failure_count = entry.get('consecutiveFailureCount', 0)
+                run_count = entry.get('runCount', 0)
+                break
+        else:
+            consecutive_failure_count = run_count = 0
+
+        if self.consecutive_failure_limit and consecutive_failure_count >= self.consecutive_failure_limit:
+            logging.info(
+                f"Marking {self} pod {pod.metadata.name} for deletion "
+                f"after {consecutive_failure_count} consecutive failures"
+            )
+            await self.mark_pod_for_termination(pod)
+            return
+
+        if self.run_limit and run_count > self.run_limit:
+            logging.info(
+                f"Marking {self} pod {pod.metadata.name} for deletion "
+                f"after {run_count} consecutive runs"
+            )
+            await self.mark_pod_for_termination(pod)
+            return
+
         # Get runner token to feed into pod template to prevent auto-generation
         runner_token = None
         for env_var in pod.spec.containers[0].env:
@@ -176,8 +248,9 @@ class AnarchyRunner(AnarchyCachedKopfObject):
         if pod_dict != cmp:
             logging.info(f"Marking {self} pod {pod.metadata.name} for deletion")
             await self.mark_pod_for_termination(pod)
-        else:
-            self.pods[pod.metadata.name] = pod
+            return
+
+        self.pods[pod.metadata.name] = pod
 
     async def manage_service_account(self):
         try:
