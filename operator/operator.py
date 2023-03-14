@@ -40,7 +40,7 @@ async def on_startup(settings: kopf.OperatorSettings, logger, **_):
     configure_kopf_logging()
 
 @kopf.on.cleanup()
-async def on_cleanup():
+async def on_cleanup(**_):
     await Anarchy.on_cleanup()
 
 @kopf.on.event(Anarchy.domain, Anarchy.version, 'anarchygovernors')
@@ -299,27 +299,38 @@ async def run_daemon(stopped, **kwargs):
 if not Anarchy.running_all_in_one:
     @kopf.on.create(Anarchy.domain, Anarchy.version, 'anarchyrunners')
     async def runner_create(**kwargs):
-        anarchy_runner = AnarchyRunner.load(**kwargs)
+        anarchy_runner = AnarchyRunner.load(logger, **kwargs)
         async with anarchy_runner.lock:
-            await anarchy_runner.handle_create()
+            await anarchy_runner.handle_create(logger=logger)
 
     @kopf.on.delete(Anarchy.domain, Anarchy.version, 'anarchyrunners')
-    async def runner_delete(**kwargs):
+    async def runner_delete(logger, **kwargs):
         anarchy_runner = AnarchyRunner.load(**kwargs)
         async with anarchy_runner.lock:
-            await anarchy_runner.handle_delete()
+            await anarchy_runner.handle_delete(logger=logger)
 
     @kopf.on.resume(Anarchy.domain, Anarchy.version, 'anarchyrunners')
-    async def runner_resume(**kwargs):
+    async def runner_resume(logger, **kwargs):
         anarchy_runner = AnarchyRunner.load(**kwargs)
         async with anarchy_runner.lock:
-            await anarchy_runner.handle_resume()
+            await anarchy_runner.handle_resume(logger=logger)
 
     @kopf.on.update(Anarchy.domain, Anarchy.version, 'anarchyrunners')
-    async def runner_update(**kwargs):
+    async def runner_update(logger, **kwargs):
         anarchy_runner = AnarchyRunner.load(**kwargs)
         async with anarchy_runner.lock:
-            await anarchy_runner.handle_update()
+            await anarchy_runner.handle_update(logger=logger)
+
+    @kopf.daemon(Anarchy.domain, Anarchy.version, 'anarchyrunners', cancellation_timeout=1)
+    async def runner_daemon(logger, stopped, **kwargs):
+        anarchy_runner = AnarchyRunner.load(**kwargs)
+        try:
+            while not stopped:
+                async with anarchy_runner.lock:
+                    await anarchy_runner.manage_pods(logger=logger)
+                await asyncio.sleep(anarchy_runner.scaling_check_interval)
+        except asyncio.CancelledError:
+            pass
 
     @kopf.on.event('pods', labels={Anarchy.runner_label: kopf.PRESENT})
     async def runner_pod_event(event, logger, **_):
@@ -336,6 +347,6 @@ if not Anarchy.running_all_in_one:
             return
         async with anarchy_runner.lock:
             if event['type'] == 'DELETED':
-                await anarchy_runner.handle_runner_pod_deleted(pod)
+                await anarchy_runner.handle_runner_pod_deleted(pod=pod, logger=logger)
             else:
-                await anarchy_runner.handle_runner_pod_event(pod)
+                await anarchy_runner.handle_runner_pod_event(pod=pod, logger=logger)

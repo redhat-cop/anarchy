@@ -5,6 +5,7 @@
     anarchy_test_oc_cmd: oc
     anarchy_tests:
     - simple
+    - scaling
     - babylon
   roles:
   - anarchy_test_setup

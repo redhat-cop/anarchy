@@ -1,0 +1,46 @@
+---
+- name: Delete AnarchySubject test-scaling-fail
+  kubernetes.core.k8s:
+    api_version: anarchy.gpte.redhat.com/v1
+    kind: AnarchySubject
+    name: test-scaling-fail
+    namespace: "{{ anarchy_namespace }}"
+    state: absent
+
+- name: Delete AnarchySubjects for test-scaling
+  kubernetes.core.k8s:
+    api_version: anarchy.gpte.redhat.com/v1
+    kind: AnarchySubject
+    name: test-scaling-{{ item }}
+    namespace: "{{ anarchy_namespace }}"
+    state: absent
+  loop: "{{ range(0, 10) | list }}"
+
+- name: Wait for AnarchySubject for test-scaling to delete
+  pause:
+    seconds: 5
+
+- name: Delete AnarchyGovernor test-scaling
+  kubernetes.core.k8s:
+    api_version: anarchy.gpte.redhat.com/v1
+    kind: AnarchyGovernor
+    name: test-scaling
+    namespace: "{{ anarchy_namespace }}"
+    state: absent
+
+- name: Reutrn AnarchyRunner to original sate
+  kubernetes.core.k8s:
+    api_version: anarchy.gpte.redhat.com/v1
+    kind: AnarchyRunner
+    name: default
+    namespace: "{{ anarchy_namespace }}"
+    definition:
+      spec:
+        consecutiveFailureLimit: ~
+        minReplicas: 1
+        maxReplicas: ~
+        runLimit: ~
+        scaleUpDelay: ~
+        scaleUpThreshold: ~
+        scalingCheckInterval: ~
+...

@@ -22,7 +22,7 @@
           action_destroy_fail_first_attempt: true
           action_start_fail_first_attempt: true
           action_stop_fail_first_attempt: true
-          tower_job_check_interval: 10s
+          job_check_interval: 10s
 
 - name: Check test-babylon-automatic-retries provision action
   kubernetes.core.k8s_info:

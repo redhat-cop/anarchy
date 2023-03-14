@@ -1,0 +1,49 @@
+---
+- name: Setup AnarchyRunner default for scaling
+  kubernetes.core.k8s:
+    api_version: anarchy.gpte.redhat.com/v1
+    kind: AnarchyRunner
+    name: default
+    namespace: "{{ anarchy_namespace }}"
+    definition:
+      spec:
+        consecutiveFailureLimit: 3
+        minReplicas: 1
+        maxReplicas: 10
+        runLimit: 20
+        scaleUpDelay: 10s
+        scaleUpThreshold: 5
+        scalingCheckInterval: 10s
+
+- name: Create AnarchyGovernor test-scaling
+  kubernetes.core.k8s:
+    definition:
+      apiVersion: anarchy.gpte.redhat.com/v1
+      kind: AnarchyGovernor
+      metadata:
+        name: test-scaling
+        namespace: "{{ anarchy_namespace }}"
+      spec:
+        runner: default
+        subjectEventHandlers:
+          create:
+            tasks:
+            - debug:
+                msg: "{% raw %}{{ fail_on_pod }} == {{ anarchy_run_pod_name }}{% endraw %}"
+            - fail:
+                msg: "{% raw %}Fail on {{ anarchy_run_pod_name }}{% endraw %}"
+              when: fail_on_pod == anarchy_run_pod_name
+            - pause:
+                seconds: 30
+          update:
+            tasks:
+            - debug:
+                msg: "{% raw %}{{ fail_on_pod }} == {{ anarchy_run_pod_name }}{% endraw %}"
+            - fail:
+                msg: "{% raw %}Fail on {{ anarchy_run_pod_name }}{% endraw %}"
+              when: fail_on_pod == anarchy_run_pod_name
+            - pause:
+                seconds: 30
+        vars:
+          fail_on_pod: ''
+...

@@ -24,6 +24,9 @@ async def on_startup():
     await AnarchyAction.on_startup()
     await AnarchyRun.on_startup()
 
+    for anarchy_runner in AnarchyRunner.cache.values():
+        await anarchy_runner.update_status()
+
 @app.on_shutdown
 async def on_shutdown():
     await AnarchyRun.on_shutdown()
@@ -96,6 +99,8 @@ async def get_run(request):
     if not anarchy_run:
         return None
 
+    await anarchy_runner.update_status()
+
     handler = anarchy_run.get_handler()
     anarchy_governor = await anarchy_run.get_governor()
     anarchy_subject = await anarchy_run.get_subject()
@@ -123,8 +128,6 @@ async def get_run(request):
         'run': await anarchy_run.export(),
     }
 
-    return resp
-
 @app.route('/run/{anarchy_run_name}', methods=['POST'])
 async def post_run(request):
     """
@@ -144,16 +147,21 @@ async def post_run(request):
     result = request_data['result']
     result_status = result['status']
     result_status_message = result.get('statusMessage')
+    anarchy_runner_pod.run_count += 1
 
     if result_status == 'failed':
         logging.warning(f"{anarchy_runner_pod} posted failed result for {anarchy_run}: {result_status_message}")
+        anarchy_runner_pod.consecutive_failure_count += 1
         await anarchy_run.set_runner_state_failed(result)
     elif result_status == 'successful':
         logging.info(f"{anarchy_runner_pod} posted successful result for {anarchy_run}")
+        anarchy_runner_pod.consecutive_failure_count = 0
         await anarchy_run.set_runner_state_successful(result)
     else:
         logging.info(f"{anarchy_runner_pod} sent unknown result status {result_status} for {anarchy_run}")
         raise ResponseError.BAD_REQUEST(f"Unknown result status {result_status}")
+
+    await anarchy_runner.update_status()
 
     return {"success": True}
 
