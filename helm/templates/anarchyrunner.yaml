@@ -14,6 +14,9 @@ metadata:
   name: {{ $runner.name }}
   namespace: {{ include "anarchy.namespaceName" $ }}
 spec:
+{{- if $runner.consecutiveFailureLimit }}
+  consecutiveFailureLimit: {{ $runner.consecutiveFailureLimit }}
+{{- end }}
 {{- if $runner.maxReplicas }}
   maxReplicas: {{ $runner.maxReplicas }}
 {{- end }}
@@ -29,6 +32,18 @@ spec:
         resources:
           {{- toYaml $runner.resources | nindent 10 }}
       serviceAccountName: {{ $serviceAccountName }}
+{{- if $runner.runLimit }}
+  runLimit: {{ $runner.runLimit }}
+{{- end }}
+{{- if $runner.scaleUpDelay }}
+  scaleUpDelay: {{ $runner.scaleUpDelay }}
+{{- end }}
+{{- if $runner.scaleUpThreshold }}
+  scaleUpThreshold: {{ $runner.scaleUpThreshold }}
+{{- end }}
+{{- if $runner.scalingCheckInterval }}
+  scalingCheckInterval: {{ $runner.scalingCheckInterval }}
+{{- end }}
 {{- with $runner.clusterRoleRules }}
 ---
 apiVersion: rbac.authorization.k8s.io/v1
