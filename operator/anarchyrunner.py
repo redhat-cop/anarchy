@@ -37,6 +37,12 @@ class AnarchyRunner(AnarchyCachedKopfObject):
         return self.spec.get('maxReplicas')
 
     @property
+    def max_replicas_reached(self):
+        if not self.max_replicas:
+            return False
+        return len(self.pods) >= self.max_replicas
+
+    @property
     def min_replicas(self):
         return self.spec.get('minReplicas', 1)
 
@@ -57,12 +63,30 @@ class AnarchyRunner(AnarchyCachedKopfObject):
         return pytimeparse.parse(self.spec.get('scaleUpDelay', '5m'))
 
     @property
+    def scale_up_delay_exceeded(self):
+        return (
+            datetime.now(timezone.utc) - self.last_scale_up_datetime
+        ).total_seconds() > self.scale_up_delay
+
+    @property
     def scale_up_threshold(self):
         return self.spec.get('scaleUpThreshold')
 
     @property
+    def scale_up_threshold_exceeded(self):
+        idle_runner_count = 0
+        for pod in self.status.get('pods', []):
+            if 'run' not in pod:
+                idle_runner_count += 1
+        return self.scale_up_threshold < len(self.status.get('pendingRuns', [])) - idle_runner_count
+
+    @property
     def scaling_check_interval(self):
         return pytimeparse.parse(self.spec.get('scalingCheckInterval', '1m'))
+
+    @property
+    def scaling_enabled(self):
+        return self.scale_up_threshold != None and self.scale_up_threshold > 1
 
     @property
     def service_account_name(self):
@@ -195,16 +219,11 @@ class AnarchyRunner(AnarchyCachedKopfObject):
         while len(self.pods) < self.min_replicas:
             await self.create_runner_pod(logger=logger)
 
-        idle_runner_count = 0
-        for pod in self.status.get('pods', []):
-            if 'run' not in pod:
-                idle_runner_count += 1
-
         if not have_pending_pod \
-        and self.scale_up_threshold \
-        and self.scale_up_threshold < len(self.status.get('pendingRuns', [])) - idle_runner_count \
-        and (not self.max_replicas or len(self.pods) < self.max_replicas) \
-        and (datetime.now(timezone.utc) - self.last_scale_up_datetime).total_seconds() > self.scale_up_delay:
+        and self.scaling_enabled \
+        and self.scale_up_threshold_exceeded \
+        and not self.max_replicas_reached \
+        and self.scale_up_delay_exceeded:
             logger.info(f"Scaling up {self}")
             await self.create_runner_pod(logger=logger)
 
