@@ -1,18 +1,19 @@
-{{- if .Values.deploy -}}
-{{- range $runner := .Values.runners -}}
-{{- with $serviceAccountName := (hasKey $runner "serviceAccountName") | ternary $runner.serviceAccountName (printf "%s-runner-%s" (include "anarchy.name" $) $runner.name) -}}
+{{- if .Values.deploy }}
+{{- range $namespace := .Values.namespaces | default (list .Values.namespace) }}
+{{- range $runner := $namespace.runners | default $.Values.runners }}
+{{- $serviceAccountName := (hasKey $runner "serviceAccountName") | ternary $runner.serviceAccountName (printf "%s-runner-%s" (include "anarchy.name" $) $runner.name) }}
 ---
 apiVersion: v1
 kind: ServiceAccount
 metadata:
   name: {{ $serviceAccountName }}
-  namespace: {{ include "anarchy.namespaceName" $ }}
+  namespace: {{ $namespace.name }}
 ---
 apiVersion: anarchy.gpte.redhat.com/v1
 kind: AnarchyRunner
 metadata:
   name: {{ $runner.name }}
-  namespace: {{ include "anarchy.namespaceName" $ }}
+  namespace: {{ $namespace.name }}
 spec:
 {{- if $runner.consecutiveFailureLimit }}
   consecutiveFailureLimit: {{ $runner.consecutiveFailureLimit }}
@@ -49,23 +50,23 @@ spec:
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
-  name: {{ include "anarchy.namespaceName" $ }}:{{ $serviceAccountName }}
+  name: {{ $namespace.name }}:{{ $serviceAccountName }}
 rules:
 {{ toYaml .  }}
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
 metadata:
-  name: {{ include "anarchy.namespaceName" $ }}:{{ $serviceAccountName }}
+  name: {{ $namespace.name }}:{{ $serviceAccountName }}
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: ClusterRole
-  name: {{ include "anarchy.namespaceName" $ }}:{{ $serviceAccountName }}
+  name: {{ $namespace.name }}:{{ $serviceAccountName }}
 subjects:
 - kind: ServiceAccount
   name: {{ $serviceAccountName }}
-  namespace: {{ include "anarchy.namespaceName" $ }}
+  namespace: {{ $namespace.name }}
 {{- end }}
-{{- end -}}
-{{- end -}}
+{{- end }}
+{{- end }}
 {{- end }}

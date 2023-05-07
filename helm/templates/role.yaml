@@ -1,11 +1,13 @@
-{{- if or .Values.deploy .Values.roles.create -}}
+{{- if or .Values.deploy .Values.roles.create }}
+{{- range $namespace := .Values.namespaces | default (list .Values.namespace) }}
 ---
 kind: Role
 apiVersion: rbac.authorization.k8s.io/v1
 metadata:
-  name: {{ include "anarchy.name" . }}
-  namespace: {{ include "anarchy.namespaceName" . }}
+  name: {{ include "anarchy.name" $ }}
+  namespace: {{ $namespace.name }}
   labels:
+    {{- include "anarchy.labels" $ | nindent 4 }}
     rbac.authorization.k8s.io/aggregate-to-admin: "true"
 rules:
 - apiGroups:
@@ -105,4 +107,5 @@ rules:
   - create
   - patch
   - update
+{{- end }}
 {{- end }}

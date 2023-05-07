@@ -13,6 +13,9 @@ namespace:
   create: true
   name: anarchy
 
+# Deploy to multiple namespaces
+namespaces: []
+
 # Control creation of cluster roles
 clusterroles:
   create: true
@@ -26,6 +29,7 @@ imagePullSecrets: []
 nameOverride: ""
 
 # Number of Anarchy replicas for deployment
+apiReplicaCount: 1
 replicaCount: 1
 
 serviceAccount:
@@ -63,6 +67,18 @@ affinity: {}
 runners:
 - name: default
   resources:
+    #clusterRoleRules:
+    #- apiGroups:
+    #  - app.example.com
+    #  resources:
+    #  - widgets
+    #  verbs:
+    #  - create
+    #  - delete
+    #  - get
+    #  - list
+    #  - patch
+    #  - update
     limits:
       cpu: "1"
       memory: 256Mi
