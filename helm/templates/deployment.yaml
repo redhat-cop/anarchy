@@ -1,60 +1,62 @@
 {{- if .Values.deploy -}}
+{{- range $namespace := .Values.namespaces | default (list .Values.namespace) }}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: {{ include "anarchy.name" . }}
-  namespace: {{ include "anarchy.namespaceName" . }}
+  name: {{ include "anarchy.name" $ }}
+  namespace: {{ $namespace.name }}
   labels:
-    {{- include "anarchy.labels" . | nindent 4 }}
-    app.kburenetes.io/component: api
+    {{- include "anarchy.labels" $ | nindent 4 }}
+    app.kubrenetes.io/component: operator
 spec:
-  replicas: {{ .Values.replicaCount }}
+  replicas: {{ $namespace.replicaCount | default $.Values.replicaCount }}
   selector:
     matchLabels:
-      {{- include "anarchy.operatorComponentLabels" . | nindent 6 }}
+      {{- include "anarchy.operatorComponentLabels" $ | nindent 6 }}
   strategy:
     type: RollingUpdate
   template:
     metadata:
       labels:
-        {{- include "anarchy.operatorComponentLabels" . | nindent 8 }}
+        {{- include "anarchy.operatorComponentLabels" $ | nindent 8 }}
     spec:
-    {{- with .Values.imagePullSecrets }}
+    {{- with $.Values.imagePullSecrets }}
       imagePullSecrets:
         {{- toYaml . | nindent 8 }}
     {{- end }}
-      serviceAccountName: {{ include "anarchy.serviceAccountName" . }}
+      serviceAccountName: {{ include "anarchy.serviceAccountName" $ }}
       containers:
       - name: manager
         env:
         - name: ANARCHY_SERVICE
-          value: {{ include "anarchy.name" . }}
-        {{- range $k, $v := .Values.envVars }}
+          value: {{ include "anarchy.name" $ }}
+        {{- range $k, $v := $namespace.envVars | default $.Values.envVars }}
         - name: {{ $k | quote }}
           value: {{ $v | quote }}
         {{ end }}
-        {{- if .Values.image.repository | contains ":" }}
-        image: {{ .Values.image.repository }}
+        {{- if $.Values.image.repository | contains ":" }}
+        image: {{ $.Values.image.repository }}
         {{- else }}
-        image: {{ .Values.image.repository }}:v{{ .Chart.AppVersion }}
+        image: {{ $.Values.image.repository }}:v{{ $.Chart.AppVersion }}
         {{- end }}
-        imagePullPolicy: {{ .Values.image.pullPolicy }}
+        imagePullPolicy: {{ $.Values.image.pullPolicy }}
         livenessProbe:
           httpGet:
             path: /healthz
             port: 8080
         resources:
-          {{- toYaml .Values.resources | nindent 10 }}
-      {{- with .Values.nodeSelector }}
+          {{- toYaml $namespace.resources | default $.Values.resources | nindent 10 }}
+      {{- with $namespace.nodeSelector | default $.Values.nodeSelector }}
       nodeSelector:
         {{- toYaml . | nindent 8 }}
       {{- end }}
-    {{- with .Values.affinity }}
+      {{- with $namespace.affinity | default $.Values.affinity }}
       affinity:
         {{- toYaml . | nindent 8 }}
-    {{- end }}
-    {{- with .Values.tolerations }}
+      {{- end }}
+      {{- with $namespace.tolerations | default $.Values.tolerations }}
       tolerations:
         {{- toYaml . | nindent 8 }}
-    {{- end }}
+      {{- end }}
+{{- end }}
 {{- end }}

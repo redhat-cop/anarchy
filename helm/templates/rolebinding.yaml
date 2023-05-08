@@ -1,16 +1,18 @@
 {{- if .Values.deploy -}}
+{{- range $namespace := .Values.namespaces | default (list .Values.namespace) }}
 apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
 metadata:
-  name: {{ include "anarchy.serviceAccountName" . }}
-  namespace: {{ include "anarchy.namespaceName" . }}
+  name: {{ include "anarchy.serviceAccountName" $ }}
+  namespace: {{ $namespace.name }}
   labels:
-    {{- include "anarchy.labels" . | nindent 4 }}
+    {{- include "anarchy.labels" $ | nindent 4 }}
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: Role
-  name: {{ include "anarchy.name" . }}
+  name: {{ include "anarchy.name" $ }}
 subjects:
 - kind: ServiceAccount
-  name: {{ include "anarchy.serviceAccountName" . }}
+  name: {{ include "anarchy.serviceAccountName" $ }}
+{{- end }}
 {{- end }}

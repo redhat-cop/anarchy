@@ -1,58 +1,61 @@
 {{- if .Values.deploy -}}
+{{- range $namespace := .Values.namespaces | default (list .Values.namespace) }}
+---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: {{ include "anarchy.apiName" . }}
-  namespace: {{ include "anarchy.namespaceName" . }}
+  name: {{ include "anarchy.apiName" $ }}
+  namespace: {{ $namespace.name }}
   labels:
-    {{- include "anarchy.labels" . | nindent 4 }}
-    app.kburenetes.io/component: operator
+    {{- include "anarchy.labels" $ | nindent 4 }}
+    app.kubrenetes.io/component: api
 spec:
-  replicas: {{ .Values.replicaCount }}
+  replicas: {{ $namespace.apiReplicaCount | default $.Values.apiReplicaCount }}
   selector:
     matchLabels:
-      {{- include "anarchy.apiComponentLabels" . | nindent 6 }}
+      {{- include "anarchy.apiComponentLabels" $ | nindent 6 }}
   strategy:
     type: RollingUpdate
   template:
     metadata:
       labels:
-        {{- include "anarchy.apiComponentLabels" . | nindent 8 }}
+        {{- include "anarchy.apiComponentLabels" $ | nindent 8 }}
     spec:
-    {{- with .Values.imagePullSecrets }}
+    {{- with $.Values.imagePullSecrets }}
       imagePullSecrets:
         {{- toYaml . | nindent 8 }}
     {{- end }}
-      serviceAccountName: {{ include "anarchy.serviceAccountName" . }}
+      serviceAccountName: {{ include "anarchy.serviceAccountName" $ }}
       containers:
       - name: api
         env:
         - name: ANARCHY_COMPONENT
           value: api
         - name: ANARCHY_SERVICE
-          value: {{ include "anarchy.name" . }}
-        {{- if .Values.ingress.enabled }}
+          value: {{ include "anarchy.name" $ }}
+        {{- if $.Values.ingress.enabled }}
         - name: CALLBACK_BASE_URL
-          value: https://{{ (index .Values.ingress.hosts 0).host }}
+          value: https://{{ (index $.Values.ingress.hosts 0).host }}
         {{- end }}
-        {{- if .Values.image.repository | contains ":" }}
-        image: {{ .Values.image.repository }}
+        {{- if $.Values.image.repository | contains ":" }}
+        image: {{ $.Values.image.repository }}
         {{- else }}
-        image: {{ .Values.image.repository }}:v{{ .Chart.AppVersion }}
+        image: {{ $.Values.image.repository }}:v{{ $.Chart.AppVersion }}
         {{- end }}
-        imagePullPolicy: {{ .Values.image.pullPolicy }}
+        imagePullPolicy: {{ $.Values.image.pullPolicy }}
         resources:
-          {{- toYaml .Values.resources | nindent 10 }}
-      {{- with .Values.nodeSelector }}
+          {{- toYaml $.Values.resources | nindent 10 }}
+      {{- with $namespace.nodeSelector | default $.Values.nodeSelector }}
       nodeSelector:
         {{- toYaml . | nindent 8 }}
       {{- end }}
-    {{- with .Values.affinity }}
+      {{- with $namespace.affinity | default $.Values.affinity }}
       affinity:
         {{- toYaml . | nindent 8 }}
-    {{- end }}
-    {{- with .Values.tolerations }}
+      {{- end }}
+      {{- with $namespace.tolerations | default $.Values.tolerations }}
       tolerations:
         {{- toYaml . | nindent 8 }}
-    {{- end }}
+      {{- end }}
+{{- end }}
 {{- end }}

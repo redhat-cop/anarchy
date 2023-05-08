@@ -1,20 +1,22 @@
-{{- if .Values.deploy -}}
+{{- if .Values.deploy }}
+{{- range $namespace := .Values.namespaces | default (list .Values.namespace) }}
 apiVersion: v1
 kind: Service
 metadata:
-  name: {{ include "anarchy.name" . }}
-  namespace: {{ include "anarchy.namespaceName" . }}
+  name: {{ include "anarchy.name" $ }}
+  namespace: {{ $namespace.name }}
   labels:
-    {{- include "anarchy.labels" . | nindent 4 }}
+    {{- include "anarchy.labels" $ | nindent 4 }}
 spec:
-  type: {{ .Values.service.type }}
+  type: {{ $.Values.service.type }}
   ports:
-  {{- range $k, $v := .Values.service.port }}
+  {{- range $k, $v := $.Values.service.port }}
   - name: {{ $k }}
     protocol: TCP
     port: {{ $v }}
     targetPort: {{ $v }}
   {{- end }}
   selector:
-    {{- include "anarchy.apiComponentLabels" . | nindent 4 }}
+    {{- include "anarchy.apiComponentLabels" $ | nindent 4 }}
+{{- end }}
 {{- end }}
