@@ -87,6 +87,7 @@ jobs:
           DEFAULT_CHANNEL=stable \
           SHELL=/bin/bash \
           VERSION='${{ steps.image_tags.outputs.VERSION }}';
+        docker login --username "${{ secrets.REGISTRY_USERNAME }}" --password "${{ secrets.REGISTRY_PASSWORD }}" "${{ vars.IMAGE_REGISTRY }}"
         docker tag "${IMG}" "${IMG_LATEST}"
         docker tag "${IMG}" "${IMG_MAJOR_VERSION}"
         docker tag "${IMG}" "${IMG_MINOR_VERSION}"
@@ -105,6 +106,7 @@ jobs:
         docker push "${CATALOG_IMG_LATEST}"
         docker push "${CATALOG_IMG_MAJOR_VERSION}"
         docker push "${CATALOG_IMG_MINOR_VERSION}"
+        docker logout "${{ vars.IMAGE_REGISTRY }}"
 
   publish-helm-charts:
     needs: publish
