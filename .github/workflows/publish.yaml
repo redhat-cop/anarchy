@@ -26,6 +26,8 @@ jobs:
         # To determine VERSION, strip off any release number suffix
         VERSION=${RELEASE/-*/}
 
+        echo "VERSION=${VERSION}" >> $GITHUB_OUTPUT
+
         # Only build image if version tag without release number
         # Releases indicate a change in the repository that should not trigger a new build.
         if [[ "${VERSION}" == "${RELEASE}" ]]; then
@@ -78,6 +80,7 @@ jobs:
         CATALOG_IMG_LATEST="${CATALOG_IMG%:catalog-v*}:catalog-latest"
         CATALOG_IMG_MAJOR_VERSION="${CATALOG_IMG%.*.*}"
         CATALOG_IMG_MINOR_VERSION="${CATALOG_IMG%.*}"
+        docker login --username "${{ secrets.REGISTRY_USERNAME }}" --password "${{ secrets.REGISTRY_PASSWORD }}" "${{ vars.IMAGE_REGISTRY }}"
         make docker-build docker-push bundle bundle-build bundle-push catalog-build catalog-push \
           IMG="${IMG}" \
           BUNDLE_IMG="${BUNDLE_IMG}" \
@@ -87,7 +90,6 @@ jobs:
           DEFAULT_CHANNEL=stable \
           SHELL=/bin/bash \
           VERSION='${{ steps.image_tags.outputs.VERSION }}';
-        docker login --username "${{ secrets.REGISTRY_USERNAME }}" --password "${{ secrets.REGISTRY_PASSWORD }}" "${{ vars.IMAGE_REGISTRY }}"
         docker tag "${IMG}" "${IMG_LATEST}"
         docker tag "${IMG}" "${IMG_MAJOR_VERSION}"
         docker tag "${IMG}" "${IMG_MINOR_VERSION}"
