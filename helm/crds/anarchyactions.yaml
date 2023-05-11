@@ -9,7 +9,6 @@ spec:
     plural: anarchyactions
     singular: anarchyaction
     kind: AnarchyAction
-    shortNames: []
   versions:
   - name: v1
     served: true

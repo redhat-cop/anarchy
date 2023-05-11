@@ -9,7 +9,6 @@ spec:
     plural: anarchyrunners
     singular: anarchyrunner
     kind: AnarchyRunner
-    shortNames: []
   versions:
   - name: v1
     served: true

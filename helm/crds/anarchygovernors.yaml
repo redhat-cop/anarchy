@@ -9,7 +9,6 @@ spec:
     plural: anarchygovernors
     singular: anarchygovernor
     kind: AnarchyGovernor
-    shortNames: []
   versions:
   - name: v1
     served: true
