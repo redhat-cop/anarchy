@@ -1,0 +1,59 @@
+{{- if .Values.communeOperator.deploy }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: anarchy-commune-operator
+  namespace: {{ .Values.communeOperator.namespace.name }}
+  labels:
+    {{- include "anarchy.labels" . | nindent 4 }}
+    app.kubrenetes.io/component: commune-operator
+spec:
+  replicas: 1
+  revisionHistoryLimit: 1
+  selector:
+    matchLabels:
+      {{- include "anarchy.communeOperatorComponentLabels" . | nindent 8 }}
+  strategy:
+    type: Recreate
+  template:
+    metadata:
+      labels:
+        {{- include "anarchy.communeOperatorComponentLabels" . | nindent 8 }}
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      serviceAccountName: anarchy-commune-operator
+      containers:
+      - name: operator
+        env:
+        - name: ANARCHY_COMPONENT
+          value: commune-operator
+        {{- if .Values.image.repository | contains ":" }}
+        image: {{ .Values.image.repository }}
+        {{- else }}
+        image: {{ .Values.image.repository }}:v{{ .Chart.AppVersion }}
+        {{- end }}
+        imagePullPolicy: {{ .Values.image.pullPolicy }}
+        livenessProbe:
+          httpGet:
+            path: /healthz
+            port: 8080
+          periodSeconds: 30
+        resources:
+          {{- toYaml .Values.communeOperator.resources | nindent 10 }}
+      {{- with .Values.communeOperator.affinity | default .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.communeOperator.nodeSelector | default .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.communeOperator.tolerations | default .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+{{- end }}

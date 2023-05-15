@@ -1,13 +1,11 @@
-{{- if and .Values.deploy (or .Values.namespace.create .Values.namespaces) }}
-{{- range $namespace := .Values.namespaces | default (list .Values.namespace) }}
+{{- if and .Values.deploy .Values.namespace.create }}
 ---
 apiVersion: v1
 kind: Namespace
 metadata:
-  name: {{ $namespace.name }}
+  name: {{ .Values.namespace.name }}
   annotations:
     helm.sh/resource-policy: keep
   labels:
     {{- include "anarchy.labels" $ | nindent 4 }}
-{{- end }}
 {{- end }}

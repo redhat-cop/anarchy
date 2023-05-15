@@ -1,4 +1,0 @@
-## Append samples you want in your CSV to this file as resources ##
-resources:
-- anarchy_v1_anarchycommune.yaml
-#+kubebuilder:scaffold:manifestskustomizesamples

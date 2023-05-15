@@ -11,6 +11,7 @@ rules:
   - anarchy.gpte.redhat.com
   resources:
   - anarchyactions
+  - anarchycommunes
   - anarchygovernors
   - anarchyrunners
   - anarchyruns

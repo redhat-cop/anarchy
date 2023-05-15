@@ -1,0 +1,15 @@
+{{- if .Values.communeOperator.deploy }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: anarchy-commune-operator
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: anarchy-commune-operator
+subjects:
+- kind: ServiceAccount
+  name: anarchy-commune-operator
+  namespace: {{ .Values.communeOperator.namespace.name }}
+{{- end }}

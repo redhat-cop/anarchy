@@ -1,5 +1,5 @@
 {{- if .Values.deploy -}}
-{{- range $namespace := .Values.namespaces | default (list .Values.namespace) }}
+{{- $namespace := .Values.namespace }}
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -57,5 +57,4 @@ spec:
       tolerations:
         {{- toYaml . | nindent 8 }}
       {{- end }}
-{{- end }}
 {{- end }}

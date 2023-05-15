@@ -1,7 +1,16 @@
 #!/bin/sh
 
 
-if [ "${ANARCHY_COMPONENT}" == 'api' ]
+if [ "true" == "${ANARCHY_RUNNING_ALL_IN_ONE}" ]
+then
+    if [ -z "${RUNNER_TOKEN}" ]
+    then
+        export RUNNER_TOKEN="$(openssl rand -base64 15)"
+    fi
+    ANARCHY_COMPONENT=api $0 &
+    ANARCHY_COMPONENT=runner ANARCHY_URL=http://$HOSTNAME:5000 RUNNER_NAME=default $0 &
+    exec /usr/libexec/s2i/run
+elif [ "${ANARCHY_COMPONENT}" == 'api' ]
 then
     export HOME=/opt/app-root/api
     cd $HOME
@@ -13,15 +22,26 @@ then
     export ANSIBLE_CONFIG=$HOME/ansible-runner/ansible.cfg
     export KUBECONFIG=$HOME/kubeconfig
     exec /opt/app-root/bin/python3 $HOME/main.py
-elif [ "true" == "${ANARCHY_RUNNING_ALL_IN_ONE}" ]
+elif [ "${ANARCHY_COMPONENT}" == 'commune-operator' ]
 then
-    if [ -z "${RUNNER_TOKEN}" ]
-    then
-        export RUNNER_TOKEN="$(openssl rand -base64 15)"
-    fi
-    ANARCHY_COMPONENT=api $0 &
-    ANARCHY_COMPONENT=runner ANARCHY_URL=http://$HOSTNAME:5000 RUNNER_NAME=default $0 &
-    exec /usr/libexec/s2i/run
+    export HOME=/opt/app-root/commune-operator
+    cd $HOME
+    export OPERATOR_NAMESPACE="$(cat /run/secrets/kubernetes.io/serviceaccount/namespace)"
+    unset KOPF_VERSION
+
+    oc create -f - <<EOF >/dev/null 2>&1
+apiVersion: kopf.dev/v1
+kind: ClusterKopfPeering
+metadata:
+  name: anarchy-commune-operator
+EOF
+
+    exec kopf run \
+	--all-namespaces \
+        --liveness=http://0.0.0.0:8080/healthz \
+        --log-format=json \
+        --peering=anarchy-commune-operator \
+        operator.py
 else
     exec /usr/libexec/s2i/run
 fi

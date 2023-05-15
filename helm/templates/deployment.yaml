@@ -1,5 +1,5 @@
 {{- if .Values.deploy -}}
-{{- range $namespace := .Values.namespaces | default (list .Values.namespace) }}
+{{- $namespace := .Values.namespace }}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -10,6 +10,7 @@ metadata:
     app.kubrenetes.io/component: operator
 spec:
   replicas: {{ $namespace.replicaCount | default $.Values.replicaCount }}
+  revisionHistoryLimit: 1
   selector:
     matchLabels:
       {{- include "anarchy.operatorComponentLabels" $ | nindent 6 }}
@@ -20,10 +21,10 @@ spec:
       labels:
         {{- include "anarchy.operatorComponentLabels" $ | nindent 8 }}
     spec:
-    {{- with $.Values.imagePullSecrets }}
+      {{- with $.Values.imagePullSecrets }}
       imagePullSecrets:
         {{- toYaml . | nindent 8 }}
-    {{- end }}
+      {{- end }}
       serviceAccountName: {{ include "anarchy.serviceAccountName" $ }}
       containers:
       - name: manager
@@ -58,5 +59,4 @@ spec:
       tolerations:
         {{- toYaml . | nindent 8 }}
       {{- end }}
-{{- end }}
 {{- end }}

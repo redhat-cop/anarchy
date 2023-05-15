@@ -1,4 +1,17 @@
 ---
+communeOperator:
+  deploy: false
+  namespace:
+    create: true
+    name: anarchy-commune-operator
+  resources:
+    limits:
+      cpu: "1"
+      memory: 256Mi
+    requests:
+      cpu: 100m
+      memory: 128Mi
+
 image:
   repository: quay.io/redhat-cop/anarchy
   pullPolicy: IfNotPresent
@@ -13,12 +26,9 @@ namespace:
   create: true
   name: anarchy
 
-# Deploy to multiple namespaces
-namespaces: []
-
 # Control creation of cluster roles
 clusterroles:
-  create: true
+  create: false
 
 # Just for odo usage, separate control for role creation, roles also
 # created when deploy is set to true
@@ -65,23 +75,18 @@ tolerations: []
 affinity: {}
 
 runners:
-- name: default
-  resources:
-    #clusterRoleRules:
-    #- apiGroups:
-    #  - app.example.com
-    #  resources:
-    #  - widgets
-    #  verbs:
-    #  - create
-    #  - delete
-    #  - get
-    #  - list
-    #  - patch
-    #  - update
-    limits:
-      cpu: "1"
-      memory: 256Mi
-    requests:
-      cpu: 500m
-      memory: 256Mi
+  default:
+    resources:
+      consecutiveFailureLimit: 10
+      maxReplicas: 10
+      minReplicas: 1
+      limits:
+        cpu: "1"
+        memory: 256Mi
+      requests:
+        cpu: 500m
+        memory: 256Mi
+      runLimit: 100
+      scaleUpDelay: 5m
+      scaleUpThreshold: 20
+      scalingCheckInterval: 1m

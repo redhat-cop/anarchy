@@ -7,6 +7,8 @@ shopt -s dotglob
 mkdir -p /opt/app-root/src || :
 cp --preserve=mode --recursive /tmp/src/api /opt/app-root/
 cp --preserve=mode --recursive /tmp/src/anarchy-runner /opt/app-root/
+cp --preserve=mode --recursive /tmp/src/commune-operator /opt/app-root/
+cp --preserve=mode --recursive /tmp/src/helm /opt/app-root/commune-operator/
 
 touch \
   /opt/app-root/anarchy-runner/ansible-runner/project/main.yml \
