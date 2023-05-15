@@ -33,7 +33,7 @@ jobs:
         if [[ "${VERSION}" == "${RELEASE}" ]]; then
           # Publish to latest, minor, and patch tags
           # Ex: latest,v1.2,v1.2.3
-          echo "IMAGE_TAGS=latest ${VERSION%.*} ${VERSION}" >> $GITHUB_OUTPUT
+          echo "IMAGE_TAGS=latest v${VERSION%.*} v${VERSION}" >> $GITHUB_OUTPUT
         fi
 
         # Read version from helm/Chart.yaml
