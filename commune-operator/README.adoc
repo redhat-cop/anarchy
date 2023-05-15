@@ -1,3 +1,0 @@
-= Anarchy Commune Operator
-
-AnarchyCommune resources are used to request Anarchy deployment in a project namespace.

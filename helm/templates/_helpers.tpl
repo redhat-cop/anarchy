@@ -44,6 +44,14 @@ app.kubernetes.io/component: api
 {{- end -}}
 
 {{/*
+API component labels
+*/}}
+{{- define "anarchy.communeOperatorComponentLabels" -}}
+{{-   include "anarchy.selectorLabels" . }}
+app.kubernetes.io/component: commune-operator
+{{- end -}}
+
+{{/*
 Operator component labels
 */}}
 {{- define "anarchy.operatorComponentLabels" -}}

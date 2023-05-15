@@ -1,0 +1,7 @@
+{{- if (and .Values.communeOperator.deploy .Values.communeOperator.namespace.create) }}
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: {{ .Values.communeOperator.namespace.name }}
+{{- end }}
