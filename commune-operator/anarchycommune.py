@@ -191,7 +191,7 @@ class AnarchyCommune:
             plural = self.plural,
             version = self.version,
             body = {"status": patch},
-            _content_type = 'application/merge-patch+json.',
+            _content_type = 'application/merge-patch+json',
         )
         self.update_from_definition(definition)
 
