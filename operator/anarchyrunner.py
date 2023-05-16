@@ -210,20 +210,20 @@ class AnarchyRunner(AnarchyCachedKopfObject):
         if not self.pods_preloaded:
             await self.preload_pods()
 
-        have_pending_pod = False
         for name, pod in list(self.pods.items()):
             await self.manage_pod(pod=pod, logger=logger)
             if pod.status.phase == 'Pending':
-                have_pending_pod = True
+                return
 
-        while len(self.pods) < self.min_replicas:
-            await self.create_runner_pod(logger=logger)
-
-        if not have_pending_pod \
-        and self.scaling_enabled \
-        and self.scale_up_threshold_exceeded \
-        and not self.max_replicas_reached \
-        and self.scale_up_delay_exceeded:
+        if (
+            len(self.pods) < self.min_replicas or
+            (
+                self.scaling_enabled and
+                self.scale_up_threshold_exceeded and
+                not self.max_replicas_reached and
+                self.scale_up_delay_exceeded
+            )
+        ):
             logger.info(f"Scaling up {self}")
             await self.create_runner_pod(logger=logger)
 
