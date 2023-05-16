@@ -76,17 +76,17 @@ affinity: {}
 
 runners:
   default:
+    consecutiveFailureLimit: 10
+    maxReplicas: 10
+    minReplicas: 1
+    runLimit: 100
+    scaleUpDelay: 5m
+    scaleUpThreshold: 20
+    scalingCheckInterval: 1m
     resources:
-      consecutiveFailureLimit: 10
-      maxReplicas: 10
-      minReplicas: 1
       limits:
         cpu: "1"
         memory: 256Mi
       requests:
         cpu: 500m
         memory: 256Mi
-      runLimit: 100
-      scaleUpDelay: 5m
-      scaleUpThreshold: 20
-      scalingCheckInterval: 1m

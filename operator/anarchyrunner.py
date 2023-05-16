@@ -43,6 +43,12 @@ class AnarchyRunner(AnarchyCachedKopfObject):
         return len(self.pods) >= self.max_replicas
 
     @property
+    def min_scale_up_delay_exceeded(self):
+        return (
+            datetime.now(timezone.utc) - self.last_scale_up_datetime
+        ).total_seconds() > 10
+
+    @property
     def min_replicas(self):
         return self.spec.get('minReplicas', 1)
 
@@ -210,17 +216,25 @@ class AnarchyRunner(AnarchyCachedKopfObject):
         if not self.pods_preloaded:
             await self.preload_pods()
 
-        for name, pod in list(self.pods.items()):
+        have_pod_not_running = False
+        for pod in list(self.pods.values()):
             await self.manage_pod(pod=pod, logger=logger)
-            if pod.status.phase == 'Pending':
-                return
+            if pod.status.phase != 'Running':
+                have_pod_not_running = True
 
         if (
-            len(self.pods) < self.min_replicas or
+            have_pod_not_running or
+            self.max_replicas_reached
+        ):
+            return
+
+        if (
             (
+                len(self.pods) < self.min_replicas and
+                self.min_scale_up_delay_exceeded
+            ) or (
                 self.scaling_enabled and
                 self.scale_up_threshold_exceeded and
-                not self.max_replicas_reached and
                 self.scale_up_delay_exceeded
             )
         ):
@@ -265,7 +279,7 @@ class AnarchyRunner(AnarchyCachedKopfObject):
         cmp = deepcopy(pod_dict)
         deep_merge(cmp, pod_template)
         if pod_dict != cmp:
-            logging.info(f"Marking {self} pod {pod.metadata.name} for deletion")
+            logging.info(f"Marking {self} pod {pod.metadata.name} for deletion on template mismatch")
             await self.mark_pod_for_termination(pod)
             return
 

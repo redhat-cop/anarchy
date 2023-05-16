@@ -298,8 +298,8 @@ async def run_daemon(stopped, **kwargs):
 
 if not Anarchy.running_all_in_one:
     @kopf.on.create(Anarchy.domain, Anarchy.version, 'anarchyrunners')
-    async def runner_create(**kwargs):
-        anarchy_runner = AnarchyRunner.load(logger, **kwargs)
+    async def runner_create(logger, **kwargs):
+        anarchy_runner = AnarchyRunner.load(**kwargs)
         async with anarchy_runner.lock:
             await anarchy_runner.handle_create(logger=logger)
 
@@ -348,5 +348,5 @@ if not Anarchy.running_all_in_one:
         async with anarchy_runner.lock:
             if event['type'] == 'DELETED':
                 await anarchy_runner.handle_runner_pod_deleted(pod=pod, logger=logger)
-            else:
+            elif Anarchy.runner_terminating_label not in pod.metadata.labels:
                 await anarchy_runner.handle_runner_pod_event(pod=pod, logger=logger)

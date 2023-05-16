@@ -26,11 +26,11 @@ class Anarchy():
 
     @classmethod
     def k8s_obj_from_dict(cls, definition, k8s_class):
-        return cls.core_v1_api.api_client.deserialize(FakeKubeResponse(definition), k8s_class)
+        return cls.api_client.deserialize(FakeKubeResponse(definition), k8s_class)
 
     @classmethod
     def k8s_obj_to_dict(cls, obj):
-        return cls.core_v1_api.api_client.sanitize_for_serialization(obj)
+        return cls.api_client.sanitize_for_serialization(obj)
 
     @classmethod
     async def init_pod(cls):
@@ -41,8 +41,7 @@ class Anarchy():
 
     @classmethod
     async def on_cleanup(cls):
-        cls.core_v1_api.api_client.close()
-        cls.custom_objects_api.api_client.close()
+        await cls.api_client.close()
 
     @classmethod
     async def on_startup(cls):
@@ -60,8 +59,9 @@ class Anarchy():
                     'Please set OPERATOR_NAMESPACE environment variable.'
                 )
 
-        cls.core_v1_api = kubernetes_asyncio.client.CoreV1Api()
-        cls.custom_objects_api = kubernetes_asyncio.client.CustomObjectsApi()
+        cls.api_client = kubernetes_asyncio.client.ApiClient()
+        cls.core_v1_api = kubernetes_asyncio.client.CoreV1Api(cls.api_client)
+        cls.custom_objects_api = kubernetes_asyncio.client.CustomObjectsApi(cls.api_client)
 
         if not cls.running_all_in_one:
             await cls.init_pod()
