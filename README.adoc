@@ -72,7 +72,7 @@ helm template anarchy helm/ --include-crds | oc apply -f -
 Check your to make sure the anarchy-operator pod is running and the default runner starts soon after:
 
 -------------------------------------------------------------------------
-$ oc get pods
+$ oc get pods -n anarchy
 NAME                                     READY   STATUS    RESTARTS   AGE
 anarchy-5f7d7898d7-f6dww                 1/1     Running   0          11m
 anarchy-runner-default-9767c79b6-vt6b4   1/1     Running   0          12m
