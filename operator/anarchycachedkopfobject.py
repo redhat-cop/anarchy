@@ -1,3 +1,4 @@
+from anarchy import Anarchy
 from anarchykopfobject import AnarchyKopfObject
 
 class AnarchyCachedKopfObject(AnarchyKopfObject):
@@ -7,7 +8,8 @@ class AnarchyCachedKopfObject(AnarchyKopfObject):
         if obj:
             return obj
         obj = await cls.fetch(name)
-        cls.cache[name] = obj
+        if not obj.ignore:
+            cls.cache[name] = obj
         return obj
 
     @classmethod

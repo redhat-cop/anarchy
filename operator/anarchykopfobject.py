@@ -58,6 +58,10 @@ class AnarchyKopfObject:
         return self.metadata.get('finalizers', [])
 
     @property
+    def ignore(self):
+        return Anarchy.ignore_label in self.labels
+
+    @property
     def is_deleted(self):
         """
         Object should be treated as functionally deleted.

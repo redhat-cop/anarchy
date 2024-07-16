@@ -19,6 +19,7 @@ class Anarchy():
     event_label = f"{domain}/event"
     finished_label = f"{domain}/finished"
     governor_label = f"{domain}/governor"
+    ignore_label = f"{domain}/ignore"
     runner_label = f"{domain}/runner"
     runner_terminating_label = f"{domain}/runner-terminating"
     spec_sha256_annotation = f"{domain}/spec-sha256"
