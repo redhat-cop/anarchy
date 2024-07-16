@@ -324,13 +324,15 @@ if not Anarchy.running_all_in_one:
     @kopf.daemon(Anarchy.domain, Anarchy.version, 'anarchyrunners', cancellation_timeout=1)
     async def runner_daemon(logger, stopped, **kwargs):
         anarchy_runner = AnarchyRunner.load(**kwargs)
-        try:
-            while not stopped:
+        while not stopped:
+            try:
                 async with anarchy_runner.lock:
                     await anarchy_runner.manage_pods(logger=logger)
                 await asyncio.sleep(anarchy_runner.scaling_check_interval)
-        except asyncio.CancelledError:
-            pass
+            except asyncio.CancelledError:
+                pass
+            except Exception:
+                logger.exception(f"Exception in daemon for {anarchy_runner}")
 
     @kopf.on.event('pods', labels={Anarchy.runner_label: kopf.PRESENT})
     async def runner_pod_event(event, logger, **_):

@@ -7,6 +7,9 @@
     namespace: "{{ anarchy_namespace }}"
   register: r_get_runner_pods
   failed_when: r_get_runner_pods.resources | length != 1
+  until: r_get_runner_pods is successful
+  delay: 5
+  retries: 30
 
 - name: Create AnarchySubject that will trigger failures
   kubernetes.core.k8s:
@@ -34,7 +37,7 @@
     r_get_runner_pods.resources | length != 1 or
     r_get_runner_pods.resources[0].metadata.labels['anarchy.gpte.redhat.com/runner'] != 'failed'
   until: r_get_runner_pods is successful
-  delay: 5
+  delay: 1
   retries: 30
 
 - name: Wait for AnarchyRun failure for AnarchySubject test-scaling-fail successful on new pod
