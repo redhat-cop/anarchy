@@ -214,7 +214,9 @@ async def action_daemon(stopped, **kwargs):
     try:
         while not stopped:
             async with anarchy_subject.lock:
-                if anarchy_subject.ignore:
+                await anarchy_action.refresh()
+                await anarchy_subject.refresh()
+                if anarchy_action.ignore or anarchy_subject.ignore:
                     return
                 sleep_interval = await anarchy_action.manage(anarchy_subject)
             if sleep_interval:
@@ -356,10 +358,14 @@ async def run_daemon(stopped, **kwargs):
 
     try:
         while not stopped:
-            if anarchy_subject.ignore:
+            await anarchy_run.refresh()
+            await anarchy_subject.refresh()
+            if anarchy_run.ignore or anarchy_subject.ignore:
                 return
-            if anarchy_action and anarchy_action.ignore:
-                return
+            if anarchy_action:
+                await anarchy_action.refresh()
+                if anarchy_action.ignore:
+                    return
             async with anarchy_subject.lock:
                 sleep_interval = await anarchy_run.manage(anarchy_subject, anarchy_action)
             if sleep_interval:

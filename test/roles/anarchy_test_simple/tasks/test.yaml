@@ -42,7 +42,7 @@
   register: r_get_test_simple_1_create_run
   failed_when: r_get_test_simple_1_create_run.resources | default([]) | length != 1
   until: r_get_test_simple_1_create_run is success
-  retries: 10
+  retries: 15
   delay: 5
 
 - name: Validate AnarchyRun for create test-simple-1
