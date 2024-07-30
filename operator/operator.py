@@ -135,11 +135,15 @@ async def action_create(**kwargs):
     anarchy_subject = await anarchy_action.get_subject()
     if not anarchy_subject:
         await anarchy_action.raise_error_if_still_exists(
-            f"{anarchy_action} references missing AnarchySubject {anarchy_action.subject_name}",
+            f"{anarchy_action} references missing AnarchySubject {anarchy_action.subject_name}"
         )
         return
+
     if anarchy_subject.ignore:
-        return
+        raise kopf.TemporaryError(
+            f"Refusing to handle {anarchy_action} when {anarchy_subject} is marked with ignore",
+            delay=30
+        )
 
     async with anarchy_subject.lock:
         await anarchy_action.handle_create(anarchy_subject)
@@ -153,8 +157,14 @@ async def action_delete(**kwargs):
     anarchy_action.remove_from_cache()
 
     anarchy_subject = await anarchy_action.get_subject()
-    if not anarchy_subject or anarchy_subject.ignore:
+    if not anarchy_subject:
         return
+
+    if anarchy_subject.ignore:
+        raise kopf.TemporaryError(
+            f"Refusing to handle {anarchy_action} when {anarchy_subject} is marked with ignore",
+            delay=30
+        )
 
     async with anarchy_subject.lock:
         await anarchy_action.handle_delete(anarchy_subject)
@@ -168,11 +178,15 @@ async def action_resume(**kwargs):
     anarchy_subject = await anarchy_action.get_subject()
     if not anarchy_subject:
         await anarchy_action.raise_error_if_still_exists(
-            f"{anarchy_action} references missing AnarchySubject {anarchy_action.subject_name}",
+            f"{anarchy_action} references missing AnarchySubject {anarchy_action.subject_name}"
         )
         return
+
     if anarchy_subject.ignore:
-        return
+        raise kopf.TemporaryError(
+            f"Refusing to handle {anarchy_action} when {anarchy_subject} is marked with ignore",
+            delay=30
+        )
 
     async with anarchy_subject.lock:
         await anarchy_action.handle_resume(anarchy_subject)
@@ -188,11 +202,15 @@ async def action_update(**kwargs):
         if anarchy_action.is_delete_handler:
             return
         await anarchy_action.raise_error_if_still_exists(
-            f"{anarchy_action} references missing AnarchySubject {anarchy_action.subject_name}",
+            f"{anarchy_action} references missing AnarchySubject {anarchy_action.subject_name}"
         )
         return
+
     if anarchy_subject.ignore:
-        return
+        raise kopf.TemporaryError(
+            f"Refusing to handle {anarchy_action} when {anarchy_subject} is marked with ignore",
+            delay=30
+        )
 
     async with anarchy_subject.lock:
         await anarchy_action.handle_update(anarchy_subject)
@@ -207,17 +225,19 @@ async def action_daemon(stopped, **kwargs):
     anarchy_subject = await anarchy_action.get_subject()
     if not anarchy_subject:
         await anarchy_action.raise_error_if_still_exists(
-            f"{anarchy_action} references missing AnarchySubject {anarchy_action.subject_name}",
+            f"{anarchy_action} references missing AnarchySubject {anarchy_action.subject_name}"
         )
         return
 
     try:
         while not stopped:
             async with anarchy_subject.lock:
-                await anarchy_action.refresh()
                 await anarchy_subject.refresh()
-                if anarchy_action.ignore or anarchy_subject.ignore:
-                    return
+                if anarchy_subject.ignore:
+                    raise kopf.TemporaryError(
+                        f"Refusing to handle {anarchy_action} when {anarchy_subject} is marked with ignore",
+                        delay=30
+                    )
                 sleep_interval = await anarchy_action.manage(anarchy_subject)
             if sleep_interval:
                 await asyncio.sleep(sleep_interval)
@@ -234,8 +254,14 @@ async def run_delete(**kwargs):
     anarchy_run.remove_from_cache()
 
     anarchy_subject = await anarchy_run.get_subject()
-    if not anarchy_subject or anarchy_subject.ignore:
+    if not anarchy_subject:
         return
+
+    if anarchy_subject.ignore:
+        raise kopf.TemporaryError(
+            f"Refusing to handle {anarchy_run} when {anarchy_subject} is marked with ignore",
+            delay=30
+        )
 
     if anarchy_run.has_action:
         anarchy_action = await anarchy_run.get_action()
@@ -243,7 +269,10 @@ async def run_delete(**kwargs):
         anarchy_action = None
 
     if anarchy_action and anarchy_action.ignore:
-         return
+        raise kopf.TemporaryError(
+            f"Refusing to handle {anarchy_run} when {anarchy_action} is marked with ignore",
+            delay=30
+        )
 
     async with anarchy_subject.lock:
         await anarchy_run.handle_delete(anarchy_subject, anarchy_action)
@@ -257,24 +286,30 @@ async def run_resume(**kwargs):
     anarchy_subject = await anarchy_run.get_subject()
     if not anarchy_subject:
         await anarchy_run.raise_error_if_still_exists(
-            f"{anarchy_run} references missing AnarchySubject {anarchy_run.subject_name}",
+            f"{anarchy_run} references missing AnarchySubject {anarchy_run.subject_name}"
         )
         return
     if anarchy_subject.ignore:
-        return
+        raise kopf.TemporaryError(
+            f"Refusing to handle {anarchy_run} when {anarchy_subject} is marked with ignore",
+            delay=30
+        )
 
     if anarchy_run.has_action:
         anarchy_action = await anarchy_run.get_action()
         if not anarchy_action:
             await anarchy_run.raise_error_if_still_exists(
-                f"{anarchy_run} references missing AnarchyAction {anarchy_run.action_name}",
+                f"{anarchy_run} references missing AnarchyAction {anarchy_run.action_name}"
             )
             return
     else:
         anarchy_action = None
 
     if anarchy_action and anarchy_action.ignore:
-         return
+        raise kopf.TemporaryError(
+            f"Refusing to handle {anarchy_run} when {anarchy_action} is marked with ignore",
+            delay=30
+        )
 
     async with anarchy_subject.lock:
         await anarchy_run.handle_resume(anarchy_subject, anarchy_action)
@@ -290,11 +325,14 @@ async def run_update(new, old, **kwargs):
         if anarchy_run.is_delete_handler:
             return
         await anarchy_run.raise_error_if_still_exists(
-            f"{anarchy_run} references missing AnarchySubject {anarchy_run.subject_name}",
+            f"{anarchy_run} references missing AnarchySubject {anarchy_run.subject_name}"
         )
         return
     if anarchy_subject.ignore:
-        return
+        raise kopf.TemporaryError(
+            f"Refusing to handle {anarchy_run} when {anarchy_subject} is marked with ignore",
+            delay=30
+        )
 
     if anarchy_run.has_action:
         anarchy_action = await anarchy_run.get_action()
@@ -302,14 +340,17 @@ async def run_update(new, old, **kwargs):
             if anarchy_run.is_delete_handler:
                 return
             await anarchy_run.raise_error_if_still_exists(
-                f"{anarchy_run} references missing AnarchyAction {anarchy_run.action_name}",
+                f"{anarchy_run} references missing AnarchyAction {anarchy_run.action_name}"
             )
             return
     else:
         anarchy_action = None
 
     if anarchy_action and anarchy_action.ignore:
-         return
+        raise kopf.TemporaryError(
+            f"Refusing to handle {anarchy_run} when {anarchy_action} is marked with ignore",
+            delay=30
+        )
 
     new_runner_state = new['metadata'].get('labels', {}).get(Anarchy.runner_label)
     old_runner_state = old['metadata'].get('labels', {}).get(Anarchy.runner_label)
@@ -340,17 +381,20 @@ async def run_daemon(stopped, **kwargs):
     anarchy_subject = await anarchy_run.get_subject()
     if not anarchy_subject:
         await anarchy_run.raise_error_if_still_exists(
-            f"{anarchy_run} references missing AnarchySubject {anarchy_run.subject_name}",
+            f"{anarchy_run} references missing AnarchySubject {anarchy_run.subject_name}"
         )
         return
     if anarchy_subject.ignore:
-        return
+        raise kopf.TemporaryError(
+            f"Refusing to handle {anarchy_run} when {anarchy_subject} is marked with ignore",
+            delay=30
+        )
 
     if anarchy_run.has_action:
         anarchy_action = await anarchy_run.get_action()
         if not anarchy_action:
             await anarchy_run.raise_error_if_still_exists(
-                f"{anarchy_run} references missing AnarchyAction {anarchy_run.action_name}",
+                f"{anarchy_run} references missing AnarchyAction {anarchy_run.action_name}"
             )
             return
     else:
@@ -365,7 +409,10 @@ async def run_daemon(stopped, **kwargs):
             if anarchy_action:
                 await anarchy_action.refresh()
                 if anarchy_action.ignore:
-                    return
+                    raise kopf.TemporaryError(
+                        f"Refusing to handle {anarchy_run} when {anarchy_action} is marked with ignore",
+                        delay=30
+                    )
             async with anarchy_subject.lock:
                 sleep_interval = await anarchy_run.manage(anarchy_subject, anarchy_action)
             if sleep_interval:
