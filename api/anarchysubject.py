@@ -1,5 +1,6 @@
 import hashlib
 import json
+import kubernetes_asyncio
 import logging
 import re
 
